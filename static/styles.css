@@ -1,0 +1,5 @@
+:root { color-scheme: dark; }
+body { margin: 0; background: #121212; }
+.board-scroll { overflow-x: auto; white-space: nowrap; padding-bottom: 1rem; }
+.column { width: 320px; display: inline-block; vertical-align: top; margin-right: 1rem; }
+.task-card { cursor: grab; margin-bottom: 0.75rem; }
