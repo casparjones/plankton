@@ -55,6 +55,7 @@ const state = {
   eventSource: null,
   currentUser: null,
   isDragging: false,    // true während ein Task/Board gezogen wird
+  detailTask: null,     // Task in der Detail-Ansicht
 };
 
 // 20 vordefinierte Farben für Spalten.
@@ -1360,6 +1361,78 @@ function closeTaskModal() {
 }
 
 // ------------------------------------------------------------------
+// Task Detail-Ansicht
+// ------------------------------------------------------------------
+
+function openTaskDetail(task) {
+  state.detailTask = task;
+
+  document.getElementById('detail-title').textContent = task.title || 'Untitled';
+
+  // Current column badge
+  const col = (state.project?.columns || []).find(c => c.id === task.column_id);
+  const colColor = col?.color || 'var(--accent)';
+  document.getElementById('detail-column-info').innerHTML = col
+      ? `<span class="detail-column-badge"><span class="detail-column-dot" style="background:${colColor}"></span>${escapeHtml(col.title)}</span>`
+      : '';
+
+  // Description
+  const descEl = document.getElementById('detail-description');
+  if (task.description) {
+    descEl.textContent = task.description;
+    descEl.classList.remove('detail-description-empty');
+  } else {
+    descEl.textContent = 'Keine Beschreibung';
+    descEl.classList.add('detail-description-empty');
+  }
+
+  // Labels
+  const labelsEl = document.getElementById('detail-labels');
+  labelsEl.innerHTML = (task.labels || []).length
+      ? (task.labels || []).map(l => `<span class="detail-label">${escapeHtml(l)}</span>`).join('')
+      : '<span class="detail-empty">Keine Labels</span>';
+
+  // Points
+  document.getElementById('detail-points').innerHTML = task.points
+      ? `<span class="detail-points-badge">${task.points}</span>`
+      : '–';
+
+  // Worker
+  const workerEl = document.getElementById('detail-worker');
+  if (task.worker) {
+    workerEl.innerHTML = `<div class="detail-worker"><span class="detail-worker-avatar">${escapeHtml(task.worker[0].toUpperCase())}</span><span class="detail-worker-name">${escapeHtml(task.worker)}</span></div>`;
+  } else {
+    workerEl.textContent = '–';
+  }
+
+  // Dates
+  document.getElementById('detail-created').textContent = formatDate(task.created_at);
+  document.getElementById('detail-updated').textContent = formatDate(task.updated_at);
+
+  // Previous row
+  document.getElementById('detail-prev-row').textContent = columnName(task.previous_row);
+
+  // Comments
+  const commentsEl = document.getElementById('detail-comments');
+  commentsEl.innerHTML = (task.comments || []).length
+      ? (task.comments || []).map(c => `<div class="detail-list-item">${escapeHtml(c)}</div>`).join('')
+      : '<div class="detail-empty">Keine Kommentare</div>';
+
+  // Logs
+  const logsEl = document.getElementById('detail-logs');
+  logsEl.innerHTML = (task.logs || []).length
+      ? [...(task.logs || [])].reverse().map(l => `<div class="detail-log-item">${escapeHtml(l)}</div>`).join('')
+      : '<div class="detail-empty">Keine Logs</div>';
+
+  document.getElementById('task-detail-modal').classList.add('open');
+}
+
+function closeTaskDetail() {
+  document.getElementById('task-detail-modal').classList.remove('open');
+  state.detailTask = null;
+}
+
+// ------------------------------------------------------------------
 // UI-Helfer
 // ------------------------------------------------------------------
 
@@ -1459,7 +1532,7 @@ function buildDOM() {
               <input id="modal-title" type="text" />
             </label>
             <label>Beschreibung
-              <textarea id="modal-desc" rows="4"></textarea>
+              <textarea id="modal-desc" rows="8"></textarea>
             </label>
             <label>Labels <small>(kommagetrennt)</small>
               <input id="modal-labels" type="text" />
@@ -1501,6 +1574,67 @@ function buildDOM() {
         <div class="modal-actions">
           <button id="modal-save-btn" class="btn-primary">Speichern</button>
           <button id="modal-delete-btn" class="btn-danger">Löschen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="task-detail-modal" class="modal-overlay">
+      <div class="modal modal-detail">
+        <div class="modal-header">
+          <span class="modal-heading" id="detail-heading">Task</span>
+          <button class="modal-close" id="detail-close-btn">&#10005;</button>
+        </div>
+        <div id="detail-title" class="detail-title"></div>
+        <div id="detail-column-info"></div>
+        <div class="detail-grid">
+          <div class="detail-col-main">
+            <div class="detail-section">
+              <span class="detail-section-title">Beschreibung</span>
+              <div id="detail-description" class="detail-description"></div>
+            </div>
+            <div class="detail-section">
+              <span class="detail-section-title">Labels</span>
+              <div id="detail-labels" class="detail-labels"></div>
+            </div>
+            <div class="detail-section">
+              <span class="detail-section-title">Kommentare</span>
+              <div id="detail-comments" class="detail-list"></div>
+            </div>
+          </div>
+          <div class="detail-col-side">
+            <div class="detail-section">
+              <span class="detail-section-title">Details</span>
+              <div class="detail-info-grid">
+                <div class="detail-info-item">
+                  <span class="detail-info-item-label">Points</span>
+                  <span id="detail-points" class="detail-info-item-value">–</span>
+                </div>
+                <div class="detail-info-item">
+                  <span class="detail-info-item-label">Worker</span>
+                  <span id="detail-worker" class="detail-info-item-value">–</span>
+                </div>
+                <div class="detail-info-item">
+                  <span class="detail-info-item-label">Erstellt</span>
+                  <span id="detail-created" class="detail-info-item-value">–</span>
+                </div>
+                <div class="detail-info-item">
+                  <span class="detail-info-item-label">Geändert</span>
+                  <span id="detail-updated" class="detail-info-item-value">–</span>
+                </div>
+              </div>
+            </div>
+            <div class="detail-section">
+              <span class="detail-section-title">Vorherige Spalte</span>
+              <div id="detail-prev-row"></div>
+            </div>
+            <div class="detail-section">
+              <span class="detail-section-title">Logs</span>
+              <div id="detail-logs" class="detail-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="detail-edit-btn" class="btn-primary">Bearbeiten</button>
         </div>
       </div>
     </div>
@@ -1657,7 +1791,7 @@ function buildDOM() {
     const inner = e.target.closest('[data-task-id]');
     if (inner && !e.target.closest('.task-checkbox')) {
       const task = state.project.tasks.find(t => t.id === inner.dataset.taskId);
-      if (task) openTaskModal(task, false);
+      if (task) openTaskDetail(task);
       return;
     }
 
@@ -1675,6 +1809,18 @@ function buildDOM() {
       openColumnMenu(menuBtn, menuBtn.dataset.colId);
       return;
     }
+  });
+
+  // Detail-Ansicht schließen.
+  document.getElementById('detail-close-btn').addEventListener('click', closeTaskDetail);
+  document.getElementById('task-detail-modal').addEventListener('click', e => {
+    if (e.target.id === 'task-detail-modal') closeTaskDetail();
+  });
+  document.getElementById('detail-edit-btn').addEventListener('click', () => {
+    if (!state.detailTask) return;
+    const task = state.detailTask;
+    closeTaskDetail();
+    openTaskModal(task, false);
   });
 
   // Modal schließen.
