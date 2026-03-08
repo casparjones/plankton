@@ -1,44 +1,46 @@
 // build.rs
-// Wird von Cargo vor dem Kompilieren ausgeführt.
-// Baut das Frontend-Bundle via webpack, sodass `cargo build`
-// alles in einem Schritt erledigt.
+// Baut das Frontend via webpack – wird von Cargo vor dem Kompilieren ausgeführt.
 //
-// Projektstruktur (flat, kein frontend/-Unterordner):
-//   package.json        ← im Root
-//   webpack.config.js   ← im Root
-//   static/main.js      ← Webpack-Einstiegspunkt
-//   static/bundle.js    ← Webpack-Output
-//   static/bundle.css   ← Webpack-Output
+// Logik:
+// - Wenn static/bundle.js bereits existiert (z.B. im Docker-Build von Stage 1
+//   vorbereitet), wird npm übersprungen → kein Node.js im Rust-Builder nötig
+// - Wenn bundle.js fehlt (lokale Entwicklung), wird npm install + build ausgeführt
 
-use std::process::Command;
 use std::path::Path;
+use std::process::Command;
 
 fn main() {
-    // Cargo anweisen, bei Änderungen neu zu bauen.
     println!("cargo:rerun-if-changed=static/main.js");
     println!("cargo:rerun-if-changed=static/styles.css");
     println!("cargo:rerun-if-changed=package.json");
     println!("cargo:rerun-if-changed=webpack.config.js");
 
-    // Arbeitsverzeichnis = Projekt-Root (wo Cargo.toml liegt)
     let root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let root = Path::new(&root);
+    let bundle = root.join("static/bundle.js");
 
-    // npm install – nur wenn node_modules fehlt
+    // Bundle bereits vorhanden (Docker Stage 1 oder manuelles npm run build)?
+    // Dann überspringen – kein Node.js erforderlich.
+    if bundle.exists() {
+        println!("cargo:warning=bundle.js gefunden – npm build übersprungen");
+        return;
+    }
+
+    // Lokale Entwicklung: node_modules installieren falls nötig
     if !root.join("node_modules").exists() {
         let status = Command::new("npm")
             .args(["install"])
             .current_dir(root)
             .status()
-            .expect("npm install fehlgeschlagen – ist Node.js installiert und im PATH?");
-        assert!(status.success(), "npm install returned non-zero exit code");
+            .expect("npm install fehlgeschlagen – ist Node.js installiert?");
+        assert!(status.success(), "npm install schlug fehl");
     }
 
-    // npm run build → webpack → static/bundle.js + static/bundle.css
+    // Webpack-Bundle bauen
     let status = Command::new("npm")
         .args(["run", "build"])
         .current_dir(root)
         .status()
         .expect("npm run build fehlgeschlagen");
-    assert!(status.success(), "webpack build returned non-zero exit code");
+    assert!(status.success(), "webpack build schlug fehl");
 }

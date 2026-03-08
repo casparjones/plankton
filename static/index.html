@@ -6,7 +6,11 @@
   <title>Plankton</title>
   <link rel="stylesheet" href="/bundle.css" />
 </head>
-<body>
+<body data-theme="dark">
+<script>
+// Theme sofort setzen um Flash zu vermeiden.
+(function(){var t=localStorage.getItem('plankton-theme');if(!t){t=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'}document.body.setAttribute('data-theme',t)})();
+</script>
 <script src="/bundle.js"></script>
 </body>
 </html>
