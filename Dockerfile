@@ -1,53 +1,70 @@
 # ============================================================
-# Stage 1: Frontend – Node.js baut das Webpack-Bundle
+# Plankton – Multi-Stage Dockerfile
+#
+# Stage 1 (frontend-builder): Node.js baut das Webpack-Bundle
+# Stage 2 (backend-builder):  Rust baut das Binary
+# Stage 3 (runtime):          Minimales Debian-Image
+# ============================================================
+
+# ============================================================
+# Stage 1: Frontend
 # ============================================================
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app
 
-# Erst nur package.json kopieren → npm install wird gecacht
-# solange sich package.json nicht ändert
+# package.json zuerst kopieren → npm install wird Docker-gecacht
+# solange sich package.json / package-lock.json nicht ändern
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Jetzt erst die Frontend-Quellen
+# Frontend-Quellen
 COPY webpack.config.js ./
 COPY static/main.js static/styles.css static/index.html ./static/
+
+# Bundle bauen → erzeugt static/bundle.js + static/bundle.css
 RUN npm run build
 
 # ============================================================
-# Stage 2: Backend – Rust baut das Binary
-# Kein Node.js nötig, build.rs überspringt npm da bundle
-# bereits von Stage 1 gebaut wurde
+# Stage 2: Backend
+# Node.js wird hier nicht benötigt – build.rs erkennt dass
+# bundle.js bereits existiert und überspringt npm automatisch
 # ============================================================
-FROM rust:1.78-slim AS backend-builder
+FROM rust:1.94-slim AS backend-builder
 WORKDIR /app
 
-# System-Deps für reqwest (TLS)
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+# System-Abhängigkeiten für reqwest (OpenSSL)
+RUN apt-get update \
+    && apt-get install -y pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Cargo-Cache-Layer: erst nur Cargo.toml, dann Dummy-Build
-# → Abhängigkeiten werden gecacht solange Cargo.toml gleich bleibt
+# Cargo-Dependency-Cache: erst Cargo.toml/Cargo.lock + Dummy-main
+# → cargo build cached alle Abhängigkeiten in einem eigenen Layer
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo 'fn main(){}' > src/main.rs
 RUN cargo build --release
 RUN rm -rf src
 
-# Jetzt echten Source-Code und das fertige Frontend-Bundle reinkopieren
+# Echten Source + build.rs + fertiges Frontend-Bundle reinkopieren
 COPY src ./src
-# Bundle aus Stage 1 holen – build.rs muss npm NICHT nochmal laufen
-COPY --from=frontend-builder /app/static ./static
-# build.rs braucht keine node_modules wenn bundle.js schon existiert
 COPY build.rs ./
-# Touch damit Cargo den Source als neuer erkennt
-RUN touch src/main.rs && cargo build --release
+# Bundle aus Stage 1 – build.rs überspringt npm da bundle.js existiert
+COPY --from=frontend-builder /app/static ./static
+
+# Timestamps aktualisieren damit Cargo den Source neu kompiliert
+RUN touch src/main.rs
+RUN cargo build --release
 
 # ============================================================
-# Stage 3: Runtime – minimales Image, nur das Binary + static
+# Stage 3: Runtime
+# Nur das Binary + static/ – kein Rust, kein Node, kein npm
 # ============================================================
 FROM debian:bookworm-slim
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+# Laufzeit-Abhängigkeiten für OpenSSL
+RUN apt-get update \
+    && apt-get install -y libssl3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=backend-builder /app/target/release/plankton /usr/local/bin/plankton
 COPY --from=backend-builder /app/static ./static
