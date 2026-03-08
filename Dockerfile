@@ -19,7 +19,9 @@ RUN npm ci
 
 # Frontend-Quellen
 COPY webpack.config.js ./
-COPY static/main.js static/styles.css static/index.html ./static/
+COPY src/frontend ./src/frontend/
+COPY static/styles.css static/index.html ./static/
+COPY static/styles ./static/styles/
 
 # Bundle bauen → erzeugt static/bundle.js + static/bundle.css
 RUN npm run build

@@ -1,0 +1,84 @@
+/* jKanban Base + Reset + Layout */
+
+.kanban-container { overflow: hidden; }
+.kanban-container * { box-sizing: border-box; }
+.kanban-board { position: relative; float: left; }
+.kanban-board.disabled-board { opacity: 0.3; }
+.kanban-board.is-moving.gu-mirror { transform: rotate(3deg); }
+.kanban-drag { min-height: 200px; }
+.kanban-item { display: block; }
+.kanban-item.is-moving.gu-mirror { transform: rotate(3deg); }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+.app {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.btn-primary {
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: #fff;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 20px;
+    transition: opacity 0.15s;
+}
+
+.btn-primary:hover { opacity: 0.85; }
+
+.btn-danger {
+    background: none;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 8px 20px;
+    transition: background 0.15s;
+}
+
+.btn-danger:hover { background: rgba(224, 92, 106, 0.1); }
+
+.btn-small {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 8px;
+    transition: background 0.12s;
+}
+
+.btn-small:hover { background: var(--accent); }
+
+.btn-danger-small {
+    background: none;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 8px;
+}
+
+.btn-danger-small:hover {
+    background: rgba(224, 92, 106, 0.1);
+}

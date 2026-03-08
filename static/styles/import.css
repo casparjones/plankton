@@ -1,0 +1,101 @@
+/* Import Modal */
+
+.import-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    padding: 4px 10px;
+    transition: all 0.12s;
+}
+
+.import-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.import-preview {
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.import-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.import-table th {
+    text-align: left;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+}
+
+.import-table td {
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+}
+
+.import-row-ok td { background: rgba(165, 214, 167, 0.08); }
+.import-row-warning td { background: rgba(255, 204, 128, 0.08); }
+.import-row-error td { background: rgba(224, 92, 106, 0.08); }
+
+.import-notes {
+    font-size: 10px;
+    color: var(--text-dim);
+    max-width: 200px;
+}
+
+.import-summary {
+    padding: 6px 0;
+    font-size: 12px;
+    color: var(--text);
+}
+
+.import-result {
+    padding: 8px 0;
+}
+
+.import-result-summary {
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.import-log {
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 8px;
+    margin-top: 6px;
+}
+
+.import-warnings {
+    font-size: 11px;
+    color: #ffcc80;
+}
+
+.import-errors {
+    font-size: 11px;
+    color: var(--danger);
+}
+
+.import-error {
+    color: var(--danger);
+    font-size: 13px;
+    padding: 8px;
+    background: rgba(224, 92, 106, 0.1);
+    border-radius: var(--radius);
+}

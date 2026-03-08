@@ -10,8 +10,9 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    println!("cargo:rerun-if-changed=static/main.js");
+    println!("cargo:rerun-if-changed=src/frontend");
     println!("cargo:rerun-if-changed=static/styles.css");
+    println!("cargo:rerun-if-changed=static/styles");
     println!("cargo:rerun-if-changed=package.json");
     println!("cargo:rerun-if-changed=webpack.config.js");
 
