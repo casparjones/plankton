@@ -1,47 +1,70 @@
-# Plankton
+# 🪼 Plankton
 
-Plankton is a CouchDB-backed Kanban board written in Rust (Axum) with a Vue 3 + Pinia + Vuetify frontend.
+Minimales Kanban-Board mit Rust-Backend (Axum) + jKanban-Frontend.  
+Jede Änderung am Board wird sofort als JSON in CouchDB (oder lokal als Datei) gespeichert.
 
-## Features
-- One CouchDB document per project
-- REST CRUD APIs for projects, tasks, columns, and users
-- Optimistic concurrency with CouchDB `_rev`
-- SSE endpoint for live updates (`/api/projects/:id/events`)
-- MCP-like tool endpoint for LLM actions (`/mcp/tools`, `/mcp/call`)
-- Dark mode, mobile-friendly board layout
-- Drag/drop between columns
-- Manual JSON import/export via GET/PUT on `/api/projects/:id`
+## Voraussetzungen
 
-## Run locally
+- Rust (stable) + Cargo
+- Node.js ≥ 18 + npm
+
+## Setup & Starten
 
 ```bash
-export COUCHDB_URL=http://127.0.0.1:5984
-export COUCHDB_DB=plankton
+# Alles in einem Schritt – Cargo ruft npm automatisch via build.rs auf:
+cargo run
+
+# Mit CouchDB:
+COUCHDB_URI=http://admin:password@localhost:5984 cargo run
+
+# Anderen Port:
+PORT=8080 cargo run
+```
+
+Browser: **http://localhost:3000**
+
+## Entwicklung (Frontend Hot-Reload)
+
+```bash
+# Terminal 1 – Webpack im Watch-Modus
+cd frontend && npm run dev
+
+# Terminal 2 – Rust-Server (ohne build.rs-Frontend-Build)
 cargo run
 ```
 
-Alternativ mit neuer Variable:
+## Projektstruktur
 
-```bash
-export COUCHDB_URI=http://127.0.0.1:5984
-cargo run
+```
+plankton/
+├── build.rs              # Ruft npm build vor cargo build auf
+├── src/
+│   └── main.rs           # Axum REST-API + SSE + File/CouchDB Store
+├── frontend/
+│   ├── package.json
+│   ├── webpack.config.js
+│   └── src/
+│       ├── main.js       # jKanban + Vanilla JS App
+│       └── style.css     # Dark Industrial Theme
+└── static/
+    ├── index.html        # Wird von Axum served
+    ├── bundle.js         # Webpack Output
+    └── bundle.css        # Webpack Output
 ```
 
-Wenn `COUCHDB_URI` (oder `COUCHDB_URL`) **nicht** gesetzt ist, nutzt Plankton automatisch ein Dateisystem-Fallback in `./data/projects/*.json`.
+## Datenformat (JSON)
 
-Open `http://localhost:3000`.
+Jedes Projekt ist ein flaches JSON-Dokument:
 
-## MCP tool call example
-
-```bash
-curl -X POST http://localhost:3000/mcp/call \
-  -H 'content-type: application/json' \
-  -d '{"tool":"summarize_board","arguments":{"project_id":"<id>"}}'
+```json
+{
+  "_id": "uuid",
+  "_rev": "1",
+  "title": "Mein Projekt",
+  "columns": [{ "id": "uuid", "title": "Todo", "order": 0, "color": "#90CAF9" }],
+  "users":   [{ "id": "uuid", "name": "Frank", "avatar": "F", "role": "dev" }],
+  "tasks":   [{ "id": "uuid", "title": "Feature X", "column_id": "...", ... }]
+}
 ```
 
-## Docker
-
-```bash
-docker build -t plankton .
-docker run -p 3000:3000 -e COUCHDB_URL=http://host.docker.internal:5984 plankton
-```
+Im File-Store liegt jedes Projekt unter `data/projects/<id>.json` – direkt importierbar/exportierbar.

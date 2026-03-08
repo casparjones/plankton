@@ -1,3 +1,4 @@
+@import url(https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap);
 /* ============================================================
    jKanban Base (inline statt externem CSS-Import)
    ============================================================ */
@@ -14,8 +15,6 @@
 /* ============================================================
    Plankton – Dark Industrial Theme
    ============================================================ */
-
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
 
 :root {
     --bg:           #0e0e10;

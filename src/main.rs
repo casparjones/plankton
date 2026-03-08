@@ -1,3 +1,13 @@
+// ============================================================
+// Plankton – Kanban-Backend (Axum + CouchDB oder File-Store)
+// ============================================================
+// Dieses Modul stellt eine REST-API für ein Kanban-Board bereit.
+// Als Storage-Backend kann entweder CouchDB (via COUCHDB_URI)
+// oder ein einfacher JSON-File-Store (./data/projects) verwendet werden.
+// Zusätzlich gibt es einen minimalen MCP-Endpunkt (/mcp/*) für
+// Tool-basierte KI-Zugriffe sowie SSE-Events pro Projekt.
+// ============================================================
+
 use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
@@ -16,34 +26,60 @@ use tower_http::{cors::CorsLayer, services::ServeDir};
 use tracing::info;
 use uuid::Uuid;
 
+// ------------------------------------------------------------------
+// App-State
+// ------------------------------------------------------------------
+
+/// Zentraler Anwendungs-State, der von Axum in alle Handler injiziert wird.
 #[derive(Clone)]
 struct AppState {
+    /// Abstrahiertes Storage-Backend (CouchDB oder File).
     store: DataStore,
+    /// Pro Projekt-ID ein Broadcast-Sender für SSE-Events.
     events: Arc<Mutex<HashMap<String, broadcast::Sender<String>>>>,
 }
 
+// ------------------------------------------------------------------
+// Storage-Backends
+// ------------------------------------------------------------------
+
+/// Enum, das CouchDB und den lokalen File-Store vereint.
+/// Alle Methoden werden über `DataStore::*` aufgerufen und delegieren
+/// intern an das passende Backend.
 #[derive(Clone)]
 enum DataStore {
     Couch(CouchDb),
     File(FileStore),
 }
 
+/// HTTP-Client-Wrapper für CouchDB.
 #[derive(Clone)]
 struct CouchDb {
     client: Client,
+    /// Basis-URL, z.B. "http://admin:password@localhost:5984"
     base_url: String,
+    /// Name der Datenbank, z.B. "plankton"
     db: String,
 }
 
+/// Lokaler File-Store: Jedes Projekt wird als `<id>.json` in `root` gespeichert.
 #[derive(Clone)]
 struct FileStore {
     root: PathBuf,
 }
 
+// ------------------------------------------------------------------
+// Datenmodelle
+// ------------------------------------------------------------------
+
+/// Repräsentiert ein vollständiges Kanban-Projekt als flaches Dokument.
+/// Sowohl CouchDB-Felder (`_id`, `_rev`) als auch die eigentlichen Daten
+/// (Spalten, Nutzer, Aufgaben) sind enthalten.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct ProjectDoc {
     #[serde(rename = "_id")]
     id: String,
+    /// Revisions-Token – wird von CouchDB benötigt und im FileStore simuliert.
     #[serde(rename = "_rev", skip_serializing_if = "Option::is_none")]
     rev: Option<String>,
     title: String,
@@ -52,57 +88,77 @@ struct ProjectDoc {
     tasks: Vec<Task>,
 }
 
+/// Eine Spalte im Kanban-Board.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Column {
     id: String,
     title: String,
+    /// Reihenfolge der Spalte (aufsteigend).
     order: i32,
+    /// Hex-Farbcode, z.B. "#90CAF9".
     color: String,
 }
 
+/// Ein Teammitglied, das Aufgaben zugewiesen bekommen kann.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct User {
     id: String,
     name: String,
+    /// URL oder Initialen-Kürzel für den Avatar.
     avatar: String,
     role: String,
 }
 
+/// Eine einzelne Aufgabe (Karte) im Board.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Task {
     id: String,
     title: String,
     description: String,
+    /// ID der Spalte, in der sich die Aufgabe befindet.
     column_id: String,
     assignee_ids: Vec<String>,
     labels: Vec<String>,
+    /// Reihenfolge innerhalb der Spalte.
     order: i32,
     created_at: String,
     updated_at: String,
 }
 
+// ------------------------------------------------------------------
+// Request/Response-Hilfstypen
+// ------------------------------------------------------------------
+
+/// Query-Parameter für DELETE /projects/:id – CouchDB erfordert die Rev.
 #[derive(Debug, Deserialize)]
 struct DeleteQuery {
     rev: String,
 }
 
+/// Body für POST /projects/:id/tasks/:task_id/move
 #[derive(Debug, Deserialize)]
 struct MoveTaskRequest {
     column_id: String,
     order: Option<i32>,
 }
 
+/// Body für POST /mcp/call
 #[derive(Debug, Deserialize)]
 struct McpCall {
     tool: String,
     arguments: serde_json::Value,
 }
 
+/// Tool-Beschreibung für GET /mcp/tools
 #[derive(Debug, Serialize)]
 struct ToolDef {
     name: &'static str,
     description: &'static str,
 }
+
+// ------------------------------------------------------------------
+// main
+// ------------------------------------------------------------------
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -110,12 +166,14 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    // CouchDB-URL kann über COUCHDB_URI oder COUCHDB_URL gesetzt werden.
     let couch_uri = std::env::var("COUCHDB_URI")
         .ok()
         .or_else(|| std::env::var("COUCHDB_URL").ok());
     let db = std::env::var("COUCHDB_DB").unwrap_or_else(|_| "plankton".to_string());
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
 
+    // Backend-Auswahl: CouchDB wenn URI gesetzt, sonst File-Store.
     let store = if let Some(base_url) = couch_uri {
         let couch = CouchDb {
             client: Client::new(),
@@ -139,6 +197,7 @@ async fn main() -> anyhow::Result<()> {
         events: Arc::new(Mutex::new(HashMap::new())),
     };
 
+    // Router: REST-API + MCP-Endpunkte + Statische Dateien.
     let app = Router::new()
         .route("/api/projects", get(list_projects).post(create_project))
         .route(
@@ -178,10 +237,16 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+// ------------------------------------------------------------------
+// Projekt-Handler
+// ------------------------------------------------------------------
+
+/// GET /api/projects – Alle Projekte auflisten.
 async fn list_projects(State(state): State<AppState>) -> Result<Json<Vec<ProjectDoc>>, ApiError> {
     Ok(Json(state.store.list_projects().await?))
 }
 
+/// POST /api/projects – Neues Projekt anlegen.
 async fn create_project(
     State(state): State<AppState>,
     Json(mut payload): Json<ProjectDoc>,
@@ -195,6 +260,7 @@ async fn create_project(
     Ok(Json(created))
 }
 
+/// GET /api/projects/:id – Ein Projekt abrufen.
 async fn get_project(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -202,17 +268,27 @@ async fn get_project(
     Ok(Json(state.store.get_project(&id).await?))
 }
 
+/// PUT /api/projects/:id – Vollständiges Projekt ersetzen.
+///
+/// FIX: Das Projekt wird zunächst aus dem Store geladen, damit die aktuelle
+/// Revisions-ID bekannt ist. Ohne diesen Schritt würde der FileStore
+/// immer einen Conflict-Fehler melden, weil das eingehende Payload keine Rev trägt.
 async fn update_project(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(mut payload): Json<ProjectDoc>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
+    // Sicherstellen, dass ID und Rev korrekt gesetzt sind.
     payload.id = id.clone();
+    // Aktuelle Rev aus dem Store holen, damit der FileStore keinen Conflict wirft.
+    let current = state.store.get_project(&id).await?;
+    payload.rev = current.rev;
     let updated = state.store.put_project(payload).await?;
     publish_update(&state, &id).await;
     Ok(Json(updated))
 }
 
+/// DELETE /api/projects/:id?rev=<rev> – Projekt löschen.
 async fn delete_project(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -223,6 +299,11 @@ async fn delete_project(
     Ok(StatusCode::NO_CONTENT)
 }
 
+// ------------------------------------------------------------------
+// Task-Handler
+// ------------------------------------------------------------------
+
+/// POST /api/projects/:id/tasks – Neue Aufgabe anlegen.
 async fn create_task(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -241,6 +322,7 @@ async fn create_task(
     Ok(Json(updated))
 }
 
+/// PUT /api/projects/:id/tasks/:task_id – Aufgabe aktualisieren.
 async fn update_task(
     State(state): State<AppState>,
     Path((id, task_id)): Path<(String, String)>,
@@ -260,6 +342,7 @@ async fn update_task(
     Ok(Json(updated))
 }
 
+/// DELETE /api/projects/:id/tasks/:task_id – Aufgabe löschen.
 async fn delete_task(
     State(state): State<AppState>,
     Path((id, task_id)): Path<(String, String)>,
@@ -271,6 +354,7 @@ async fn delete_task(
     Ok(Json(updated))
 }
 
+/// POST /api/projects/:id/tasks/:task_id/move – Aufgabe in eine andere Spalte verschieben.
 async fn move_task(
     State(state): State<AppState>,
     Path((id, task_id)): Path<(String, String)>,
@@ -289,6 +373,11 @@ async fn move_task(
     Ok(Json(updated))
 }
 
+// ------------------------------------------------------------------
+// Spalten-Handler
+// ------------------------------------------------------------------
+
+/// POST /api/projects/:id/columns – Neue Spalte anlegen.
 async fn create_column(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -304,6 +393,7 @@ async fn create_column(
     Ok(Json(updated))
 }
 
+/// PUT /api/projects/:id/columns/:column_id – Spalte aktualisieren.
 async fn update_column(
     State(state): State<AppState>,
     Path((id, column_id)): Path<(String, String)>,
@@ -318,18 +408,25 @@ async fn update_column(
     Ok(Json(updated))
 }
 
+/// DELETE /api/projects/:id/columns/:column_id – Spalte und alle ihre Aufgaben löschen.
 async fn delete_column(
     State(state): State<AppState>,
     Path((id, column_id)): Path<(String, String)>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
     let mut project = state.store.get_project(&id).await?;
     project.columns.retain(|c| c.id != column_id);
+    // Aufgaben der gelöschten Spalte ebenfalls entfernen.
     project.tasks.retain(|t| t.column_id != column_id);
     let updated = state.store.put_project(project).await?;
     publish_update(&state, &id).await;
     Ok(Json(updated))
 }
 
+// ------------------------------------------------------------------
+// Nutzer-Handler
+// ------------------------------------------------------------------
+
+/// POST /api/projects/:id/users – Neuen Nutzer zum Projekt hinzufügen.
 async fn create_user(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -345,34 +442,53 @@ async fn create_user(
     Ok(Json(updated))
 }
 
+/// PUT /api/projects/:id/users/:user_id – Nutzer aktualisieren.
+///
+/// FIX: War `state.couch.get_project` / `state.couch.put_project` –
+/// `AppState` hat kein Feld `couch`. Korrigiert zu `state.store.*`.
 async fn update_user(
     State(state): State<AppState>,
     Path((id, user_id)): Path<(String, String)>,
     Json(user): Json<User>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.couch.get_project(&id).await?;
+    let mut project = state.store.get_project(&id).await?; // FIX: war state.couch
     if let Some(existing) = project.users.iter_mut().find(|u| u.id == user_id) {
         *existing = user;
     }
-    let updated = state.couch.put_project(project).await?;
+    let updated = state.store.put_project(project).await?; // FIX: war state.couch
     publish_update(&state, &id).await;
     Ok(Json(updated))
 }
 
+/// DELETE /api/projects/:id/users/:user_id – Nutzer aus dem Projekt entfernen.
+///
+/// FIX: War `state.couch.get_project` / `state.couch.put_project` –
+/// korrigiert zu `state.store.*`. Außerdem werden Zuweisung-IDs in allen
+/// Aufgaben bereinigt.
 async fn delete_user(
     State(state): State<AppState>,
     Path((id, user_id)): Path<(String, String)>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.couch.get_project(&id).await?;
+    let mut project = state.store.get_project(&id).await?; // FIX: war state.couch
     project.users.retain(|u| u.id != user_id);
+    // Den Nutzer auch aus allen Aufgaben-Zuweisungen entfernen.
     for task in &mut project.tasks {
         task.assignee_ids.retain(|uid| uid != &user_id);
     }
-    let updated = state.couch.put_project(project).await?;
+    let updated = state.store.put_project(project).await?; // FIX: war state.couch
     publish_update(&state, &id).await;
     Ok(Json(updated))
 }
 
+// ------------------------------------------------------------------
+// SSE-Events
+// ------------------------------------------------------------------
+
+/// GET /api/projects/:id/events – Server-Sent Events Stream für ein Projekt.
+///
+/// FIX: Bei `RecvError::Closed` (Sender gedroppt) gab der alte Code einen
+/// Heartbeat zurück und lief endlos weiter. Jetzt wird der Stream korrekt
+/// mit `None` beendet, wenn der Kanal geschlossen ist.
 async fn project_events(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -387,13 +503,24 @@ async fn project_events(
 
     let out = stream::unfold(rx, move |mut rx| async move {
         match rx.recv().await {
+            // Normale Update-Nachricht weiterleiten.
             Ok(msg) => Some((Ok(Event::default().event("project_update").data(msg)), rx)),
-            Err(_) => Some((Ok(Event::default().event("heartbeat").data("ping")), rx)),
+            // RecvError::Lagged: Nachrichten übersprungen → Heartbeat senden, weiterlaufen.
+            Err(broadcast::error::RecvError::Lagged(_)) => {
+                Some((Ok(Event::default().event("heartbeat").data("ping")), rx))
+            }
+            // FIX: RecvError::Closed: Sender ist weg → Stream beenden statt Endlosschleife.
+            Err(broadcast::error::RecvError::Closed) => None,
         }
     });
     Sse::new(out)
 }
 
+// ------------------------------------------------------------------
+// MCP-Endpunkte
+// ------------------------------------------------------------------
+
+/// GET /mcp/tools – Verfügbare Tools auflisten.
 async fn list_tools() -> Json<Vec<ToolDef>> {
     Json(vec![
         ToolDef {
@@ -431,6 +558,7 @@ async fn list_tools() -> Json<Vec<ToolDef>> {
     ])
 }
 
+/// POST /mcp/call – Ein Tool aufrufen.
 async fn call_tool(
     State(state): State<AppState>,
     Json(call): Json<McpCall>,
@@ -545,6 +673,11 @@ async fn call_tool(
     Ok(Json(out))
 }
 
+// ------------------------------------------------------------------
+// Hilfsfunktionen
+// ------------------------------------------------------------------
+
+/// Sendet eine SSE-Benachrichtigung an alle aktiven Listener eines Projekts.
 async fn publish_update(state: &AppState, project_id: &str) {
     let events = state.events.lock().await;
     if let Some(tx) = events.get(project_id) {
@@ -552,16 +685,23 @@ async fn publish_update(state: &AppState, project_id: &str) {
     }
 }
 
+// ------------------------------------------------------------------
+// CouchDB-Implementierung
+// ------------------------------------------------------------------
+
 impl CouchDb {
+    /// Stellt sicher, dass die Datenbank existiert (idempotenter PUT).
     async fn ensure_db(&self) -> anyhow::Result<()> {
         let url = format!("{}/{}", self.base_url, self.db);
         let resp = self.client.put(url).send().await?;
+        // 412 Precondition Failed bedeutet: DB existiert bereits – kein Fehler.
         if !(resp.status().is_success() || resp.status().as_u16() == 412) {
             anyhow::bail!("Failed to ensure DB");
         }
         Ok(())
     }
 
+    /// Listet alle Dokumente in der Datenbank auf.
     async fn list_projects(&self) -> Result<Vec<ProjectDoc>, ApiError> {
         #[derive(Deserialize)]
         struct AllDocs {
@@ -584,6 +724,7 @@ impl CouchDb {
         Ok(rows.rows.into_iter().filter_map(|r| r.doc).collect())
     }
 
+    /// Legt ein neues Dokument in CouchDB an (POST).
     async fn create_project(&self, mut project: ProjectDoc) -> Result<ProjectDoc, ApiError> {
         if project.id.is_empty() {
             project.id = Uuid::new_v4().to_string();
@@ -602,6 +743,7 @@ impl CouchDb {
         Ok(project)
     }
 
+    /// Liest ein einzelnes Dokument aus CouchDB.
     async fn get_project(&self, id: &str) -> Result<ProjectDoc, ApiError> {
         let url = format!("{}/{}/{}", self.base_url, self.db, id);
         let proj = self
@@ -615,6 +757,7 @@ impl CouchDb {
         Ok(proj)
     }
 
+    /// Schreibt ein vorhandenes Dokument zurück (PUT mit Rev).
     async fn put_project(&self, mut project: ProjectDoc) -> Result<ProjectDoc, ApiError> {
         let id = project.id.clone();
         let url = format!("{}/{}/{}", self.base_url, self.db, id);
@@ -631,12 +774,17 @@ impl CouchDb {
         Ok(project)
     }
 
+    /// Löscht ein Dokument in CouchDB (erfordert aktuelle Rev).
     async fn delete_project(&self, id: &str, rev: &str) -> Result<(), ApiError> {
         let url = format!("{}/{}/{}?rev={}", self.base_url, self.db, id, rev);
         self.client.delete(url).send().await?.error_for_status()?;
         Ok(())
     }
 }
+
+// ------------------------------------------------------------------
+// DataStore-Delegation
+// ------------------------------------------------------------------
 
 impl DataStore {
     async fn list_projects(&self) -> Result<Vec<ProjectDoc>, ApiError> {
@@ -675,16 +823,23 @@ impl DataStore {
     }
 }
 
+// ------------------------------------------------------------------
+// FileStore-Implementierung
+// ------------------------------------------------------------------
+
 impl FileStore {
+    /// Erstellt das Root-Verzeichnis, falls es nicht existiert.
     async fn ensure_db(&self) -> Result<(), ApiError> {
         tokio::fs::create_dir_all(&self.root).await?;
         Ok(())
     }
 
+    /// Gibt den Dateipfad für ein Projekt zurück.
     fn project_path(&self, id: &str) -> PathBuf {
         self.root.join(format!("{id}.json"))
     }
 
+    /// Liest alle JSON-Dateien im Root-Verzeichnis ein.
     async fn list_projects(&self) -> Result<Vec<ProjectDoc>, ApiError> {
         let mut out = vec![];
         let mut entries = tokio::fs::read_dir(&self.root).await?;
@@ -700,6 +855,7 @@ impl FileStore {
         Ok(out)
     }
 
+    /// Schreibt ein neues Projekt als JSON-Datei. Startet mit Rev "1".
     async fn create_project(&self, mut project: ProjectDoc) -> Result<ProjectDoc, ApiError> {
         if project.id.is_empty() {
             project.id = Uuid::new_v4().to_string();
@@ -710,6 +866,7 @@ impl FileStore {
         Ok(project)
     }
 
+    /// Liest ein Projekt aus einer JSON-Datei.
     async fn get_project(&self, id: &str) -> Result<ProjectDoc, ApiError> {
         let path = self.project_path(id);
         if !path.exists() {
@@ -719,6 +876,7 @@ impl FileStore {
         Ok(serde_json::from_str(&content)?)
     }
 
+    /// Überschreibt eine Projektdatei. Prüft Revisions-Übereinstimmung (optimistisches Locking).
     async fn put_project(&self, mut project: ProjectDoc) -> Result<ProjectDoc, ApiError> {
         let current = self.get_project(&project.id).await?;
         let current_rev = current.rev.unwrap_or_else(|| "0".into());
@@ -728,6 +886,7 @@ impl FileStore {
                 "Revision conflict: expected {current_rev}, got {given_rev}"
             )));
         }
+        // Rev inkrementieren.
         let next_rev = current_rev.parse::<u64>().unwrap_or(0) + 1;
         project.rev = Some(next_rev.to_string());
         let content = serde_json::to_string_pretty(&project)?;
@@ -735,6 +894,7 @@ impl FileStore {
         Ok(project)
     }
 
+    /// Löscht eine Projektdatei nach Rev-Prüfung.
     async fn delete_project(&self, id: &str, rev: &str) -> Result<(), ApiError> {
         let current = self.get_project(id).await?;
         if current.rev.as_deref().unwrap_or("") != rev {
@@ -745,6 +905,11 @@ impl FileStore {
     }
 }
 
+// ------------------------------------------------------------------
+// Hilfsfunktion: Standard-Projekt
+// ------------------------------------------------------------------
+
+/// Erstellt ein Projekt mit drei Default-Spalten (Todo, In Progress, Done).
 fn default_project(title: String) -> ProjectDoc {
     ProjectDoc {
         id: Uuid::new_v4().to_string(),
@@ -775,6 +940,11 @@ fn default_project(title: String) -> ProjectDoc {
     }
 }
 
+// ------------------------------------------------------------------
+// Fehlerbehandlung
+// ------------------------------------------------------------------
+
+/// Einheitlicher Fehlertyp für alle API-Handler.
 #[derive(Debug, thiserror::Error)]
 enum ApiError {
     #[error("Not found: {0}")]
@@ -791,6 +961,7 @@ enum ApiError {
     Json(#[from] serde_json::Error),
 }
 
+/// Konvertiert `ApiError` in eine HTTP-Antwort mit JSON-Body `{"error": "..."}`.
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         let (status, msg) = match self {
