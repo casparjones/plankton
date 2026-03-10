@@ -1,41 +1,42 @@
 const path = require('path');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const { VueLoaderPlugin } = require('vue-loader');
 
 module.exports = {
-  entry: './src/frontend/main.js',
+  entry: './src/frontend/main.ts',
   output: {
     filename: 'bundle.js',
     path: path.resolve(__dirname, 'static'),
     clean: false,
   },
+  resolve: {
+    extensions: ['.ts', '.js', '.vue', '.json'],
+    alias: {
+      '@': path.resolve(__dirname, 'src/frontend'),
+    },
+  },
   plugins: [
     new MiniCssExtractPlugin({ filename: 'bundle.css' }),
+    new VueLoaderPlugin(),
   ],
   module: {
     rules: [
       {
-        test: /\.css$/i,
-        use: [MiniCssExtractPlugin.loader, 'css-loader'],
+        test: /\.vue$/,
+        loader: 'vue-loader',
       },
       {
-        // jKanban Fix: Die IIFE `(function() { this.jKanban = ... })()`
-        // hat in Webpack strict-mode `this === undefined`.
-        // Ersetze den self-invoking Call `})()` durch `}).call(window)`,
-        // damit `this` auf `window` zeigt und `window.jKanban` gesetzt wird.
-        test: /jkanban[/\\]jkanban\.js$/,
-        use: [
-          {
-            loader: 'exports-loader',
-            options: { type: 'commonjs', exports: 'single window.jKanban' },
-          },
-          {
-            loader: 'string-replace-loader',
-            options: {
-              search: '})()',
-              replace: '}).call(window)',
-            },
-          },
-        ],
+        test: /\.ts$/,
+        loader: 'ts-loader',
+        exclude: /node_modules/,
+        options: {
+          appendTsSuffixTo: [/\.vue$/],
+          transpileOnly: true,
+        },
+      },
+      {
+        test: /\.css$/i,
+        use: [MiniCssExtractPlugin.loader, 'css-loader'],
       },
     ],
   },

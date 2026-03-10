@@ -1604,3 +1604,47 @@ body {
 
 /* Plankton – Stylesheet (Module) */
 
+
+.board-columns[data-v-550c2f11] {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 8px 0;
+  min-height: 200px;
+  align-items: flex-start;
+}
+.kanban-column[data-v-550c2f11] {
+  min-width: 280px;
+  max-width: 320px;
+  flex: 0 0 300px;
+  background: var(--board-bg, #1a1a2e);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+}
+.kanban-board-header[data-v-550c2f11] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px 8px 0 0;
+}
+.kanban-drag[data-v-550c2f11] {
+  min-height: 40px;
+  padding: 4px 8px;
+  flex: 1;
+}
+.kanban-item[data-v-550c2f11] {
+  cursor: grab;
+  margin-bottom: 6px;
+}
+.kanban-item[data-v-550c2f11]:active {
+  cursor: grabbing;
+}
+.kanban-empty[data-v-550c2f11] {
+  padding: 16px;
+  text-align: center;
+  opacity: 0.5;
+  font-size: 0.85rem;
+}
+
