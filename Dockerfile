@@ -18,7 +18,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # Frontend-Quellen
-COPY webpack.config.js ./
+COPY webpack.config.js tsconfig.json ./
 COPY src/frontend ./src/frontend/
 COPY static/styles.css static/index.html ./static/
 COPY static/styles ./static/styles/
