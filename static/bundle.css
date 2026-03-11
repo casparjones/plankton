@@ -1,10 +1,4 @@
-/*!*******************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/variables.css ***!
-  \*******************************************************************************/
 @import url(https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap);
-/*!***********************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/variables.css (1) ***!
-  \***********************************************************************************/
 /* Plankton – Theme Variables */
 
 :root {
@@ -36,9 +30,6 @@ body[data-theme="light"] {
     color-scheme: light;
 }
 
-/*!**************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/base.css ***!
-  \**************************************************************************/
 /* jKanban Base + Reset + Layout */
 
 .kanban-container { overflow: hidden; }
@@ -124,9 +115,6 @@ body {
     background: rgba(224, 92, 106, 0.1);
 }
 
-/*!*****************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/sidebar.css ***!
-  \*****************************************************************************/
 /* Sidebar + User Section */
 
 .sidebar {
@@ -345,9 +333,6 @@ body {
     color: var(--accent);
 }
 
-/*!***************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/board.css ***!
-  \***************************************************************************/
 /* Main Area + jKanban Overrides + Task Cards */
 
 .main {
@@ -614,9 +599,6 @@ body {
 
 .bulk-bar.visible { display: flex; }
 
-/*!****************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/modals.css ***!
-  \****************************************************************************/
 /* Modal Base Styles */
 
 .modal-overlay {
@@ -863,9 +845,6 @@ body {
     box-shadow: 0 0 0 2px var(--accent);
 }
 
-/*!*********************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/task-detail.css ***!
-  \*********************************************************************************/
 /* Task Detail View */
 
 .detail-title {
@@ -1144,9 +1123,6 @@ body {
     }
 }
 
-/*!**********************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/project-menu.css ***!
-  \**********************************************************************************/
 /* Project Menu Button + Dropdown + Prompt + JSON */
 
 .project-menu-btn {
@@ -1239,9 +1215,6 @@ body {
     border-color: var(--accent);
 }
 
-/*!***************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/login.css ***!
-  \***************************************************************************/
 /* Login Page */
 
 .login-page {
@@ -1316,9 +1289,6 @@ body {
     font-size: 14px;
 }
 
-/*!***************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/admin.css ***!
-  \***************************************************************************/
 /* Admin Panel + Tabs + Tokens */
 
 .admin-user-list {
@@ -1449,9 +1419,6 @@ body {
     user-select: all;
 }
 
-/*!*******************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/json-tree.css ***!
-  \*******************************************************************************/
 /* JSON Tree-View */
 
 .json-tree {
@@ -1538,9 +1505,6 @@ body {
     /* wrapper */
 }
 
-/*!****************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/import.css ***!
-  \****************************************************************************/
 /* Import Modal */
 
 .import-btn {
@@ -1643,9 +1607,6 @@ body {
     border-radius: var(--radius);
 }
 
-/*!*************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/git.css ***!
-  \*************************************************************************/
 /* Git-Status-Icon im Board-Header */
 
 .git-status-icon {
@@ -1722,16 +1683,10 @@ body {
     padding: 6px 8px;
 }
 
-/*!*********************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles.css ***!
-  \*********************************************************************/
 /* Plankton – Stylesheet (Module) */
 
-/*!*************************************************************************************************************************************************************************************************************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/vue-loader/dist/index.js??ruleSet[1].rules[5].use[0]!./src/frontend/components/KanbanBoard.vue?vue&type=style&index=0&id=5c281aac&scoped=true&lang=css ***!
-  \*************************************************************************************************************************************************************************************************************************************************************************/
 
-.board-columns[data-v-5c281aac] {
+.board-columns[data-v-6913501f] {
   display: flex;
   gap: 12px;
   overflow-x: auto;
@@ -1739,7 +1694,7 @@ body {
   min-height: 200px;
   align-items: flex-start;
 }
-.kanban-column[data-v-5c281aac] {
+.kanban-column[data-v-6913501f] {
   min-width: 280px;
   max-width: 320px;
   flex: 0 0 300px;
@@ -1749,7 +1704,7 @@ body {
   flex-direction: column;
   max-height: calc(100vh - 140px);
 }
-.kanban-board-header[data-v-5c281aac] {
+.kanban-board-header[data-v-6913501f] {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1758,30 +1713,30 @@ body {
   flex-shrink: 0;
   cursor: grab;
 }
-.kanban-board-header[data-v-5c281aac]:active {
+.kanban-board-header[data-v-6913501f]:active {
   cursor: grabbing;
 }
-.col-done .kanban-board-header[data-v-5c281aac] {
+.col-done .kanban-board-header[data-v-6913501f] {
   cursor: default;
 }
-.column-dragging[data-v-5c281aac] {
+.column-dragging[data-v-6913501f] {
   opacity: 0.4;
 }
-.kanban-drag[data-v-5c281aac] {
+.kanban-drag[data-v-6913501f] {
   min-height: 40px;
   padding: 4px 8px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
-.kanban-item[data-v-5c281aac] {
+.kanban-item[data-v-6913501f] {
   cursor: grab;
   margin-bottom: 6px;
 }
-.kanban-item[data-v-5c281aac]:active {
+.kanban-item[data-v-6913501f]:active {
   cursor: grabbing;
 }
-.kanban-empty[data-v-5c281aac] {
+.kanban-empty[data-v-6913501f] {
   padding: 16px;
   text-align: center;
   opacity: 0.5;
