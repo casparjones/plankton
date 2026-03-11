@@ -182,7 +182,7 @@ pub async fn move_task(
     Path((id, task_id)): Path<(String, String)>,
     headers: axum::http::HeaderMap,
     Json(req): Json<MoveTaskRequest>,
-) -> Result<Json<ProjectDoc>, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     let mut project = state.store.get_project(&id).await?;
     let user_name = extract_token_from_headers(&headers)
         .and_then(|t| validate_jwt(&t, &state.jwt_secret).ok())
@@ -208,7 +208,26 @@ pub async fn move_task(
     } else {
         return Err(ApiError::NotFound("Task not found".into()));
     }
-    let updated = state.store.put_project(project).await?;
+    state.store.put_project(project).await?;
     publish_update(&state, &id).await;
-    Ok(Json(updated))
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// POST /api/projects/:id/tasks/batch-move – Mehrere Tasks auf einmal verschieben.
+pub async fn batch_move_tasks(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<BatchMoveRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut project = state.store.get_project(&id).await?;
+    for m in &req.moves {
+        if let Some(task) = project.tasks.iter_mut().find(|t| t.id == m.task_id) {
+            task.column_id = m.column_id.clone();
+            task.order = m.order;
+            task.updated_at = Utc::now().to_rfc3339();
+        }
+    }
+    state.store.put_project(project).await?;
+    publish_update(&state, &id).await;
+    Ok(Json(serde_json::json!({ "ok": true, "moved": req.moves.len() })))
 }

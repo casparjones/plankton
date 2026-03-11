@@ -186,7 +186,7 @@ onMounted(() => {
         <button id="theme-toggle" class="theme-toggle" title="Theme wechseln">&#9728;</button>
       </div>
       <div class="sidebar-create">
-        <input id="new-project-input" placeholder="Projektname…" />
+        <input id="new-project-input" placeholder="Projektname…" autocomplete="one-time-code" name="project-title-new" />
         <button id="new-project-btn" @click="handleCreateProject">Erstellen</button>
       </div>
       <ul id="project-list" class="project-list"></ul>
@@ -258,7 +258,7 @@ onMounted(() => {
         <button class="modal-close" id="proj-modal-close">&#10005;</button>
       </div>
       <label>Projektname
-        <input id="proj-modal-title" type="text" placeholder="Projektname…" />
+        <input id="proj-modal-title" type="text" placeholder="Projektname…" autocomplete="one-time-code" name="project-title-edit" />
       </label>
       <div class="proj-json-header">
         <span class="modal-section-title">JSON</span>

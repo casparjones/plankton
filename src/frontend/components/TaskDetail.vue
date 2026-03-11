@@ -1,10 +1,20 @@
 <script setup lang="ts">
 // Task-Detail: Nur-Lesen-Ansicht eines Tasks mit allen Informationen.
 import { ref, computed } from 'vue'
+import { marked } from 'marked'
 import type { Task } from '../types'
 
 import { state } from '../state'
 import { columnName, formatDate } from '../utils'
+
+// Marked Optionen: keine async, Zeilenumbrüche als <br>
+marked.setOptions({ async: false, breaks: true })
+
+/** Rendert Markdown zu sanitized HTML. */
+function renderMarkdown(text: string | undefined): string {
+  if (!text) return '–'
+  return marked.parse(text) as string
+}
 
 const isOpen = ref(false)
 const task = ref<Task | null>(null)
@@ -69,7 +79,7 @@ defineExpose({ open, close })
         <div class="detail-col-main">
           <div class="detail-section">
             <span class="detail-section-title">Beschreibung</span>
-            <div class="detail-description">{{ task?.description || '–' }}</div>
+            <div class="detail-description markdown-body" v-html="renderMarkdown(task?.description)"></div>
           </div>
           <div class="detail-section">
             <span class="detail-section-title">Labels</span>
@@ -84,7 +94,7 @@ defineExpose({ open, close })
             <span class="detail-section-title">Kommentare</span>
             <div class="detail-list">
               <template v-if="comments.length">
-                <div v-for="(c, i) in comments" :key="i" class="detail-list-item">{{ c }}</div>
+                <div v-for="(c, i) in comments" :key="i" class="detail-list-item markdown-body" v-html="renderMarkdown(c)"></div>
               </template>
               <div v-else class="detail-list-empty">Keine Kommentare</div>
             </div>

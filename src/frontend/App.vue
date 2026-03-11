@@ -17,6 +17,7 @@ import { toggleTheme as legacyToggleTheme } from './components/theme'
 
 const { initTheme } = useTheme()
 
+const authChecked = ref(false)
 const isAuthenticated = ref(false)
 const loginError = ref('')
 const loginUsername = ref('')
@@ -91,11 +92,13 @@ onMounted(async () => {
   console.log('[App] checkAuth result:', user)
   if (!user) {
     console.log('[App] Not authenticated, showing login')
+    authChecked.value = true
     showLogin()
     return
   }
   state.currentUser = user
   isAuthenticated.value = true
+  authChecked.value = true
   console.log('[App] Authenticated, isAuthenticated=true')
 
   await nextTick()
@@ -108,8 +111,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <!-- Login-Ansicht -->
-  <div v-if="!isAuthenticated" class="login-page">
+  <!-- Login-Ansicht (erst nach Auth-Check zeigen, verhindert Flash) -->
+  <div v-if="authChecked && !isAuthenticated" class="login-page">
     <div class="login-card">
       <div class="login-logo">&#x1FAB4; Plankton</div>
       <div v-if="loginError" class="login-error">{{ loginError }}</div>

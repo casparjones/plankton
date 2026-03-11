@@ -22,6 +22,20 @@ pub struct MoveTaskRequest {
     pub order: Option<i32>,
 }
 
+/// Einzelner Move in einem Batch.
+#[derive(Debug, Deserialize)]
+pub struct BatchMoveItem {
+    pub task_id: String,
+    pub column_id: String,
+    pub order: i32,
+}
+
+/// Body für POST /projects/:id/tasks/batch-move
+#[derive(Debug, Deserialize)]
+pub struct BatchMoveRequest {
+    pub moves: Vec<BatchMoveItem>,
+}
+
 /// Body für POST /mcp/call
 #[derive(Debug, Deserialize)]
 pub struct McpCall {

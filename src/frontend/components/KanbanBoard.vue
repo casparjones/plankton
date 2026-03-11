@@ -2,13 +2,13 @@
 // Kanban-Board Komponente mit VueDraggablePlus für Drag&Drop.
 // Ersetzt die bisherige jKanban-Implementierung.
 
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
+import Sortable from 'sortablejs'
 import type { Task, Column } from '../types'
 
 import { state } from '../state'
-// @ts-ignore
-import { moveTask } from '../services/project-service'
+import api from '../api'
 import { updateBulkBar } from './bulk-actions'
 // @ts-ignore
 import { updateGitStatusIcon } from './git-settings'
@@ -88,45 +88,83 @@ watch(() => state.project, (newVal, oldVal) => {
 
 /** Handler für Task-Drag-Start. */
 function onDragStart(): void {
+  console.log('[DnD] drag START')
   state.isDragging = true
 }
 
 /** Handler für Task-Drag-Ende. */
-function onDragEnd(): void {
+function onDragEnd(evt: any): void {
+  console.log('[DnD] drag END', evt)
   setTimeout(() => { state.isDragging = false }, 50)
 }
 
-/** Handler wenn ein Task in eine Spalte gedroppt wird. */
-function onTaskChange(columnId: string, evt: { moved?: { element: Task; newIndex: number }; added?: { element: Task; newIndex: number } }): void {
-  if (evt.added) {
-    // Task wurde in eine andere Spalte verschoben
-    moveTask(evt.added.element.id, columnId, evt.added.newIndex, true)
-  } else if (evt.moved) {
-    // Task wurde innerhalb derselben Spalte verschoben
-    moveTask(evt.moved.element.id, columnId, evt.moved.newIndex, true)
-  }
+/** Batch-Move: alle Moves in einem Request. */
+function persistMoves(moves: { task_id: string; column_id: string; order: number }[]): void {
+  if (!moves.length) return
+  api.post(`/api/projects/${state.project!._id}/tasks/batch-move`, { moves })
+    .then(() => console.log('[DnD] ✅ batch-move', moves.length, 'tasks'))
+    .catch(err => console.error('[DnD] ❌ batch-move failed:', err))
 }
 
-/** Handler für Spalten-Reihenfolge nach Drag. */
-function onColumnReorder(): void {
-  // Spalten-Order im Backend aktualisieren
-  const visibleColumns = sortedColumns.value
-  // @ts-ignore – Legacy-Import
-  import('../services/project-service').then(({ saveTask: _unused, ...mod }) => {
-    // Direkt die Spaltenorder über die API speichern
-    const columns = state.project?.columns
-    if (!columns) return
-    visibleColumns.forEach((col: Column, idx: number) => {
-      const origCol = columns.find((c: Column) => c.id === col.id)
-      if (origCol) origCol.order = idx
-    })
-    // Projekt speichern
-    // @ts-ignore
-    import('../api').then(({ default: api }) => {
-      api.put(`/api/projects/${state.project._id}`, state.project)
+/** SortableJS @update: Task innerhalb derselben Spalte verschoben. */
+function onSortUpdate(columnId: string, evt: any): void {
+  const tasks = columnTasks.value[columnId] || []
+  const from = Math.min(evt.oldIndex, evt.newIndex)
+  const to = Math.max(evt.oldIndex, evt.newIndex)
+  const moves: { task_id: string; column_id: string; order: number }[] = []
+  for (let i = from; i <= to; i++) {
+    const task = tasks[i]
+    if (task && task.order !== i) {
+      task.order = i
+      moves.push({ task_id: task.id, column_id: columnId, order: i })
+    }
+  }
+  persistMoves(moves)
+}
+
+/** SortableJS @add: Task aus anderer Spalte hierhin verschoben. */
+function onSortAdd(columnId: string, evt: any): void {
+  const tasks = columnTasks.value[columnId] || []
+  const task = tasks[evt.newIndex]
+  if (task) persistMoves([{ task_id: task.id, column_id: columnId, order: evt.newIndex }])
+}
+
+/** Spalten-Reihenfolge nach Drag persistieren. */
+function onColumnReorder(evt: Sortable.SortableEvent): void {
+  if (evt.oldIndex == null || evt.newIndex == null || evt.oldIndex === evt.newIndex) return
+  // State aktualisieren
+  const columns = state.project?.columns
+  if (!columns) return
+  // Neue Reihenfolge aus dem DOM lesen (data-id Attribute)
+  const container = evt.from
+  const orderedIds = Array.from(container.children).map(el => (el as HTMLElement).dataset.id)
+  orderedIds.forEach((id, idx) => {
+    const col = columns.find((c: Column) => c.id === id)
+    if (col) col.order = idx
+  })
+  // Done-Spalte immer zuletzt
+  const done = columns.find((c: Column) => c.title === 'Done')
+  if (done) done.order = 9999
+  // Projekt speichern
+  api.put(`/api/projects/${state.project!._id}`, state.project)
+    .catch(err => console.error('[DnD] column reorder failed:', err))
+}
+
+/** Template ref für den Spalten-Container. */
+const columnsRef = ref<HTMLElement | null>(null)
+
+onMounted(() => {
+  nextTick(() => {
+    if (!columnsRef.value) return
+    Sortable.create(columnsRef.value, {
+      animation: 150,
+      handle: '.kanban-board-header',
+      draggable: '.kanban-column:not(.col-done)',
+      ghostClass: 'column-dragging',
+      onEnd: onColumnReorder,
     })
   })
-}
+})
 
 /** Checkbox-Handler für Bulk-Selection. */
 function toggleTaskSelection(taskId: string, checked: boolean): void {
@@ -165,11 +203,6 @@ function openColMenu(event: Event, columnId: string): void {
   })
 }
 
-/** Erzeugt einen Change-Handler für eine bestimmte Spalte. */
-function makeChangeHandler(columnId: string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (evt: any) => onTaskChange(columnId, evt)
-}
 
 // Globale Funktion für SSE-Updates und Legacy-Code (board.js Bridge).
 // @ts-ignore
@@ -177,7 +210,7 @@ window.__kanbanRefresh = refreshColumnTasks
 </script>
 
 <template>
-  <div class="board-columns">
+  <div ref="columnsRef" class="board-columns">
     <!-- Spalten-Container (Drag&Drop für Spaltenreihenfolge deaktiviert für Done) -->
     <div
       v-for="col in sortedColumns"
@@ -205,7 +238,8 @@ window.__kanbanRefresh = refreshColumnTasks
         ghost-class="dragging"
         @start="onDragStart"
         @end="onDragEnd"
-        @change="makeChangeHandler(col.id)"
+        @update="(evt: any) => onSortUpdate(col.id, evt)"
+        @add="(evt: any) => onSortAdd(col.id, evt)"
       >
         <div
           v-for="task in (columnTasks[col.id] || [])"
@@ -272,6 +306,7 @@ window.__kanbanRefresh = refreshColumnTasks
   border-radius: 8px;
   display: flex;
   flex-direction: column;
+  max-height: calc(100vh - 140px);
 }
 
 .kanban-board-header {
@@ -280,12 +315,28 @@ window.__kanbanRefresh = refreshColumnTasks
   gap: 8px;
   padding: 10px 12px;
   border-radius: 8px 8px 0 0;
+  flex-shrink: 0;
+  cursor: grab;
+}
+
+.kanban-board-header:active {
+  cursor: grabbing;
+}
+
+.col-done .kanban-board-header {
+  cursor: default;
+}
+
+.column-dragging {
+  opacity: 0.4;
 }
 
 .kanban-drag {
   min-height: 40px;
   padding: 4px 8px;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .kanban-item {

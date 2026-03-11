@@ -1,4 +1,10 @@
+/*!*******************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/variables.css ***!
+  \*******************************************************************************/
 @import url(https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap);
+/*!***********************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/variables.css (1) ***!
+  \***********************************************************************************/
 /* Plankton – Theme Variables */
 
 :root {
@@ -30,6 +36,9 @@ body[data-theme="light"] {
     color-scheme: light;
 }
 
+/*!**************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/base.css ***!
+  \**************************************************************************/
 /* jKanban Base + Reset + Layout */
 
 .kanban-container { overflow: hidden; }
@@ -115,6 +124,9 @@ body {
     background: rgba(224, 92, 106, 0.1);
 }
 
+/*!*****************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/sidebar.css ***!
+  \*****************************************************************************/
 /* Sidebar + User Section */
 
 .sidebar {
@@ -333,6 +345,9 @@ body {
     color: var(--accent);
 }
 
+/*!***************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/board.css ***!
+  \***************************************************************************/
 /* Main Area + jKanban Overrides + Task Cards */
 
 .main {
@@ -599,6 +614,9 @@ body {
 
 .bulk-bar.visible { display: flex; }
 
+/*!****************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/modals.css ***!
+  \****************************************************************************/
 /* Modal Base Styles */
 
 .modal-overlay {
@@ -845,6 +863,9 @@ body {
     box-shadow: 0 0 0 2px var(--accent);
 }
 
+/*!*********************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/task-detail.css ***!
+  \*********************************************************************************/
 /* Task Detail View */
 
 .detail-title {
@@ -886,13 +907,94 @@ body {
     font-size: 14px;
     color: var(--text);
     line-height: 1.6;
-    white-space: pre-wrap;
     word-break: break-word;
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 14px 16px;
     min-height: 80px;
+}
+
+/* Markdown in Beschreibung und Kommentaren */
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+    color: var(--text);
+    margin: 0.6em 0 0.3em;
+    line-height: 1.3;
+}
+.markdown-body h1 { font-size: 1.4em; }
+.markdown-body h2 { font-size: 1.2em; }
+.markdown-body h3 { font-size: 1.05em; }
+
+.markdown-body p { margin: 0 0 0.5em; }
+.markdown-body p:last-child { margin-bottom: 0; }
+
+.markdown-body ul, .markdown-body ol {
+    padding-left: 1.5em;
+    margin: 0.3em 0;
+}
+.markdown-body li { margin: 0.15em 0; }
+
+.markdown-body code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+}
+
+.markdown-body pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+.markdown-body pre code {
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.markdown-body blockquote {
+    border-left: 3px solid var(--accent);
+    margin: 0.5em 0;
+    padding: 0.3em 0.8em;
+    color: var(--text-dim);
+}
+
+.markdown-body a {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+.markdown-body table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.5em 0;
+}
+.markdown-body th, .markdown-body td {
+    border: 1px solid var(--border);
+    padding: 5px 10px;
+    font-size: 13px;
+    text-align: left;
+}
+.markdown-body th {
+    background: var(--surface);
+    font-weight: 600;
+}
+
+.markdown-body hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0.8em 0;
+}
+
+.markdown-body img {
+    max-width: 100%;
+    border-radius: var(--radius);
 }
 
 .detail-description-empty {
@@ -1042,6 +1144,9 @@ body {
     }
 }
 
+/*!**********************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/project-menu.css ***!
+  \**********************************************************************************/
 /* Project Menu Button + Dropdown + Prompt + JSON */
 
 .project-menu-btn {
@@ -1134,6 +1239,9 @@ body {
     border-color: var(--accent);
 }
 
+/*!***************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/login.css ***!
+  \***************************************************************************/
 /* Login Page */
 
 .login-page {
@@ -1208,6 +1316,9 @@ body {
     font-size: 14px;
 }
 
+/*!***************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/admin.css ***!
+  \***************************************************************************/
 /* Admin Panel + Tabs + Tokens */
 
 .admin-user-list {
@@ -1338,6 +1449,9 @@ body {
     user-select: all;
 }
 
+/*!*******************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/json-tree.css ***!
+  \*******************************************************************************/
 /* JSON Tree-View */
 
 .json-tree {
@@ -1424,6 +1538,9 @@ body {
     /* wrapper */
 }
 
+/*!****************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/import.css ***!
+  \****************************************************************************/
 /* Import Modal */
 
 .import-btn {
@@ -1526,6 +1643,9 @@ body {
     border-radius: var(--radius);
 }
 
+/*!*************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles/git.css ***!
+  \*************************************************************************/
 /* Git-Status-Icon im Board-Header */
 
 .git-status-icon {
@@ -1602,10 +1722,16 @@ body {
     padding: 6px 8px;
 }
 
+/*!*********************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./static/styles.css ***!
+  \*********************************************************************/
 /* Plankton – Stylesheet (Module) */
 
+/*!*************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./node_modules/vue-loader/dist/stylePostLoader.js!./node_modules/vue-loader/dist/index.js??ruleSet[1].rules[5].use[0]!./src/frontend/components/KanbanBoard.vue?vue&type=style&index=0&id=5c281aac&scoped=true&lang=css ***!
+  \*************************************************************************************************************************************************************************************************************************************************************************/
 
-.board-columns[data-v-550c2f11] {
+.board-columns[data-v-5c281aac] {
   display: flex;
   gap: 12px;
   overflow-x: auto;
@@ -1613,7 +1739,7 @@ body {
   min-height: 200px;
   align-items: flex-start;
 }
-.kanban-column[data-v-550c2f11] {
+.kanban-column[data-v-5c281aac] {
   min-width: 280px;
   max-width: 320px;
   flex: 0 0 300px;
@@ -1621,27 +1747,41 @@ body {
   border-radius: 8px;
   display: flex;
   flex-direction: column;
+  max-height: calc(100vh - 140px);
 }
-.kanban-board-header[data-v-550c2f11] {
+.kanban-board-header[data-v-5c281aac] {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
   border-radius: 8px 8px 0 0;
+  flex-shrink: 0;
+  cursor: grab;
 }
-.kanban-drag[data-v-550c2f11] {
+.kanban-board-header[data-v-5c281aac]:active {
+  cursor: grabbing;
+}
+.col-done .kanban-board-header[data-v-5c281aac] {
+  cursor: default;
+}
+.column-dragging[data-v-5c281aac] {
+  opacity: 0.4;
+}
+.kanban-drag[data-v-5c281aac] {
   min-height: 40px;
   padding: 4px 8px;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
-.kanban-item[data-v-550c2f11] {
+.kanban-item[data-v-5c281aac] {
   cursor: grab;
   margin-bottom: 6px;
 }
-.kanban-item[data-v-550c2f11]:active {
+.kanban-item[data-v-5c281aac]:active {
   cursor: grabbing;
 }
-.kanban-empty[data-v-550c2f11] {
+.kanban-empty[data-v-5c281aac] {
   padding: 16px;
   text-align: center;
   opacity: 0.5;

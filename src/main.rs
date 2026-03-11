@@ -115,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
             put(update_task).delete(delete_task),
         )
         .route("/api/projects/:id/tasks/:task_id/move", post(move_task))
+        .route("/api/projects/:id/tasks/batch-move", post(batch_move_tasks))
         .route("/api/projects/:id/import", post(import_tasks))
         .route("/api/projects/:id/columns", post(create_column))
         .route(
