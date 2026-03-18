@@ -574,107 +574,167 @@ pub async fn skill_md(
         .unwrap_or("http");
     let plankton_url = format!("{scheme}://{host}");
 
-    let tools = all_tools();
-    let tool_lines: String = tools
-        .iter()
-        .map(|t| {
-            let roles = match t.roles {
-                None => "public".to_string(),
-                Some(r) => r.join(", "),
-            };
-            format!("- `{}` – {} ({})", t.name, t.description, roles)
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
     let content = format!(
         r#"---
 name: plankton
-description: Manage tasks on the Plankton Kanban board via MCP – create, assign, review, and move tasks autonomously
+description: Manage tasks on the Plankton Kanban board – create, assign, review, and move tasks using curl and the JSON-RPC API
 allowed-tools: Bash, Read, Grep, WebFetch
 user-invocable: true
 ---
 
 # Plankton – Kanban Board für KI-Agenten
 
-Plankton ist ein Kanban-Board mit REST-API und MCP-Integration.
-Es ermöglicht KI-Agenten, Tasks über das Model Context Protocol (MCP) zu verwalten.
+Plankton ist ein Kanban-Board mit REST-API und JSON-RPC-Schnittstelle.
+Du interagierst damit ausschließlich über **curl-Aufrufe** an den JSON-RPC-Endpunkt.
 
 - **Server:** {plankton_url}
 - **Dokumentation:** {plankton_url}/docs
 
 ## Secrets laden
 
-Lies die Datei `plankton-secrets.md` aus einem der folgenden Orte (erster Treffer gewinnt):
+Lies zuerst die Datei `plankton-secrets.md` aus einem der folgenden Orte (erster Treffer gewinnt):
 
 1. `~/.claude/plankton-secrets.md` (persönlich, empfohlen)
 2. `.claude/plankton-secrets.md` (projektlokal)
 
-Die Secrets-Datei enthält MCP-Agent-Tokens und die Server-URL.
-Du kannst sie in der Plankton-Oberfläche unter **Projekt-Menü → Prompts → Secrets** generieren
-und dann manuell in eine der oben genannten Dateien speichern.
+Die Secrets-Datei enthält Agent-Tokens und die Server-URL.
+Generiere sie in der Plankton-Oberfläche unter **Projekt-Menü → Prompts → Claude Code Skill**.
 
-Verwende den Token als Bearer-Token im Authorization-Header:
+## API-Aufrufe
 
-```
-curl -X POST {plankton_url}/mcp \
+Alle Tool-Aufrufe gehen an `POST {plankton_url}/mcp` als JSON-RPC 2.0.
+Verwende den Token aus der Secrets-Datei als Bearer-Token.
+
+### Aufruf-Muster
+
+```bash
+curl -s -X POST {plankton_url}/mcp \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer plk_xxxxx..." \
+  -H "Authorization: Bearer $PLANKTON_TOKEN" \
+  -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"TOOL_NAME","arguments":{{ARGS}}}},"id":1}}'
+```
+
+Ersetze `TOOL_NAME` und `ARGS` mit den Werten aus der Tool-Referenz unten.
+Die Antwort kommt als `{{"result":{{"content":[{{"type":"text","text":"..."}}]}}}}`.
+
+## Tool-Referenz
+
+Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Parametern:
+
+### Öffentliche Tools (kein spezieller Token nötig)
+
+**list_projects** – Alle Projekte auflisten
+- Parameter: keine
+- Beispiel: `{{"name":"list_projects","arguments":{{}}}}`
+
+**get_project** – Ein Projekt mit allen Tasks laden
+- Parameter: `id` (string, required) – Projekt-ID
+- Beispiel: `{{"name":"get_project","arguments":{{"id":"PROJEKT_ID"}}}}`
+
+**summarize_board** – Board-Übersicht mit Spalten und Task-Anzahl
+- Parameter: `project_id` (string, required)
+- Beispiel: `{{"name":"summarize_board","arguments":{{"project_id":"PROJEKT_ID"}}}}`
+
+### Manager / Architect Tools
+
+**create_project** – Neues Projekt anlegen
+- Parameter: `title` (string, optional, default: "Untitled Project")
+
+**list_epics** – Spalten als Epics mit Task-Anzahl anzeigen
+- Parameter: `project_id` (string, required)
+
+**create_task** – Neuen Task erstellen
+- Parameter:
+  - `project_id` (string, required)
+  - `title` (string, optional)
+  - `description` (string, optional)
+  - `column_id` (string, optional – default: erste Spalte)
+  - `labels` (string[], optional)
+  - `worker` (string, optional)
+  - `points` (number, optional)
+- Beispiel: `{{"name":"create_task","arguments":{{"project_id":"ID","title":"Feature X","description":"Beschreibung","column_id":"SPALTE","labels":["feature"],"points":5}}}}`
+
+**move_task** – Task in andere Spalte verschieben
+- Parameter: `project_id`, `task_id`, `column_id` (alle string, required)
+
+**assign_task** – Worker einem Task zuweisen
+- Parameter: `project_id`, `task_id`, `worker` (alle string, required)
+
+**delete_task** – Task löschen
+- Parameter: `project_id`, `task_id` (beide string, required)
+
+### Developer Tools
+
+**get_assigned_tasks** – Dem Aufrufer zugewiesene Tasks
+- Parameter: `project_id` (string, required)
+
+**update_task** – Task bearbeiten (Titel, Beschreibung, Labels, Worker, Points)
+- Parameter:
+  - `project_id` (string, required)
+  - `task_id` (string, required)
+  - `title` (string, optional)
+  - `description` (string, optional)
+  - `labels` (string[], optional)
+  - `worker` (string, optional)
+  - `points` (number, optional)
+
+**add_log** – Log-Eintrag zu einem Task hinzufügen
+- Parameter: `project_id`, `task_id`, `message` (alle string, required)
+
+**submit_for_review** – Task zur Review einreichen (setzt Label "review")
+- Parameter: `project_id`, `task_id` (beide string, required)
+
+### Tester Tools
+
+**get_review_queue** – Tasks mit Label "review" auflisten
+- Parameter: `project_id` (string, required)
+
+**add_comment** – Kommentar zu einem Task hinzufügen
+- Parameter: `project_id`, `task_id`, `text` (alle string, required)
+
+**approve_task** – Task abnehmen (verschiebt nach "Done", entfernt "review"-Label)
+- Parameter: `project_id`, `task_id` (beide string, required)
+
+**reject_task** – Task zurückweisen (verschiebt zurück, entfernt "review"-Label)
+- Parameter: `project_id`, `task_id` (beide string, required), `comment` (string, optional)
+
+## Typischer Workflow
+
+1. `list_projects` → Projekt-ID finden
+2. `get_project` → Spalten-IDs und Tasks sehen
+3. `create_task` → Neuen Task anlegen
+4. `move_task` → Task in "In Progress" verschieben
+5. `add_log` → Fortschritt dokumentieren
+6. `submit_for_review` → Zur Review einreichen
+7. `approve_task` / `reject_task` → Review abschließen
+
+## Vollständiges Beispiel
+
+```bash
+# Token aus secrets.md laden
+TOKEN="plk_xxx..."
+
+# Projekte auflisten
+curl -s -X POST {plankton_url}/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"list_projects","arguments":{{}}}},"id":1}}'
+
+# Task erstellen
+curl -s -X POST {plankton_url}/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"create_task","arguments":{{"project_id":"PROJ_ID","title":"Bug fixen","description":"Details...","labels":["bug"],"points":3}}}},"id":2}}'
 ```
-
-## MCP-Endpunkt
-
-Der MCP-Endpunkt ist `{plankton_url}/mcp` und erwartet JSON-RPC 2.0.
-
-### Verfügbare Tools
-
-{tool_lines}
-
-## Agenten-Hierarchie
-
-```
-Supervisor (steuert den gesamten Workflow)
-├── Architect   (plant, erstellt Epics und Tasks)
-├── Developer   (implementiert Tasks)
-└── Tester      (prüft und reviewed Tasks)
-```
-
-## Workflow
-
-### 1. Idee → Epic
-Der **Architect** analysiert Ideen und erstellt Epics mit Akzeptanzkriterien.
-
-### 2. Epic → Tasks
-Der Architect bricht Epics in Tasks auf und legt sie im Backlog an.
-Jeder Task enthält: Epic-Referenz, Beschreibung, Priorität und Story Points.
-
-### 3. Entwicklung
-Der **Developer** nimmt Tasks nach Priorität:
-1. Task auf `In Progress` verschieben
-2. Code implementieren
-3. Log-Eintrag mit Änderungen schreiben
-4. Task zur Review einreichen (`submit_for_review`)
-
-### 4. Review
-Der **Tester** prüft Tasks in Review:
-- **Fehler:** Kommentar + `reject_task` → zurück an Developer
-- **Erfolg:** Abnahme-Kommentar + `approve_task` → Done
-
-### 5. Epic-Abschluss
-Der **Supervisor** prüft Fortschritt und markiert erledigte Epics.
 
 ## Regeln
 
-1. Jeder Agent arbeitet nur mit seinem MCP-Token und den damit verfügbaren Tools
+1. Jeder Agent arbeitet nur mit seinem Token und den damit verfügbaren Tools
 2. Kommunikation erfolgt über Task-Kommentare und -Logs in Plankton
 3. Der Workflow läuft vollständig autonom ohne Rückfragen an den Nutzer
-4. Code-Kommentare auf Deutsch, Variablen-/Funktionsnamen auf Englisch
-5. Nach jeder Backend-Änderung wird `cargo build` ausgeführt
-6. Bei Blockaden: Label `blocked` setzen und Kommentar mit Problembeschreibung
+4. Bei Blockaden: Label `blocked` setzen und Kommentar mit Problembeschreibung
 "#,
         plankton_url = plankton_url,
-        tool_lines = tool_lines,
     );
 
     (
