@@ -1371,6 +1371,41 @@ body {
 .prompt-output-content { display: none; }
 .prompt-output-content.prompt-tab-visible { display: block; }
 
+/* Skill-Tab */
+.prompt-skill-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.prompt-skill-info h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text);
+}
+
+.prompt-skill-info h4 {
+    margin: 12px 0 4px;
+    font-size: 13px;
+    color: var(--accent);
+}
+
+.prompt-skill-info p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+
+.prompt-skill-info code {
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
 /* Login Page */
 
 .login-page {

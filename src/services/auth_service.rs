@@ -27,9 +27,19 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// JWT-Token erstellen.
+/// JWT-Token erstellen (Standard: 8 Stunden).
 pub fn create_jwt(user: &AuthUser, secret: &str, must_change_pw: bool) -> Result<String, ApiError> {
-    let exp = Utc::now() + chrono::Duration::hours(8);
+    create_jwt_with_duration(user, secret, must_change_pw, chrono::Duration::hours(8))
+}
+
+/// JWT-Token mit konfigurierbarer Gültigkeit erstellen.
+pub fn create_jwt_with_duration(
+    user: &AuthUser,
+    secret: &str,
+    must_change_pw: bool,
+    duration: chrono::Duration,
+) -> Result<String, ApiError> {
+    let exp = Utc::now() + duration;
     let claims = Claims {
         sub: user.id.clone(),
         username: user.username.clone(),

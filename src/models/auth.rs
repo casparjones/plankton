@@ -98,6 +98,31 @@ pub struct UpdateTokenRequest {
     pub active: Option<bool>,
 }
 
+/// Status einer CLI-Login-Session (Device Flow).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum CliSessionStatus {
+    Pending,
+    Approved,
+    Expired,
+}
+
+/// Eine CLI-Login-Session für den Device-Auth-Flow.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CliSession {
+    pub session_id: String,
+    pub code: String,
+    pub status: CliSessionStatus,
+    pub token: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Anfrage zum Genehmigen einer CLI-Session.
+#[derive(Debug, Deserialize)]
+pub struct CliApproveRequest {
+    pub session_id: String,
+}
+
 /// Generiert einen zufälligen Agent-Token im Format `plk_<hex>`.
 pub fn generate_agent_token() -> String {
     use rand::Rng;

@@ -562,6 +562,133 @@ pub async fn docs_page() -> axum::response::Html<String> {
     axum::response::Html(generate_docs_html())
 }
 
+/// GET /skill.md – Claude Code Skill-Datei zum Download.
+pub async fn skill_md(
+    axum::extract::Host(host): axum::extract::Host,
+    headers: axum::http::HeaderMap,
+) -> impl axum::response::IntoResponse {
+    // Plankton-URL aus dem Request ableiten.
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("http");
+    let plankton_url = format!("{scheme}://{host}");
+
+    let tools = all_tools();
+    let tool_lines: String = tools
+        .iter()
+        .map(|t| {
+            let roles = match t.roles {
+                None => "public".to_string(),
+                Some(r) => r.join(", "),
+            };
+            format!("- `{}` – {} ({})", t.name, t.description, roles)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let content = format!(
+        r#"---
+name: plankton
+description: Manage tasks on the Plankton Kanban board via MCP – create, assign, review, and move tasks autonomously
+allowed-tools: Bash, Read, Grep, WebFetch
+user-invocable: true
+---
+
+# Plankton – Kanban Board für KI-Agenten
+
+Plankton ist ein Kanban-Board mit REST-API und MCP-Integration.
+Es ermöglicht KI-Agenten, Tasks über das Model Context Protocol (MCP) zu verwalten.
+
+- **Server:** {plankton_url}
+- **Dokumentation:** {plankton_url}/docs
+
+## Secrets laden
+
+Lies die Datei `plankton-secrets.md` aus einem der folgenden Orte (erster Treffer gewinnt):
+
+1. `~/.claude/plankton-secrets.md` (persönlich, empfohlen)
+2. `.claude/plankton-secrets.md` (projektlokal)
+
+Die Secrets-Datei enthält MCP-Agent-Tokens und die Server-URL.
+Du kannst sie in der Plankton-Oberfläche unter **Projekt-Menü → Prompts → Secrets** generieren
+und dann manuell in eine der oben genannten Dateien speichern.
+
+Verwende den Token als Bearer-Token im Authorization-Header:
+
+```
+curl -X POST {plankton_url}/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer plk_xxxxx..." \
+  -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"list_projects","arguments":{{}}}},"id":1}}'
+```
+
+## MCP-Endpunkt
+
+Der MCP-Endpunkt ist `{plankton_url}/mcp` und erwartet JSON-RPC 2.0.
+
+### Verfügbare Tools
+
+{tool_lines}
+
+## Agenten-Hierarchie
+
+```
+Supervisor (steuert den gesamten Workflow)
+├── Architect   (plant, erstellt Epics und Tasks)
+├── Developer   (implementiert Tasks)
+└── Tester      (prüft und reviewed Tasks)
+```
+
+## Workflow
+
+### 1. Idee → Epic
+Der **Architect** analysiert Ideen und erstellt Epics mit Akzeptanzkriterien.
+
+### 2. Epic → Tasks
+Der Architect bricht Epics in Tasks auf und legt sie im Backlog an.
+Jeder Task enthält: Epic-Referenz, Beschreibung, Priorität und Story Points.
+
+### 3. Entwicklung
+Der **Developer** nimmt Tasks nach Priorität:
+1. Task auf `In Progress` verschieben
+2. Code implementieren
+3. Log-Eintrag mit Änderungen schreiben
+4. Task zur Review einreichen (`submit_for_review`)
+
+### 4. Review
+Der **Tester** prüft Tasks in Review:
+- **Fehler:** Kommentar + `reject_task` → zurück an Developer
+- **Erfolg:** Abnahme-Kommentar + `approve_task` → Done
+
+### 5. Epic-Abschluss
+Der **Supervisor** prüft Fortschritt und markiert erledigte Epics.
+
+## Regeln
+
+1. Jeder Agent arbeitet nur mit seinem MCP-Token und den damit verfügbaren Tools
+2. Kommunikation erfolgt über Task-Kommentare und -Logs in Plankton
+3. Der Workflow läuft vollständig autonom ohne Rückfragen an den Nutzer
+4. Code-Kommentare auf Deutsch, Variablen-/Funktionsnamen auf Englisch
+5. Nach jeder Backend-Änderung wird `cargo build` ausgeführt
+6. Bei Blockaden: Label `blocked` setzen und Kommentar mit Problembeschreibung
+"#,
+        plankton_url = plankton_url,
+        tool_lines = tool_lines,
+    );
+
+    (
+        [
+            (axum::http::header::CONTENT_TYPE, "text/markdown; charset=utf-8"),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                "attachment; filename=\"SKILL.md\"",
+            ),
+        ],
+        content,
+    )
+}
+
 fn generate_docs_html() -> String {
     let tools = all_tools();
     let tool_rows: String = tools

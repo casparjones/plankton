@@ -299,6 +299,7 @@ onMounted(() => {
       <div class="prompt-tabs">
         <button class="prompt-tab prompt-tab-active" data-prompt-tab="simple">Simple</button>
         <button class="prompt-tab" data-prompt-tab="plankton">Plankton</button>
+        <button class="prompt-tab" data-prompt-tab="skill">Claude Code Skill</button>
       </div>
       <!-- Tab: Simple (bisheriger Prompt) -->
       <div id="prompt-tab-simple" class="prompt-tab-content prompt-tab-visible">
@@ -342,6 +343,37 @@ onMounted(() => {
             <button id="prompt-out-copy" class="btn-primary">In Zwischenablage kopieren</button>
             <button id="prompt-out-download" class="btn-small">&#8615; Herunterladen</button>
           </div>
+        </div>
+      </div>
+      <!-- Tab: Claude Code Skill -->
+      <div id="prompt-tab-skill" class="prompt-tab-content">
+        <div class="prompt-skill-info">
+          <h3>Claude Code Skill installieren</h3>
+          <p>Der Plankton-Skill gibt Claude Code Zugriff auf das Kanban-Board via MCP.</p>
+
+          <h4>1. SKILL.md herunterladen</h4>
+          <div class="modal-actions">
+            <a id="prompt-skill-download" class="btn-primary" style="text-decoration:none; display:inline-block">&#8615; SKILL.md herunterladen</a>
+          </div>
+
+          <h4>2. Skill einrichten</h4>
+          <p><strong>Projekt-Skill</strong> (für alle im Repo):</p>
+          <pre class="prompt-content">.claude/skills/plankton/SKILL.md</pre>
+          <p><strong>Persönlicher Skill</strong> (nur für dich):</p>
+          <pre class="prompt-content">~/.claude/skills/plankton/SKILL.md</pre>
+
+          <h4>3. Secrets einrichten</h4>
+          <p>Erstelle eine Datei <code>~/.claude/plankton-secrets.md</code> (oder <code>.claude/plankton-secrets.md</code> im Projekt) mit folgendem Inhalt:</p>
+          <pre class="prompt-content" id="prompt-skill-secrets-preview">Secrets werden geladen...</pre>
+          <div class="modal-actions">
+            <button id="prompt-skill-copy-secrets" class="btn-small">In Zwischenablage kopieren</button>
+            <button id="prompt-skill-download-secrets" class="btn-small">&#8615; plankton-secrets.md</button>
+          </div>
+          <p class="prompt-token-hint"><strong>Wichtig:</strong> Die Secrets-Datei darf nicht ins Git-Repository eingecheckt werden!</p>
+
+          <h4>4. Verwenden</h4>
+          <p>Claude Code erkennt den Skill automatisch oder du rufst ihn manuell auf mit:</p>
+          <pre class="prompt-content">/plankton</pre>
         </div>
       </div>
     </div>

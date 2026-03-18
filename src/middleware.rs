@@ -103,6 +103,13 @@ pub fn print_startup_banner(port: &str) {
         ("POST",   "/mcp/call"),
         ("POST",   "/mcp (JSON-RPC 2.0)"),
         ("GET",    "/docs"),
+        ("GET",    "/skill.md"),
+        ("GET",    "/install"),
+        ("GET",    "/cli/plankton"),
+        ("GET",    "/cli-login"),
+        ("POST",   "/auth/cli-init"),
+        ("GET",    "/auth/cli-poll/:id"),
+        ("POST",   "/auth/cli-approve"),
     ];
 
     println!();

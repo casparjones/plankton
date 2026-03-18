@@ -93,9 +93,25 @@ export function initPromptTabs(): void {
       // Content umschalten.
       document.querySelectorAll('.prompt-tab-content').forEach(c => c.classList.remove('prompt-tab-visible'));
       document.getElementById(`prompt-tab-${tabName}`)?.classList.add('prompt-tab-visible');
-      // Tokens laden wenn Plankton-Tab.
-      if (tabName === 'plankton') loadTokensForPrompt();
+      // Tokens laden wenn Plankton- oder Skill-Tab.
+      if (tabName === 'plankton' || tabName === 'skill') loadTokensForPrompt();
+      // Skill-Tab: Secrets-Preview und Download-Link vorbereiten.
+      if (tabName === 'skill') prepareSkillTab();
     });
+  });
+
+  // Skill-Tab: Event-Listener.
+  document.getElementById('prompt-skill-download')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.open('/skill.md', '_blank');
+  });
+  document.getElementById('prompt-skill-copy-secrets')?.addEventListener('click', async () => {
+    const pre = document.getElementById('prompt-skill-secrets-preview');
+    if (pre) await copyToClipboard(pre.textContent || '', document.getElementById('prompt-skill-copy-secrets')!);
+  });
+  document.getElementById('prompt-skill-download-secrets')?.addEventListener('click', () => {
+    const pre = document.getElementById('prompt-skill-secrets-preview');
+    if (pre) downloadFile('plankton-secrets.md', pre.textContent || '');
   });
 
   // Generieren-Button.
@@ -169,6 +185,16 @@ function renderTokenList(container: HTMLElement, tokens: AgentToken[]): void {
       <span class="prompt-token-status ${t.active ? 'active' : 'inactive'}">${t.active ? 'aktiv' : 'inaktiv'}</span>
     </div>
   `).join('');
+}
+
+/** Bereitet den Skill-Tab vor: Secrets-Preview mit aktuellen Tokens. */
+function prepareSkillTab(): void {
+  const pre = document.getElementById('prompt-skill-secrets-preview');
+  if (!pre) return;
+  const url = window.location.origin;
+  const activeTokens = cachedTokens.filter(t => t.active);
+  const tokenEntries = activeTokens.map(t => ({ name: t.name, token: t.token, role: t.role }));
+  pre.textContent = generateSecretsMd(tokenEntries, url);
 }
 
 /** Generiert die drei Markdown-Dateien und zeigt sie an. */

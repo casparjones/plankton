@@ -76,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
         store,
         events: Arc::new(Mutex::new(HashMap::new())),
         jwt_secret,
+        cli_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
 
     // Users-Verzeichnis sicherstellen und Default-Admin anlegen.
@@ -96,6 +97,20 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    // Background-Task: Abgelaufene CLI-Sessions aufräumen.
+    {
+        let cli_sessions = state.cli_sessions.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                let mut sessions = cli_sessions.lock().await;
+                let cutoff = chrono::Utc::now() - chrono::Duration::minutes(5);
+                sessions.retain(|_, s| s.created_at > cutoff);
+            }
+        });
+    }
+
     // Router: Auth + REST-API + Admin + MCP + Statische Dateien.
     let app = Router::new()
         // Auth-Routen (öffentlich, kein Guard)
@@ -103,6 +118,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/logout", post(auth_logout))
         .route("/auth/me", get(auth_me))
         .route("/auth/change-password", post(auth_change_password))
+        // CLI Device Auth
+        .route("/auth/cli-init", post(cli_init))
+        .route("/auth/cli-poll/:session_id", get(cli_poll))
+        .route("/auth/cli-approve", post(cli_approve))
+        // CLI Script & Installer
+        .route("/install", get(serve_installer))
+        .route("/cli/plankton", get(serve_cli_script))
+        .route("/cli-login", get(cli_login_page))
         // Projekt-API
         .route("/api/projects", get(list_projects).post(create_project))
         .route(
@@ -153,8 +176,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/mcp/tools", get(list_tools))
         .route("/mcp/call", post(call_tool))
         .route("/mcp", post(mcp_jsonrpc))
-        // Docs
+        // Docs & Skill
         .route("/docs", get(docs_page))
+        .route("/skill.md", get(skill_md))
         // Statische Dateien
         .nest_service(
             "/",
