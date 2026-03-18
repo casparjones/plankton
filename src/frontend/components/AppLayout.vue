@@ -15,7 +15,7 @@ import { updateBulkBar, bulkDeleteSelected } from '../components/bulk-actions'
 // @ts-ignore
 import { closeColumnModal, saveColumnModal, selectColor } from '../components/column-modal'
 // @ts-ignore
-import { openProjectDropdown, closeProjectMenu, copyProjectJson, importProjectJson, saveProjectJson, saveProjectTitle, closePromptModal } from '../components/project-menu'
+import { openProjectDropdown, closeProjectMenu, copyProjectJson, importProjectJson, saveProjectJson, saveProjectTitle, closePromptModal, initPromptTabs } from '../components/project-menu'
 // @ts-ignore
 import { toggleJsonView } from '../components/json-view'
 // @ts-ignore
@@ -105,22 +105,8 @@ onMounted(() => {
   })
   document.getElementById('proj-view-toggle')?.addEventListener('click', toggleJsonView)
 
-  // Prompt-Modal.
-  document.getElementById('prompt-modal-close')?.addEventListener('click', closePromptModal)
-  document.getElementById('prompt-modal')?.addEventListener('click', (e: Event) => {
-    if ((e.target as HTMLElement).id === 'prompt-modal') closePromptModal()
-  })
-  document.getElementById('prompt-copy-btn')?.addEventListener('click', async () => {
-    const text = document.getElementById('prompt-content')?.textContent || ''
-    try {
-      await navigator.clipboard.writeText(text)
-      const btn = document.getElementById('prompt-copy-btn')
-      if (btn) {
-        btn.textContent = 'Kopiert!'
-        setTimeout(() => { btn.textContent = 'In Zwischenablage kopieren' }, 1500)
-      }
-    } catch { /* Clipboard nicht verfügbar */ }
-  })
+  // Prompt-Modal (Tabs + Events).
+  initPromptTabs()
 
   // User-Aktionen.
   document.getElementById('logout-btn')?.addEventListener('click', () => doLogout(props.onLogout))
@@ -309,9 +295,54 @@ onMounted(() => {
         <span class="modal-heading">KI-Prompt</span>
         <button class="modal-close" id="prompt-modal-close">&#10005;</button>
       </div>
-      <pre id="prompt-content" class="prompt-content"></pre>
-      <div class="modal-actions">
-        <button id="prompt-copy-btn" class="btn-primary">In Zwischenablage kopieren</button>
+      <!-- Tab-Leiste -->
+      <div class="prompt-tabs">
+        <button class="prompt-tab prompt-tab-active" data-prompt-tab="simple">Simple</button>
+        <button class="prompt-tab" data-prompt-tab="plankton">Plankton</button>
+      </div>
+      <!-- Tab: Simple (bisheriger Prompt) -->
+      <div id="prompt-tab-simple" class="prompt-tab-content prompt-tab-visible">
+        <pre id="prompt-content" class="prompt-content"></pre>
+        <div class="modal-actions">
+          <button id="prompt-copy-btn" class="btn-primary">In Zwischenablage kopieren</button>
+        </div>
+      </div>
+      <!-- Tab: Plankton (Agenten-Workflow-Generator) -->
+      <div id="prompt-tab-plankton" class="prompt-tab-content">
+        <div class="prompt-plankton-config">
+          <label>Plankton-URL
+            <input id="prompt-plankton-url" type="text" placeholder="https://plankton.example.com" />
+          </label>
+          <div class="prompt-token-section">
+            <span class="modal-section-title">Agent-Tokens</span>
+            <p class="prompt-token-hint">Tokens können unter <strong>Admin (&#9881;) → Tokens</strong> verwaltet werden.</p>
+            <div id="prompt-token-list" class="prompt-token-list"></div>
+            <div id="prompt-token-loading" class="prompt-token-hint">Lade Tokens...</div>
+          </div>
+          <div class="modal-actions">
+            <button id="prompt-generate-btn" class="btn-primary">Dateien generieren</button>
+          </div>
+        </div>
+        <div id="prompt-output" class="prompt-output" style="display:none">
+          <div class="prompt-output-tabs">
+            <button class="prompt-output-tab prompt-output-tab-active" data-output-tab="secrets">secrets.md</button>
+            <button class="prompt-output-tab" data-output-tab="rules">rules.md</button>
+            <button class="prompt-output-tab" data-output-tab="workflow">workflow.md</button>
+          </div>
+          <div id="prompt-out-secrets" class="prompt-output-content prompt-tab-visible">
+            <pre class="prompt-content" id="prompt-out-secrets-pre"></pre>
+          </div>
+          <div id="prompt-out-rules" class="prompt-output-content">
+            <pre class="prompt-content" id="prompt-out-rules-pre"></pre>
+          </div>
+          <div id="prompt-out-workflow" class="prompt-output-content">
+            <pre class="prompt-content" id="prompt-out-workflow-pre"></pre>
+          </div>
+          <div class="modal-actions">
+            <button id="prompt-out-copy" class="btn-primary">In Zwischenablage kopieren</button>
+            <button id="prompt-out-download" class="btn-small">&#8615; Herunterladen</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

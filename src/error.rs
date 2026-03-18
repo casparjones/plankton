@@ -16,7 +16,7 @@ pub enum ApiError {
     #[error("Forbidden: {0}")]
     Forbidden(String),
     #[error(transparent)]
-    Reqwest(#[from] reqwest::Error),
+    Request(#[from] reqwest::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -32,7 +32,7 @@ impl IntoResponse for ApiError {
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
             ApiError::Unauthorized(m) => (StatusCode::UNAUTHORIZED, m),
             ApiError::Forbidden(m) => (StatusCode::FORBIDDEN, m),
-            ApiError::Reqwest(e) => (StatusCode::BAD_GATEWAY, e.to_string()),
+            ApiError::Request(e) => (StatusCode::BAD_GATEWAY, e.to_string()),
             ApiError::Io(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             ApiError::Json(e) => (StatusCode::BAD_REQUEST, e.to_string()),
         };

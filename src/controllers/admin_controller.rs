@@ -125,6 +125,7 @@ pub async fn admin_list_tokens(
                 serde_json::json!({
                     "id": t.id,
                     "name": t.name,
+                    "token": t.token,
                     "role": t.role,
                     "active": t.active,
                     "created_at": t.created_at,

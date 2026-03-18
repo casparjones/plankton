@@ -1,4 +1,4 @@
-// Projekt-Menü (Dropdown, Editieren, JSON Import/Export, Prompt).
+// Projekt-Menü (Dropdown, Editieren, JSON Import/Export, Prompt mit Tabs).
 
 import api from '../api';
 import { state } from '../state';
@@ -9,7 +9,13 @@ import { loadProjects, renameProject } from '../services/project-service';
 import { updateProjectTitle } from './sidebar';
 import { subscribeSSE } from '../services/sse-service';
 import { openGitModal } from './git-settings';
-import type { ProjectDoc } from '../types';
+import { generateSecretsMd, generateRulesMd, generateWorkflowMd } from './prompt-generator';
+import type { ProjectDoc, AgentToken } from '../types';
+
+// Zwischenspeicher für geladene Tokens.
+let cachedTokens: AgentToken[] = [];
+// Aktuell sichtbarer Output-Tab.
+let activeOutputTab = 'secrets';
 
 export function openProjectDropdown(): void {
   closeProjectDropdown();
@@ -46,13 +52,142 @@ export function closeProjectDropdown(): void {
 
 export function openPromptModal(): void {
   if (!state.project) return;
+  // Simple-Tab: Prompt generieren.
   const prompt = generateProjectPrompt();
   document.getElementById('prompt-content')!.textContent = prompt;
+  // Plankton-Tab: URL vorbelegen.
+  const urlInput = document.getElementById('prompt-plankton-url') as HTMLInputElement;
+  if (urlInput && !urlInput.value) {
+    urlInput.value = window.location.origin;
+  }
   document.getElementById('prompt-modal')!.classList.add('open');
+  // Tokens laden wenn Plankton-Tab aktiv ist oder beim ersten Öffnen.
+  loadTokensForPrompt();
 }
 
 export function closePromptModal(): void {
   document.getElementById('prompt-modal')!.classList.remove('open');
+}
+
+/** Registriert alle Event-Listener für das Prompt-Modal (Tabs + Aktionen). */
+export function initPromptTabs(): void {
+  // Modal schließen.
+  document.getElementById('prompt-modal-close')?.addEventListener('click', closePromptModal);
+  document.getElementById('prompt-modal')?.addEventListener('click', (e: Event) => {
+    if ((e.target as HTMLElement).id === 'prompt-modal') closePromptModal();
+  });
+
+  // Simple-Tab: Copy-Button.
+  document.getElementById('prompt-copy-btn')?.addEventListener('click', async () => {
+    const text = document.getElementById('prompt-content')?.textContent || '';
+    await copyToClipboard(text, document.getElementById('prompt-copy-btn')!);
+  });
+
+  // Haupt-Tabs (Simple / Plankton).
+  document.querySelectorAll('.prompt-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabName = (tab as HTMLElement).dataset.promptTab;
+      // Tabs umschalten.
+      document.querySelectorAll('.prompt-tab').forEach(t => t.classList.remove('prompt-tab-active'));
+      tab.classList.add('prompt-tab-active');
+      // Content umschalten.
+      document.querySelectorAll('.prompt-tab-content').forEach(c => c.classList.remove('prompt-tab-visible'));
+      document.getElementById(`prompt-tab-${tabName}`)?.classList.add('prompt-tab-visible');
+      // Tokens laden wenn Plankton-Tab.
+      if (tabName === 'plankton') loadTokensForPrompt();
+    });
+  });
+
+  // Generieren-Button.
+  document.getElementById('prompt-generate-btn')?.addEventListener('click', generateFiles);
+
+  // Output-Tabs (secrets / rules / workflow).
+  document.querySelectorAll('.prompt-output-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      activeOutputTab = (tab as HTMLElement).dataset.outputTab || 'secrets';
+      document.querySelectorAll('.prompt-output-tab').forEach(t => t.classList.remove('prompt-output-tab-active'));
+      tab.classList.add('prompt-output-tab-active');
+      document.querySelectorAll('.prompt-output-content').forEach(c => c.classList.remove('prompt-tab-visible'));
+      document.getElementById(`prompt-out-${activeOutputTab}`)?.classList.add('prompt-tab-visible');
+    });
+  });
+
+  // Output: Copy + Download.
+  document.getElementById('prompt-out-copy')?.addEventListener('click', async () => {
+    const pre = document.getElementById(`prompt-out-${activeOutputTab}-pre`);
+    if (pre) await copyToClipboard(pre.textContent || '', document.getElementById('prompt-out-copy')!);
+  });
+  document.getElementById('prompt-out-download')?.addEventListener('click', () => {
+    const pre = document.getElementById(`prompt-out-${activeOutputTab}-pre`);
+    if (pre) downloadFile(`${activeOutputTab}.md`, pre.textContent || '');
+  });
+}
+
+/** Lädt Tokens vom Server. Erstellt automatisch drei Rollen-Tokens wenn keine vorhanden. */
+async function loadTokensForPrompt(): Promise<void> {
+  const list = document.getElementById('prompt-token-list')!;
+  const loading = document.getElementById('prompt-token-loading')!;
+  loading.style.display = '';
+
+  try {
+    let tokens: AgentToken[] = await api.get<AgentToken[]>('/api/admin/tokens');
+
+    // Automatisch drei Rollen-Tokens anlegen wenn keine existieren.
+    if (tokens.length === 0) {
+      const roles = [
+        { name: 'Architect', role: 'manager' },
+        { name: 'Developer', role: 'developer' },
+        { name: 'Tester', role: 'tester' },
+      ];
+      for (const r of roles) {
+        const created = await api.post<AgentToken>('/api/admin/tokens', r);
+        tokens.push(created);
+      }
+    }
+
+    cachedTokens = tokens;
+    renderTokenList(list, tokens);
+  } catch {
+    // Kein Admin-Zugriff – Tokens können nicht geladen werden.
+    list.innerHTML = '<p class="prompt-token-hint">Nur Admins können Tokens verwalten.</p>';
+  }
+
+  loading.style.display = 'none';
+}
+
+/** Rendert die Token-Liste im Plankton-Tab. */
+function renderTokenList(container: HTMLElement, tokens: AgentToken[]): void {
+  if (tokens.length === 0) {
+    container.innerHTML = '<p class="prompt-token-hint">Keine Tokens vorhanden.</p>';
+    return;
+  }
+  container.innerHTML = tokens.map(t => `
+    <div class="prompt-token-row">
+      <span class="prompt-token-name">${escapeHtml(t.name)}</span>
+      <span class="prompt-token-role">${escapeHtml(t.role)}</span>
+      <code class="prompt-token-value">${escapeHtml(t.token)}</code>
+      <span class="prompt-token-status ${t.active ? 'active' : 'inactive'}">${t.active ? 'aktiv' : 'inaktiv'}</span>
+    </div>
+  `).join('');
+}
+
+/** Generiert die drei Markdown-Dateien und zeigt sie an. */
+function generateFiles(): void {
+  const url = (document.getElementById('prompt-plankton-url') as HTMLInputElement).value.trim() || window.location.origin;
+  const projectName = state.project?.title || 'Plankton';
+
+  const activeTokens = cachedTokens.filter(t => t.active);
+  const tokenEntries = activeTokens.map(t => ({ name: t.name, token: t.token, role: t.role }));
+
+  const secrets = generateSecretsMd(tokenEntries, url);
+  const rules = generateRulesMd(url, projectName);
+  const workflow = generateWorkflowMd();
+
+  document.getElementById('prompt-out-secrets-pre')!.textContent = secrets;
+  document.getElementById('prompt-out-rules-pre')!.textContent = rules;
+  document.getElementById('prompt-out-workflow-pre')!.textContent = workflow;
+
+  document.getElementById('prompt-output')!.style.display = '';
 }
 
 function generateProjectPrompt(): string {
@@ -115,6 +250,33 @@ ${(p.tasks || []).length > 0 ? (p.tasks || []).map(t => `- [${columnName(t.colum
 Generiere jetzt Tasks basierend auf der folgenden Anforderung:
 `;
 }
+
+// === Hilfsfunktionen ===
+
+/** Kopiert Text in die Zwischenablage mit visuellem Feedback. */
+async function copyToClipboard(text: string, btn: HTMLElement): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = '\u2713 Kopiert';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  } catch { /* Clipboard nicht verfügbar */ }
+}
+
+/** Lädt einen String als Datei herunter. */
+function downloadFile(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// === Bestehende Funktionen (unverändert) ===
 
 export async function openProjectMenu(): Promise<void> {
   if (!state.project) return;
