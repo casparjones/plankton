@@ -220,6 +220,7 @@ pub async fn serve_cli_script(
 set -e
 
 VERSION="0.1.0"
+INSTALLED_FROM="{default_url}"
 CONFIG_DIR="${{HOME}}/.config/plankton"
 CONFIG_FILE="${{CONFIG_DIR}}/config"
 DEFAULT_SERVER="{default_url}"
@@ -436,6 +437,96 @@ cmd_logout() {{
     echo ""
 }}
 
+# ─── Version & Info ──────────────────────────────────────────
+
+cmd_version() {{
+    echo "plankton $VERSION"
+}}
+
+cmd_info() {{
+    load_config
+
+    echo ""
+    echo "  🪼 Plankton CLI"
+    echo "  ━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "  Version:        $VERSION"
+    echo "  Installed from: $INSTALLED_FROM"
+    echo "  Config:         $CONFIG_FILE"
+    echo ""
+
+    if [[ -z "$PLANKTON_SERVER" ]]; then
+        echo "  Server:         (not configured)"
+        echo "  Auth:           ✗ not logged in"
+    else
+        echo "  Server:         $PLANKTON_SERVER"
+        local me
+        me=$(api GET /auth/me 2>/dev/null)
+        if [[ $? -eq 0 && -n "$me" ]]; then
+            local name role
+            name=$(echo "$me" | jq -r '.display_name // .username // "unknown"')
+            role=$(echo "$me" | jq -r '.role // "unknown"')
+            echo "  Auth:           ✓ $name ($role)"
+        else
+            echo "  Auth:           ✗ token expired or invalid"
+        fi
+    fi
+    echo ""
+}}
+
+# ─── Init (.vibe Struktur) ───────────────────────────────────
+
+cmd_init() {{
+    echo ""
+    echo "  🪼 Plankton Init"
+    echo "  ━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    local dirs=(".vibe" ".vibe/ideas" ".vibe/epics" ".vibe/tasks" ".vibe/done" ".vibe/done/ideas" ".vibe/done/epics" ".vibe/done/tasks" ".vibe/log")
+
+    for d in "${{dirs[@]}}"; do
+        if [[ -d "$d" ]]; then
+            echo "  · $d (exists)"
+        else
+            mkdir -p "$d"
+            echo "  ✓ $d"
+        fi
+    done
+
+    # README anlegen wenn nicht vorhanden.
+    if [[ ! -f ".vibe/readme.md" ]]; then
+        cat > ".vibe/readme.md" <<'VIBEEOF'
+# Vibe – KI-Agenten Workflow
+
+Dieses Verzeichnis wird von Plankton-KI-Agenten genutzt.
+
+## Struktur
+
+- `ideas/`      – Neue Ideen (Markdown-Dateien)
+- `epics/`      – Aktive Epics
+- `tasks/`      – Aktive Tasks
+- `done/`       – Abgeschlossene Items
+- `log/`        – Session-Logs
+
+## Workflow
+
+1. Idee als Markdown in `ideas/` anlegen
+2. Supervisor/Architect erstellt daraus Epics und Tasks
+3. Developer implementiert Tasks
+4. Tester prüft und genehmigt
+5. Erledigte Items werden nach `done/` verschoben
+VIBEEOF
+        echo "  ✓ .vibe/readme.md"
+    else
+        echo "  · .vibe/readme.md (exists)"
+    fi
+
+    echo ""
+    echo "  Projekt-Struktur angelegt."
+    echo "  Lege Ideen als Markdown-Dateien in .vibe/ideas/ ab."
+    echo ""
+}}
+
 # ─── Help ────────────────────────────────────────────────────
 
 cmd_help() {{
@@ -449,6 +540,7 @@ cmd_help() {{
     echo "    login <url>          Login to a Plankton server (device flow)"
     echo "    logout               Clear stored credentials"
     echo "    status               Show connection info"
+    echo "    init                 Create .vibe/ project structure"
     echo "    skill install [-g]   Download & install SKILL.md"
     echo "    skill update  [-g]   Update installed SKILL.md"
     echo "    tokens               List agent tokens (admin)"
@@ -456,18 +548,21 @@ cmd_help() {{
     echo ""
     echo "  Options:"
     echo "    -g, --global         Install skill to ~/.claude/ (default: .claude/)"
+    echo "    --version            Show version number"
+    echo "    --info               Show version, server, and auth status"
     echo ""
-    echo "  Install:"
-    echo "    curl -fsSL $DEFAULT_SERVER/install | bash"
+    echo "  Install / Update:"
+    echo "    curl -fsSL $INSTALLED_FROM/install | bash"
     echo ""
 }}
 
 # ─── Main ────────────────────────────────────────────────────
 
 case "${{1:-help}}" in
-    login)   shift; cmd_login "$@" ;;
-    logout)  cmd_logout ;;
-    status)  cmd_status ;;
+    login)      shift; cmd_login "$@" ;;
+    logout)     cmd_logout ;;
+    status)     cmd_status ;;
+    init)       cmd_init ;;
     skill)
         shift
         case "${{1:-install}}" in
@@ -476,9 +571,11 @@ case "${{1:-help}}" in
             *)       echo "Unknown skill command: $1"; cmd_help ;;
         esac
         ;;
-    tokens)  cmd_tokens ;;
+    tokens)     cmd_tokens ;;
+    --version)  cmd_version ;;
+    --info)     cmd_info ;;
     help|--help|-h) cmd_help ;;
-    *)       echo "Unknown command: $1"; cmd_help ;;
+    *)          echo "Unknown command: $1"; cmd_help ;;
 esac
 "##,
         default_url = default_url,
@@ -553,7 +650,7 @@ pub async fn cli_login_page(
 </head>
 <body>
 <div class="card">
-  <h1>🪼 Plankton CLI Login</h1>
+  <h1><img src="/icons/favicon-32.png" alt="" style="vertical-align:middle;margin-right:8px" />Plankton CLI Login</h1>
   <p class="subtitle">Authorize your terminal session</p>
 
   <div id="step-login" class="step active">

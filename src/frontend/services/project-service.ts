@@ -25,7 +25,7 @@ export async function loadProjects(): Promise<void> {
   renderProjectList();
 }
 
-export async function openProject(id: string): Promise<void> {
+export async function openProject(id: string, skipPush?: boolean): Promise<void> {
   state.project = await api.get<ProjectDoc>(`/api/projects/${id}`);
   state.selectedTasks.clear();
   saveLastProject(id);
@@ -33,6 +33,9 @@ export async function openProject(id: string): Promise<void> {
   renderBoard();
   updateProjectTitle();
   subscribeSSE(id);
+  if (!skipPush) {
+    history.pushState({ project: id }, '', `/p/${id}`);
+  }
 }
 
 export async function createProject(title: string): Promise<void> {
@@ -42,7 +45,8 @@ export async function createProject(title: string): Promise<void> {
     columns: [
       { id: crypto.randomUUID(), title: 'Todo',        order: 0, color: '#90CAF9', hidden: false, slug: '', locked: false },
       { id: crypto.randomUUID(), title: 'In Progress', order: 1, color: '#FFCC80', hidden: false, slug: '', locked: false },
-      { id: crypto.randomUUID(), title: 'Done',        order: 2, color: '#A5D6A7', hidden: false, slug: '', locked: false },
+      { id: crypto.randomUUID(), title: 'Testing',     order: 2, color: '#CE93D8', hidden: false, slug: '', locked: false },
+      { id: crypto.randomUUID(), title: 'Done',        order: 3, color: '#A5D6A7', hidden: false, slug: '', locked: false },
       { id: crypto.randomUUID(), title: '_archive',    order: 99, color: '#444',   hidden: true,  slug: '', locked: false },
     ],
     users: [],

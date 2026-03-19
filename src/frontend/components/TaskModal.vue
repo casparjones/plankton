@@ -70,6 +70,11 @@ function openModal(task: Task, newTask: boolean): void {
   newComment.value = ''
   isOpen.value = true
 
+  // URL aktualisieren (nur bei existierenden Tasks).
+  if (!newTask && task.id && state.project) {
+    history.pushState({ project: state.project._id, task: task.id }, '', `/p/${state.project._id}/t/${task.id}`)
+  }
+
   if (newTask) {
     setTimeout(() => {
       const el = document.querySelector('.task-modal-title-input') as HTMLInputElement
@@ -83,6 +88,10 @@ function close(): void {
   editingTask.value = null
   state.editingTask = null
   state.isNewTask = false
+  // URL zurück auf Projekt-Ebene.
+  if (state.project) {
+    history.pushState({ project: state.project._id }, '', `/p/${state.project._id}`)
+  }
 }
 
 async function save(): Promise<void> {

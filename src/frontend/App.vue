@@ -5,7 +5,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useTheme } from './composables/useTheme'
 import AppLayout from './components/AppLayout.vue'
-import type { Claims } from './types'
+import type { Claims, Task } from './types'
 
 import { checkAuth, doLogin, updateUserSection } from './components/auth'
 // @ts-ignore
@@ -23,6 +23,13 @@ const loginError = ref('')
 const loginUsername = ref('')
 const loginPassword = ref('')
 
+/** Parst die URL und gibt Projekt- und Task-ID zurück. */
+function parseRoute(): { projectId?: string; taskId?: string } {
+  const match = location.pathname.match(/^\/p\/([^/]+)(?:\/t\/([^/]+))?/)
+  if (match) return { projectId: match[1], taskId: match[2] }
+  return {}
+}
+
 /** Startet die Board-Ansicht nach erfolgreichem Login oder Auth-Check. */
 async function startApp(): Promise<void> {
   console.log('[App] startApp() called')
@@ -37,23 +44,52 @@ async function startApp(): Promise<void> {
   }
 
   updateUserSection()
-  console.log('[App] loadProjects() ...')
   await loadProjects()
-  console.log('[App] loadProjects() done, state.projects:', state.projects?.length, state.projects)
 
   if (state.projects.length > 0) {
-    const lastId = getLastProject()
-    const target = lastId && state.projects.find((p: { _id: string }) => p._id === lastId)
-      ? lastId
-      : state.projects[0]._id
-    console.log('[App] openProject()', target)
-    await openProject(target)
-    console.log('[App] openProject() done, state.project:', state.project?._id, state.project?.title)
-    console.log('[App] state.project.columns:', state.project?.columns?.length, state.project?.columns)
-    console.log('[App] state.project.tasks:', state.project?.tasks?.length, state.project?.tasks)
-  } else {
-    console.log('[App] Keine Projekte vorhanden')
+    const route = parseRoute()
+    // URL-Projekt hat Vorrang, dann localStorage, dann erstes Projekt.
+    const target = route.projectId && state.projects.find((p: { _id: string }) => p._id === route.projectId)
+      ? route.projectId
+      : (() => {
+          const lastId = getLastProject()
+          return lastId && state.projects.find((p: { _id: string }) => p._id === lastId)
+            ? lastId
+            : state.projects[0]._id
+        })()
+    await openProject(target, true)
+    // URL setzen falls noch auf / (ohne pushState-Duplikat).
+    if (!location.pathname.startsWith('/p/')) {
+      history.replaceState({ project: target }, '', `/p/${target}`)
+    }
+    // Task aus URL öffnen.
+    if (route.taskId && state.project) {
+      const task = state.project.tasks.find((t: Task) => t.id === route.taskId)
+      if (task) {
+        await nextTick()
+        // @ts-ignore
+        window.__openTaskDetail?.(task)
+      }
+    }
   }
+
+  // Browser-Back/Forward: Projekt und Task synchronisieren.
+  window.addEventListener('popstate', async (e) => {
+    const s = e.state as { project?: string; task?: string } | null
+    if (s?.project && s.project !== state.project?._id) {
+      await openProject(s.project, true)
+    }
+    if (s?.task && state.project) {
+      const task = state.project.tasks.find((t: Task) => t.id === s.task)
+      if (task) {
+        // @ts-ignore
+        window.__openTaskDetail?.(task)
+      }
+    } else {
+      // @ts-ignore
+      window.__closeTaskDetail?.()
+    }
+  })
 }
 
 /** Zeigt die Login-Seite (setzt Vue-State zurück). */
@@ -114,7 +150,7 @@ onMounted(async () => {
   <!-- Login-Ansicht (erst nach Auth-Check zeigen, verhindert Flash) -->
   <div v-if="authChecked && !isAuthenticated" class="login-page">
     <div class="login-card">
-      <div class="login-logo">&#x1FAB4; Plankton</div>
+      <div class="login-logo"><img src="/icons/favicon-64.png" alt="Plankton" class="login-logo-img" /> Plankton</div>
       <div v-if="loginError" class="login-error">{{ loginError }}</div>
       <form @submit.prevent="handleLogin">
         <label>

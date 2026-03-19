@@ -142,7 +142,7 @@ function showLoginPage() {
   document.body.innerHTML = `
     <div class="login-page">
       <div class="login-card">
-        <div class="login-logo">🪼 Plankton</div>
+        <div class="login-logo"><img src="/icons/favicon-64.png" alt="Plankton" class="login-logo-img" /> Plankton</div>
         <div id="login-error" class="login-error"></div>
         <form id="login-form">
           <label>Username
@@ -1481,7 +1481,7 @@ function buildDOM() {
     <div class="app">
       <aside class="sidebar">
         <div class="sidebar-header">
-          <span class="logo">🪼 Plankton</span>
+          <span class="logo"><img src="/icons/favicon-32.png" alt="" class="logo-icon" /> Plankton</span>
           <button id="theme-toggle" class="theme-toggle" title="Theme wechseln">☀</button>
         </div>
         <div class="sidebar-create">

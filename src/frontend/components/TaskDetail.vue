@@ -36,12 +36,20 @@ function open(t: Task): void {
   task.value = t
   state.detailTask = t
   isOpen.value = true
+  // URL aktualisieren.
+  if (t.id && state.project) {
+    history.pushState({ project: state.project._id, task: t.id }, '', `/p/${state.project._id}/t/${t.id}`)
+  }
 }
 
 function close(): void {
   isOpen.value = false
   task.value = null
   state.detailTask = null
+  // URL zurück auf Projekt-Ebene.
+  if (state.project) {
+    history.pushState({ project: state.project._id }, '', `/p/${state.project._id}`)
+  }
 }
 
 function editTask(): void {

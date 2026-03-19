@@ -36,6 +36,20 @@ pub struct BatchMoveRequest {
     pub moves: Vec<BatchMoveItem>,
 }
 
+/// Body für PUT /projects/:id/tasks/:task_id – Partielles Update.
+#[derive(Debug, Deserialize)]
+pub struct UpdateTaskRequest {
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub column_id: Option<String>,
+    pub labels: Option<Vec<String>>,
+    pub worker: Option<String>,
+    pub points: Option<i32>,
+    pub order: Option<i32>,
+    pub comments: Option<Vec<String>>,
+    pub logs: Option<Vec<String>>,
+}
+
 /// Body für POST /mcp/call
 #[derive(Debug, Deserialize)]
 pub struct McpCall {

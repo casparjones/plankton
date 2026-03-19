@@ -26,6 +26,7 @@ export function openProjectDropdown(): void {
     <button class="proj-dropdown-item" data-action="edit">&#9998; Projekt editieren</button>
     <button class="proj-dropdown-item" data-action="git">&#128268; Git-Einstellungen</button>
     <button class="proj-dropdown-item" data-action="prompt">&#9733; Show Prompt</button>
+    <button class="proj-dropdown-item" data-action="cli">&#9881; Install CLI</button>
   `;
   dropdown.classList.add('open');
 
@@ -35,6 +36,7 @@ export function openProjectDropdown(): void {
     if (action === 'edit') openProjectMenu();
     if (action === 'git') openGitModal();
     if (action === 'prompt') openPromptModal();
+    if (action === 'cli') openCliModal();
   });
 
   setTimeout(() => {
@@ -69,6 +71,37 @@ export function closePromptModal(): void {
   document.getElementById('prompt-modal')!.classList.remove('open');
 }
 
+export function openCliModal(): void {
+  const url = window.location.origin;
+  // Install-Befehl setzen.
+  const installCmd = document.getElementById('cli-install-cmd');
+  if (installCmd) installCmd.textContent = `curl -fsSL ${url}/install | bash`;
+  const loginCmd = document.getElementById('cli-login-cmd');
+  if (loginCmd) loginCmd.textContent = `plankton login ${url}`;
+  const updateCmd = document.getElementById('cli-update-cmd');
+  if (updateCmd) updateCmd.textContent = `curl -fsSL ${url}/install | bash`;
+  document.getElementById('cli-modal')!.classList.add('open');
+}
+
+export function closeCliModal(): void {
+  document.getElementById('cli-modal')!.classList.remove('open');
+}
+
+export function initCliModal(): void {
+  document.getElementById('cli-modal-close')?.addEventListener('click', closeCliModal);
+  document.getElementById('cli-modal')?.addEventListener('click', (e: Event) => {
+    if ((e.target as HTMLElement).id === 'cli-modal') closeCliModal();
+  });
+  // Copy-Buttons.
+  document.querySelectorAll('[data-cli-copy]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const targetId = (btn as HTMLElement).dataset.cliCopy!;
+      const el = document.getElementById(targetId);
+      if (el) await copyToClipboard(el.textContent || '', btn as HTMLElement);
+    });
+  });
+}
+
 /** Registriert alle Event-Listener für das Prompt-Modal (Tabs + Aktionen). */
 export function initPromptTabs(): void {
   // Modal schließen.
@@ -93,25 +126,9 @@ export function initPromptTabs(): void {
       // Content umschalten.
       document.querySelectorAll('.prompt-tab-content').forEach(c => c.classList.remove('prompt-tab-visible'));
       document.getElementById(`prompt-tab-${tabName}`)?.classList.add('prompt-tab-visible');
-      // Tokens laden wenn Plankton- oder Skill-Tab.
-      if (tabName === 'plankton' || tabName === 'skill') loadTokensForPrompt();
-      // Skill-Tab: Secrets-Preview und Download-Link vorbereiten.
-      if (tabName === 'skill') prepareSkillTab();
+      // Tokens laden wenn Plankton-Tab.
+      if (tabName === 'plankton') loadTokensForPrompt();
     });
-  });
-
-  // Skill-Tab: Event-Listener.
-  document.getElementById('prompt-skill-download')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    window.open('/skill.md', '_blank');
-  });
-  document.getElementById('prompt-skill-copy-secrets')?.addEventListener('click', async () => {
-    const pre = document.getElementById('prompt-skill-secrets-preview');
-    if (pre) await copyToClipboard(pre.textContent || '', document.getElementById('prompt-skill-copy-secrets')!);
-  });
-  document.getElementById('prompt-skill-download-secrets')?.addEventListener('click', () => {
-    const pre = document.getElementById('prompt-skill-secrets-preview');
-    if (pre) downloadFile('plankton-secrets.md', pre.textContent || '');
   });
 
   // Generieren-Button.
@@ -185,16 +202,6 @@ function renderTokenList(container: HTMLElement, tokens: AgentToken[]): void {
       <span class="prompt-token-status ${t.active ? 'active' : 'inactive'}">${t.active ? 'aktiv' : 'inaktiv'}</span>
     </div>
   `).join('');
-}
-
-/** Bereitet den Skill-Tab vor: Secrets-Preview mit aktuellen Tokens. */
-function prepareSkillTab(): void {
-  const pre = document.getElementById('prompt-skill-secrets-preview');
-  if (!pre) return;
-  const url = window.location.origin;
-  const activeTokens = cachedTokens.filter(t => t.active);
-  const tokenEntries = activeTokens.map(t => ({ name: t.name, token: t.token, role: t.role }));
-  pre.textContent = generateSecretsMd(tokenEntries, url);
 }
 
 /** Generiert die drei Markdown-Dateien und zeigt sie an. */

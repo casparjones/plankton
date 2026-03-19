@@ -15,7 +15,7 @@ import { updateBulkBar, bulkDeleteSelected } from '../components/bulk-actions'
 // @ts-ignore
 import { closeColumnModal, saveColumnModal, selectColor } from '../components/column-modal'
 // @ts-ignore
-import { openProjectDropdown, closeProjectMenu, copyProjectJson, importProjectJson, saveProjectJson, saveProjectTitle, closePromptModal, initPromptTabs } from '../components/project-menu'
+import { openProjectDropdown, closeProjectMenu, copyProjectJson, importProjectJson, saveProjectJson, saveProjectTitle, closePromptModal, initPromptTabs, closeCliModal, initCliModal } from '../components/project-menu'
 // @ts-ignore
 import { toggleJsonView } from '../components/json-view'
 // @ts-ignore
@@ -108,6 +108,9 @@ onMounted(() => {
   // Prompt-Modal (Tabs + Events).
   initPromptTabs()
 
+  // CLI-Modal (Install CLI).
+  initCliModal()
+
   // User-Aktionen.
   document.getElementById('logout-btn')?.addEventListener('click', () => doLogout(props.onLogout))
   document.getElementById('password-btn')?.addEventListener('click', () => openPasswordModal(false))
@@ -168,7 +171,7 @@ onMounted(() => {
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <span class="logo">&#x1FAB4; Plankton</span>
+        <span class="logo"><img src="/icons/favicon-32.png" alt="" class="logo-icon" /> Plankton</span>
         <button id="theme-toggle" class="theme-toggle" title="Theme wechseln">&#9728;</button>
       </div>
       <div class="sidebar-create">
@@ -299,7 +302,6 @@ onMounted(() => {
       <div class="prompt-tabs">
         <button class="prompt-tab prompt-tab-active" data-prompt-tab="simple">Simple</button>
         <button class="prompt-tab" data-prompt-tab="plankton">Plankton</button>
-        <button class="prompt-tab" data-prompt-tab="skill">Claude Code Skill</button>
       </div>
       <!-- Tab: Simple (bisheriger Prompt) -->
       <div id="prompt-tab-simple" class="prompt-tab-content prompt-tab-visible">
@@ -345,36 +347,53 @@ onMounted(() => {
           </div>
         </div>
       </div>
-      <!-- Tab: Claude Code Skill -->
-      <div id="prompt-tab-skill" class="prompt-tab-content">
-        <div class="prompt-skill-info">
-          <h3>Claude Code Skill installieren</h3>
-          <p>Der Plankton-Skill gibt Claude Code Zugriff auf das Kanban-Board via MCP.</p>
+    </div>
+  </div>
 
-          <h4>1. SKILL.md herunterladen</h4>
-          <div class="modal-actions">
-            <a id="prompt-skill-download" class="btn-primary" style="text-decoration:none; display:inline-block">&#8615; SKILL.md herunterladen</a>
-          </div>
-
-          <h4>2. Skill einrichten</h4>
-          <p><strong>Projekt-Skill</strong> (für alle im Repo):</p>
-          <pre class="prompt-content">.claude/skills/plankton/SKILL.md</pre>
-          <p><strong>Persönlicher Skill</strong> (nur für dich):</p>
-          <pre class="prompt-content">~/.claude/skills/plankton/SKILL.md</pre>
-
-          <h4>3. Secrets einrichten</h4>
-          <p>Erstelle eine Datei <code>~/.claude/plankton-secrets.md</code> (oder <code>.claude/plankton-secrets.md</code> im Projekt) mit folgendem Inhalt:</p>
-          <pre class="prompt-content" id="prompt-skill-secrets-preview">Secrets werden geladen...</pre>
-          <div class="modal-actions">
-            <button id="prompt-skill-copy-secrets" class="btn-small">In Zwischenablage kopieren</button>
-            <button id="prompt-skill-download-secrets" class="btn-small">&#8615; plankton-secrets.md</button>
-          </div>
-          <p class="prompt-token-hint"><strong>Wichtig:</strong> Die Secrets-Datei darf nicht ins Git-Repository eingecheckt werden!</p>
-
-          <h4>4. Verwenden</h4>
-          <p>Claude Code erkennt den Skill automatisch oder du rufst ihn manuell auf mit:</p>
-          <pre class="prompt-content">/plankton</pre>
+  <!-- CLI-Modal (Install CLI) -->
+  <div id="cli-modal" class="modal-overlay">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <span class="modal-heading">Plankton CLI</span>
+        <button class="modal-close" id="cli-modal-close">&#10005;</button>
+      </div>
+      <div class="prompt-skill-info">
+        <h3>Installation</h3>
+        <p>Installiere die Plankton CLI mit einem Befehl:</p>
+        <pre class="prompt-content" id="cli-install-cmd">curl -fsSL .../install | bash</pre>
+        <div class="modal-actions">
+          <button class="btn-small" data-cli-copy="cli-install-cmd">In Zwischenablage kopieren</button>
         </div>
+
+        <h3>Login</h3>
+        <p>Melde dich bei diesem Plankton-Server an (Device Flow im Browser):</p>
+        <pre class="prompt-content" id="cli-login-cmd">plankton login ...</pre>
+        <div class="modal-actions">
+          <button class="btn-small" data-cli-copy="cli-login-cmd">In Zwischenablage kopieren</button>
+        </div>
+
+        <h3>Update</h3>
+        <p>CLI auf die neueste Version aktualisieren:</p>
+        <pre class="prompt-content" id="cli-update-cmd">curl -fsSL .../install | bash</pre>
+
+        <h3>Befehle</h3>
+        <div class="cli-commands-table">
+          <pre class="prompt-content">plankton login &lt;url&gt;          Login via Browser (Device Flow)
+plankton logout               Abmelden
+plankton status               Verbindungsinfo anzeigen
+plankton --info               Version, Server und Auth-Status
+plankton --version             Versionsnummer
+plankton skill install [-g]   Claude Code Skill installieren
+plankton skill update  [-g]   Skill aktualisieren
+plankton init                 Projekt-Struktur anlegen (.vibe/)
+plankton tokens               Agent-Tokens auflisten (Admin)</pre>
+        </div>
+
+        <h3>Claude Code Skill</h3>
+        <p>Der Skill wird automatisch via CLI installiert:</p>
+        <pre class="prompt-content">plankton skill install           # im Projekt: .claude/skills/plankton/
+plankton skill install --global  # persönlich: ~/.claude/skills/plankton/</pre>
+        <p class="prompt-token-hint">Secrets generierst du unter <strong>Show Prompt → Plankton → Dateien generieren → secrets.md</strong> und speicherst sie als <code>~/.claude/plankton-secrets.md</code></p>
       </div>
     </div>
   </div>

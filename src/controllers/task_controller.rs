@@ -144,18 +144,42 @@ pub async fn create_task(
     Ok(Json(updated))
 }
 
-/// PUT /api/projects/:id/tasks/:task_id – Aufgabe aktualisieren.
+/// PUT /api/projects/:id/tasks/:task_id – Aufgabe partiell aktualisieren (Merge).
 pub async fn update_task(
     State(state): State<AppState>,
     Path((id, task_id)): Path<(String, String)>,
-    Json(task): Json<Task>,
+    Json(req): Json<UpdateTaskRequest>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
     let mut project = state.store.get_project(&id).await?;
-    if let Some(existing) = project.tasks.iter_mut().find(|t| t.id == task_id) {
-        *existing = Task {
-            updated_at: Utc::now().to_rfc3339(),
-            ..task
-        };
+    if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
+        if let Some(title) = req.title {
+            task.title = title;
+        }
+        if let Some(description) = req.description {
+            task.description = description;
+        }
+        if let Some(column_id) = req.column_id {
+            task.column_id = column_id;
+        }
+        if let Some(labels) = req.labels {
+            task.labels = labels;
+        }
+        if let Some(worker) = req.worker {
+            task.worker = worker;
+        }
+        if let Some(points) = req.points {
+            task.points = points;
+        }
+        if let Some(order) = req.order {
+            task.order = order;
+        }
+        if let Some(comments) = req.comments {
+            task.comments = comments;
+        }
+        if let Some(logs) = req.logs {
+            task.logs = logs;
+        }
+        task.updated_at = Utc::now().to_rfc3339();
     } else {
         return Err(ApiError::NotFound("Task not found".into()));
     }

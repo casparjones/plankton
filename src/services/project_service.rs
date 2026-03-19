@@ -39,7 +39,7 @@ pub fn trigger_git_sync(state: AppState, project_id: String) {
     });
 }
 
-/// Erstellt ein Projekt mit drei Default-Spalten (Todo, In Progress, Done) + versteckte _archive-Spalte.
+/// Erstellt ein Projekt mit vier Default-Spalten (Todo, In Progress, Testing, Done) + versteckte _archive-Spalte.
 pub fn default_project(title: String) -> ProjectDoc {
     ProjectDoc {
         id: Uuid::new_v4().to_string(),
@@ -66,9 +66,18 @@ pub fn default_project(title: String) -> ProjectDoc {
             },
             Column {
                 id: Uuid::new_v4().to_string(),
+                title: "Testing".into(),
+                slug: "TESTING".into(),
+                order: 2,
+                color: "#CE93D8".into(),
+                hidden: false,
+                locked: false,
+            },
+            Column {
+                id: Uuid::new_v4().to_string(),
                 title: "Done".into(),
                 slug: "DONE".into(),
-                order: 2,
+                order: 3,
                 color: "#A5D6A7".into(),
                 hidden: false,
                 locked: false,

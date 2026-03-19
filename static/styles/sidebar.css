@@ -41,6 +41,14 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.logo-icon {
+    width: 24px;
+    height: 24px;
 }
 
 .sidebar-create {

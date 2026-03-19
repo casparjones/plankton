@@ -24,12 +24,21 @@ use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use tracing::info;
 
+use axum::response::IntoResponse;
 use config::Config;
 use controllers::*;
 use middleware::{auth_guard, print_startup_banner, request_logger};
 use services::*;
 use state::AppState;
 use store::*;
+
+/// SPA-Fallback: Liefert index.html für client-seitiges Routing (/p/*).
+async fn spa_fallback() -> impl IntoResponse {
+    let html = tokio::fs::read_to_string("static/index.html")
+        .await
+        .unwrap_or_else(|_| "<!DOCTYPE html><html><body>Not found</body></html>".into());
+    axum::response::Html(html)
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -179,6 +188,8 @@ async fn main() -> anyhow::Result<()> {
         // Docs & Skill
         .route("/docs", get(docs_page))
         .route("/skill.md", get(skill_md))
+        // SPA-Fallback: /p/* liefert index.html (URL-Routing im Frontend).
+        .route("/p/*rest", get(spa_fallback))
         // Statische Dateien
         .nest_service(
             "/",
