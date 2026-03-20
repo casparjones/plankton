@@ -30,6 +30,7 @@ export function toastConfirm(message: string): Promise<boolean> {
         },
       },
       {
+        position: POSITION.TOP_CENTER,
         timeout: 10000,
         closeOnClick: false,
         draggable: false,
