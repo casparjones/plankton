@@ -993,44 +993,81 @@ body {
     box-shadow: 0 0 0 2px var(--accent);
 }
 
-/* Blocked-by multi-select */
-.blocked-by-list {
-    max-height: 160px;
-    overflow-y: auto;
+/* Multiselect (blocked-by, etc.) */
+.multiselect {
+    position: relative;
+}
+
+.multiselect-tags {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
 }
 
-.blocked-by-item {
-    flex-direction: row !important;
-    align-items: center !important;
-    gap: 6px !important;
-    text-transform: none !important;
-    padding: 3px 6px;
-    border-radius: 3px;
-    cursor: pointer;
-}
-
-.blocked-by-item:hover {
+.multiselect-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     background: var(--surface-2);
-}
-
-.blocked-by-item input[type="checkbox"] {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    padding: 0;
-}
-
-.blocked-by-title {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-size: 11px;
     font-family: var(--font-sans);
-    font-size: 12px;
     color: var(--text);
+    max-width: 100%;
+}
+
+.multiselect-tag-remove {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 0 1px;
+    line-height: 1;
+}
+.multiselect-tag-remove:hover { color: var(--error, #f44); }
+
+.multiselect-input-wrap { position: relative; }
+
+.multiselect-input {
+    width: 100%;
+    background: var(--surface-2) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    color: var(--text) !important;
+    font-size: 12px !important;
+    padding: 5px 8px !important;
+}
+.multiselect-input:focus { border-color: var(--accent) !important; }
+
+.multiselect-dropdown {
+    position: absolute;
+    z-index: 100;
+    left: 0;
+    right: 0;
+    max-height: 140px;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    margin-top: 2px;
+}
+
+.multiselect-option {
+    padding: 5px 8px;
+    font-size: 12px;
+    font-family: var(--font-sans);
+    color: var(--text);
+    cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.multiselect-option:hover { background: var(--surface-2); }
 
 /* Task Detail View */
 

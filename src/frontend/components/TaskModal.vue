@@ -22,6 +22,23 @@ const newComment = ref('')
 const taskType = ref('task')
 const parentId = ref('')
 const blockedBy = ref<string[]>([])
+const blockedBySearch = ref('')
+const blockedByOpen = ref(false)
+const filteredBlockerTasks = computed(() => {
+  const q = blockedBySearch.value.toLowerCase()
+  return otherTasks.value.filter(t => !blockedBy.value.includes(t.id) && (!q || t.title.toLowerCase().includes(q)))
+})
+const selectedBlockers = computed(() =>
+  blockedBy.value.map(id => otherTasks.value.find(t => t.id === id)).filter(Boolean) as Task[]
+)
+function addBlocker(id: string) {
+  if (!blockedBy.value.includes(id)) blockedBy.value.push(id)
+  blockedBySearch.value = ''
+  blockedByOpen.value = false
+}
+function removeBlocker(id: string) {
+  blockedBy.value = blockedBy.value.filter(v => v !== id)
+}
 
 const logs = computed(() => [...(editingTask.value?.logs || [])].reverse())
 const epics = computed(() =>
@@ -197,23 +214,8 @@ defineExpose({ openNew, openEdit, close })
             <input v-model="title" type="text" class="task-modal-title-input" />
           </label>
           <label>Beschreibung
-            <textarea v-model="description" rows="8"></textarea>
+            <textarea v-model="description" rows="14"></textarea>
           </label>
-          <div class="modal-row">
-            <label>Typ
-              <select v-model="taskType">
-                <option value="task">Task</option>
-                <option value="epic">Epic</option>
-                <option value="job">Job</option>
-              </select>
-            </label>
-            <label>Parent Epic
-              <select v-model="parentId">
-                <option value="">–</option>
-                <option v-for="e in epics" :key="e.id" :value="e.id">{{ e.title }}</option>
-              </select>
-            </label>
-          </div>
           <label>Labels <small>(kommagetrennt)</small>
             <input v-model="labels" type="text" />
           </label>
@@ -232,6 +234,19 @@ defineExpose({ openNew, openEdit, close })
           </div>
         </div>
         <div v-if="!isNew" class="modal-col-side">
+          <label>Typ
+            <select v-model="taskType">
+              <option value="task">Task</option>
+              <option value="epic">Epic</option>
+              <option value="job">Job</option>
+            </select>
+          </label>
+          <label>Parent Epic
+            <select v-model="parentId">
+              <option value="">–</option>
+              <option v-for="e in epics" :key="e.id" :value="e.id">{{ e.title }}</option>
+            </select>
+          </label>
           <label>Points <small>(0–100)</small>
             <input v-model.number="points" type="number" min="0" max="100" />
           </label>
@@ -252,11 +267,31 @@ defineExpose({ openNew, openEdit, close })
           </div>
           <div class="modal-section" v-if="otherTasks.length">
             <span class="modal-section-title">Blockiert durch</span>
-            <div class="blocked-by-list">
-              <label v-for="t in otherTasks" :key="t.id" class="blocked-by-item">
-                <input type="checkbox" :value="t.id" v-model="blockedBy" />
-                <span class="blocked-by-title">{{ t.title }}</span>
-              </label>
+            <div class="multiselect">
+              <div class="multiselect-tags" v-if="selectedBlockers.length">
+                <span v-for="t in selectedBlockers" :key="t.id" class="multiselect-tag">
+                  {{ t.title }}
+                  <button type="button" class="multiselect-tag-remove" @click="removeBlocker(t.id)">&times;</button>
+                </span>
+              </div>
+              <div class="multiselect-input-wrap">
+                <input
+                  v-model="blockedBySearch"
+                  type="text"
+                  class="multiselect-input"
+                  placeholder="Task suchen…"
+                  @focus="blockedByOpen = true"
+                  @blur="setTimeout(() => blockedByOpen = false, 150)"
+                />
+              </div>
+              <div v-if="blockedByOpen && filteredBlockerTasks.length" class="multiselect-dropdown">
+                <div
+                  v-for="t in filteredBlockerTasks"
+                  :key="t.id"
+                  class="multiselect-option"
+                  @mousedown.prevent="addBlocker(t.id)"
+                >{{ t.title }}</div>
+              </div>
             </div>
           </div>
           <div class="modal-section">
@@ -270,6 +305,19 @@ defineExpose({ openNew, openEdit, close })
           </div>
         </div>
         <div v-else class="modal-col-side">
+          <label>Typ
+            <select v-model="taskType">
+              <option value="task">Task</option>
+              <option value="epic">Epic</option>
+              <option value="job">Job</option>
+            </select>
+          </label>
+          <label>Parent Epic
+            <select v-model="parentId">
+              <option value="">–</option>
+              <option v-for="e in epics" :key="e.id" :value="e.id">{{ e.title }}</option>
+            </select>
+          </label>
           <label>Points <small>(0–100)</small>
             <input v-model.number="points" type="number" min="0" max="100" />
           </label>
