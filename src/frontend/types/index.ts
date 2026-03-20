@@ -59,7 +59,7 @@ export interface Task {
   points: number
   worker: string
   creator: string
-  logs: string[]
+  logs: (string | { ts: string; user: string; msg: string })[]
   comments: string[]
   created_at: string
   updated_at: string

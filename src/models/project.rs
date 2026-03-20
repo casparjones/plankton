@@ -180,8 +180,8 @@ pub struct Task {
     pub worker: String,
     /// Erstellt von.
     pub creator: String,
-    /// Audit-Log: z.B. "2026-03-08 14:30 moved from Todo to In Progress".
-    pub logs: Vec<String>,
+    /// Audit-Log: String (legacy) oder Objekt `{"ts","user","msg"}`.
+    pub logs: Vec<serde_json::Value>,
     /// Kommentare: z.B. "Frank: Bitte Prio erhöhen".
     pub comments: Vec<String>,
     pub created_at: String,
@@ -200,6 +200,15 @@ pub struct Task {
 }
 
 fn default_task_type() -> String { "task".to_string() }
+
+/// Erzeugt einen strukturierten Log-Eintrag.
+pub fn log_entry(user: &str, msg: &str) -> serde_json::Value {
+    serde_json::json!({
+        "ts": chrono::Local::now().format("%m-%d %H:%M").to_string(),
+        "user": user,
+        "msg": msg,
+    })
+}
 
 impl Default for Task {
     fn default() -> Self {

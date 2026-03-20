@@ -47,7 +47,7 @@ pub struct UpdateTaskRequest {
     pub points: Option<i32>,
     pub order: Option<i32>,
     pub comments: Option<Vec<String>>,
-    pub logs: Option<Vec<String>>,
+    pub logs: Option<Vec<serde_json::Value>>,
     pub task_type: Option<String>,
     pub blocks: Option<Vec<String>>,
     pub blocked_by: Option<Vec<String>>,

@@ -280,7 +280,14 @@ defineExpose({ open, close })
             <span class="detail-section-title">Logs</span>
             <div class="detail-list">
               <template v-if="logs.length">
-                <div v-for="(l, i) in logs" :key="i" class="detail-list-item">{{ l }}</div>
+                <div v-for="(l, i) in logs" :key="i" class="detail-list-item log-entry">
+                  <template v-if="typeof l === 'object'">
+                    <span class="log-ts">{{ l.ts }}</span>
+                    <span class="log-msg">{{ l.msg }}</span>
+                    <span class="log-user">{{ l.user }}</span>
+                  </template>
+                  <template v-else>{{ l }}</template>
+                </div>
               </template>
               <div v-else class="detail-list-empty">Keine Logs</div>
             </div>

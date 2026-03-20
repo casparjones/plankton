@@ -433,14 +433,7 @@ async fn execute_tool(
                 task.previous_row = task.column_id.clone();
                 task.column_id = column_id.to_string();
                 task.updated_at = Utc::now().to_rfc3339();
-                let log = format!(
-                    "[{}] {} moved from {} to {}",
-                    caller,
-                    Local::now().format("%Y-%m-%d %H:%M"),
-                    old_name,
-                    new_name
-                );
-                task.logs.push(log);
+                task.logs.push(log_entry(&caller, &format!("→ {}", new_name)));
             }
             let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             let updated = state.store.put_project(project).await?;
@@ -516,12 +509,7 @@ async fn execute_tool(
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
                 task.worker = worker.to_string();
                 task.updated_at = Utc::now().to_rfc3339();
-                task.logs.push(format!(
-                    "[{}] {} assigned to {}",
-                    caller,
-                    Local::now().format("%Y-%m-%d %H:%M"),
-                    worker
-                ));
+                task.logs.push(log_entry(&caller, &format!("assigned → {}", worker)));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
@@ -557,12 +545,7 @@ async fn execute_tool(
                 .ok_or_else(|| ApiError::BadRequest("message missing".into()))?;
             let mut project = state.store.get_project(project_id).await?;
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
-                task.logs.push(format!(
-                    "[{}] {} {}",
-                    caller,
-                    Local::now().format("%Y-%m-%d %H:%M"),
-                    message
-                ));
+                task.logs.push(log_entry(&caller, message));
                 task.updated_at = Utc::now().to_rfc3339();
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
@@ -587,11 +570,7 @@ async fn execute_tool(
                     task.labels.push("review".to_string());
                 }
                 task.updated_at = Utc::now().to_rfc3339();
-                task.logs.push(format!(
-                    "[{}] {} submitted for review",
-                    caller,
-                    Local::now().format("%Y-%m-%d %H:%M")
-                ));
+                task.logs.push(log_entry(&caller, "submitted for review"));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
@@ -659,11 +638,7 @@ async fn execute_tool(
                     task.column_id = done_id.clone();
                 }
                 task.updated_at = Utc::now().to_rfc3339();
-                task.logs.push(format!(
-                    "[{}] {} approved",
-                    caller,
-                    Local::now().format("%Y-%m-%d %H:%M")
-                ));
+                task.logs.push(log_entry(&caller, "✓ approved"));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
@@ -693,12 +668,7 @@ async fn execute_tool(
                 }
                 task.updated_at = Utc::now().to_rfc3339();
                 task.comments.push(format!("[{}] {}", caller, comment));
-                task.logs.push(format!(
-                    "[{}] {} rejected: {}",
-                    caller,
-                    Local::now().format("%Y-%m-%d %H:%M"),
-                    comment
-                ));
+                task.logs.push(log_entry(&caller, &format!("✗ rejected: {}", comment)));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }

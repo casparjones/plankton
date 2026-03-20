@@ -151,8 +151,7 @@ pub async fn archive_old_tasks(store: &DataStore) -> Result<(), ApiError> {
                     task.previous_row = task.column_id.clone();
                     task.column_id = archive_id.clone();
                     task.updated_at = Utc::now().to_rfc3339();
-                    task.logs.push(format!("{} auto-archived",
-                        Local::now().format("%Y-%m-%d")));
+                    task.logs.push(crate::models::log_entry("system", "auto-archived"));
                     changed = true;
                 }
             }

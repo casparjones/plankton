@@ -41,6 +41,14 @@ function removeBlocker(id: string) {
 }
 
 const logs = computed(() => [...(editingTask.value?.logs || [])].reverse())
+function formatLog(entry: string | { ts: string; user: string; msg: string }): string {
+  if (typeof entry === 'string') return entry
+  return `${entry.ts} ${entry.msg} [${entry.user}]`
+}
+function logParts(entry: string | { ts: string; user: string; msg: string }): { ts: string; msg: string; user: string } {
+  if (typeof entry === 'string') return { ts: '', msg: entry, user: '' }
+  return entry
+}
 const epics = computed(() =>
   (state.project?.tasks || []).filter((t: Task) => t.task_type === 'epic' && t.id !== editingTask.value?.id)
 )
@@ -298,7 +306,14 @@ defineExpose({ openNew, openEdit, close })
             <span class="modal-section-title">Logs</span>
             <div class="modal-list modal-list-small">
               <template v-if="logs.length">
-                <div v-for="(l, i) in logs" :key="i" class="modal-list-item">{{ l }}</div>
+                <div v-for="(l, i) in logs" :key="i" class="modal-list-item log-entry">
+                  <template v-if="typeof l === 'object'">
+                    <span class="log-ts">{{ l.ts }}</span>
+                    <span class="log-msg">{{ l.msg }}</span>
+                    <span class="log-user">{{ l.user }}</span>
+                  </template>
+                  <template v-else>{{ l }}</template>
+                </div>
               </template>
               <div v-else class="modal-list-empty">Keine Logs</div>
             </div>

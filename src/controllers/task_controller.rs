@@ -110,7 +110,7 @@ pub async fn import_tasks(
         }
 
         // Log entry
-        task.logs.push(format!("{} imported via Issue Import [{}]", today, user_name));
+        task.logs.push(log_entry(&user_name, "imported"));
 
         project.tasks.push(task);
         imported += 1;
@@ -304,9 +304,7 @@ pub async fn move_task(
         task.column_id = req.column_id;
         task.order = req.order.unwrap_or(task.order);
         task.updated_at = Utc::now().to_rfc3339();
-        let log = format!("[{}] {} moved from {} to {}",
-            user_name, Local::now().format("%Y-%m-%d %H:%M"), old_name, new_name);
-        task.logs.push(log);
+        task.logs.push(log_entry(&user_name, &format!("→ {}", new_name)));
     }
     let task_data = project.tasks.iter().find(|t| t.id == real_task_id).cloned();
     state.store.put_project(project).await?;
@@ -320,9 +318,11 @@ pub async fn move_task(
 pub async fn batch_move_tasks(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<BatchMoveRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut project = state.store.resolve_project(&id).await?;
+    let user_name = resolve_caller(&headers, &state).await;
     // Blocked-Check: keine blockierten Tasks auf Done verschieben.
     let done_col_id = project.columns.iter().find(|c| c.title == "Done").map(|c| c.id.clone());
     if let Some(ref done_id) = done_col_id {
@@ -344,8 +344,19 @@ pub async fn batch_move_tasks(
             }
         }
     }
+    let column_name = |col_id: &str| -> String {
+        project.columns.iter()
+            .find(|c| c.id == col_id)
+            .map(|c| c.title.clone())
+            .unwrap_or_else(|| col_id.to_string())
+    };
     for m in &req.moves {
         if let Some(task) = project.tasks.iter_mut().find(|t| t.id == m.task_id) {
+            if task.column_id != m.column_id {
+                let new_name = column_name(&m.column_id);
+                task.previous_row = task.column_id.clone();
+                task.logs.push(log_entry(&user_name, &format!("→ {}", new_name)));
+            }
             task.column_id = m.column_id.clone();
             task.order = m.order;
             task.updated_at = Utc::now().to_rfc3339();
