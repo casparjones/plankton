@@ -2458,9 +2458,8 @@ body {
     .col-title { font-size: 11px !important; }
     .col-actions button { font-size: 12px; padding: 2px 6px; }
 
-    /* Hide less important header buttons */
-    .import-btn { display: none; }
     .search-toggle-btn { font-size: 12px; padding: 3px 6px; }
+    .import-btn { font-size: 10px; padding: 2px 6px; }
 }
 
 /* Plankton – Stylesheet (Module) */
