@@ -857,10 +857,38 @@ Generiere sie in der Plankton-Oberfläche unter **Projekt-Menü → Prompts → 
 
 ## API-Aufrufe
 
+Plankton unterstützt **MCP Streamable HTTP Transport** (Protocol Version `2025-03-26`).
 Alle Tool-Aufrufe gehen an `POST {plankton_url}/mcp` als JSON-RPC 2.0.
 Verwende den Token aus der Secrets-Datei als Bearer-Token.
 
-### Aufruf-Muster
+### Streamable HTTP Transport (empfohlen)
+
+```bash
+# 1. Session initialisieren → Mcp-Session-Id aus Response-Header lesen
+curl -s -D- -X POST {plankton_url}/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $PLANKTON_TOKEN" \
+  -d '{{"jsonrpc":"2.0","method":"initialize","id":0}}'
+# → Header: Mcp-Session-Id: <session-id>
+
+# 2. Tool aufrufen (mit Session-ID)
+curl -s -X POST {plankton_url}/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $PLANKTON_TOKEN" \
+  -H "Mcp-Session-Id: <session-id>" \
+  -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"TOOL_NAME","arguments":{{ARGS}}}},"id":1}}'
+
+# 3. SSE-Stream für Server-Notifications (optional)
+curl -s -N {plankton_url}/mcp \
+  -H "Authorization: Bearer $PLANKTON_TOKEN" \
+  -H "Mcp-Session-Id: <session-id>"
+
+# 4. Session beenden
+curl -s -X DELETE {plankton_url}/mcp \
+  -H "Mcp-Session-Id: <session-id>"
+```
+
+### Legacy-Aufruf (ohne Session)
 
 ```bash
 curl -s -X POST {plankton_url}/mcp \
@@ -994,23 +1022,42 @@ Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Para
 6. `submit_for_review` → Zur Review einreichen
 7. `approve_task` / `reject_task` → Review abschließen
 
-## Vollständiges Beispiel
+## Vollständiges Beispiel (Streamable HTTP)
 
 ```bash
 # Token aus secrets.md laden
 TOKEN="plk_xxx..."
 
-# Projekte auflisten
+# 1. Session initialisieren
+SESSION=$(curl -s -D- -X POST {plankton_url}/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{{"jsonrpc":"2.0","method":"initialize","id":0}}' \
+  | grep -i mcp-session-id | tr -d '\\r' | awk '{{print $2}}')
+
+# 2. Projekte auflisten
 curl -s -X POST {plankton_url}/mcp \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
+  -H "Mcp-Session-Id: $SESSION" \
   -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"list_projects","arguments":{{}}}},"id":1}}'
 
-# Task erstellen
+# 3. Epic erstellen mit Subtask
 curl -s -X POST {plankton_url}/mcp \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"create_task","arguments":{{"project_id":"PROJ_ID","title":"Bug fixen","description":"Details...","labels":["bug"],"points":3}}}},"id":2}}'
+  -H "Mcp-Session-Id: $SESSION" \
+  -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"create_task","arguments":{{"project_id":"PROJ_ID","title":"Auth System","task_type":"epic","labels":["feature"],"points":13}}}},"id":2}}'
+
+# 4. Subtask-Relation anlegen
+curl -s -X POST {plankton_url}/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Mcp-Session-Id: $SESSION" \
+  -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"add_relation","arguments":{{"project_id":"PROJ_ID","from_task_id":"EPIC_ID","to_task_id":"SUBTASK_ID","relation":"subtask"}}}},"id":3}}'
+
+# 5. Session beenden
+curl -s -X DELETE {plankton_url}/mcp -H "Mcp-Session-Id: $SESSION"
 ```
 
 ## Regeln
@@ -1125,23 +1172,41 @@ PUT    /api/admin/tokens/:tid                  → update token
 DELETE /api/admin/tokens/:tid                  → delete token
 </pre>
 
-<h2>MCP Protocol (JSON-RPC 2.0)</h2>
-<p>Endpoint: <code>POST /mcp</code></p>
+<h2>MCP Streamable HTTP Transport</h2>
+<p>Protocol Version: <code>2025-03-26</code> – Session-basiert mit SSE.</p>
 <pre>
-// Initialize
-{{"jsonrpc":"2.0","method":"initialize","id":1}}
+POST   /mcp                    → JSON-RPC 2.0 (initialize erstellt Session)
+GET    /mcp                    → SSE-Stream für Server-Notifications (Header: Mcp-Session-Id)
+DELETE /mcp                    → Session beenden (Header: Mcp-Session-Id)
+</pre>
+<h3>Session-Flow</h3>
+<pre>
+1. POST /mcp  {{"method":"initialize"}}          → Response enthält Mcp-Session-Id Header
+2. POST /mcp  {{"method":"tools/list"}}          → Header: Mcp-Session-Id: &lt;id&gt;
+3. POST /mcp  {{"method":"tools/call",...}}       → Header: Mcp-Session-Id: &lt;id&gt;
+4. GET  /mcp  (Header: Mcp-Session-Id)          → SSE-Stream (optional)
+5. DELETE /mcp (Header: Mcp-Session-Id)          → Session beenden
+</pre>
+<h3>Beispiel</h3>
+<pre>
+// 1. Initialize → Session-ID aus Response-Header lesen
+curl -D- -X POST /mcp -d '{{"jsonrpc":"2.0","method":"initialize","id":1}}'
+// → Mcp-Session-Id: abc-123
 
-// List tools
-{{"jsonrpc":"2.0","method":"tools/list","id":2}}
+// 2. Tools auflisten
+curl -H "Mcp-Session-Id: abc-123" -X POST /mcp \
+  -d '{{"jsonrpc":"2.0","method":"tools/list","id":2}}'
 
-// Call a tool
-{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"list_projects","arguments":{{}}}},"id":3}}
+// 3. Tool aufrufen
+curl -H "Mcp-Session-Id: abc-123" -X POST /mcp \
+  -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"list_projects","arguments":{{}}}},"id":3}}'
 </pre>
 
 <h2>Legacy MCP Endpoints</h2>
 <pre>
 GET  /mcp/tools                → list available tools
 POST /mcp/call                 → {{"tool":"...","arguments":{{...}}}}
+POST /mcp                      → JSON-RPC 2.0 (ohne Session, abwärtskompatibel)
 </pre>
 
 <h2>MCP Tools</h2>
