@@ -3,6 +3,7 @@
 import api from '../api';
 import { state } from '../state';
 import { renderBoard } from './board';
+import { toastConfirm } from '../toast';
 import type { ProjectDoc } from '../types';
 
 export function updateBulkBar(): void {
@@ -20,7 +21,7 @@ export function updateBulkBar(): void {
 export async function bulkDeleteSelected(): Promise<void> {
   const ids = [...state.selectedTasks];
   if (ids.length === 0) return;
-  if (!confirm(`${ids.length} Task(s) wirklich löschen?`)) return;
+  if (!await toastConfirm(`${ids.length} Task(s) löschen?`)) return;
 
   for (const taskId of ids) {
     try {

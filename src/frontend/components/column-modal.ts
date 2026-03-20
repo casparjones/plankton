@@ -3,6 +3,7 @@
 import api from '../api';
 import { state, COLUMN_COLORS } from '../state';
 import { renderBoard } from './board';
+import { toastConfirm } from '../toast';
 import type { Column, ProjectDoc } from '../types';
 
 interface ColumnModalState {
@@ -44,7 +45,7 @@ async function deleteColumn(colId: string): Promise<void> {
   const msg = taskCount > 0
       ? `Spalte "${col!.title}" und ${taskCount} Task(s) wirklich löschen?`
       : `Spalte "${col!.title}" wirklich löschen?`;
-  if (!confirm(msg)) return;
+  if (!await toastConfirm(msg)) return;
   state.project = await api.del(`/api/projects/${state.project!._id}/columns/${colId}`)
       .then(() => api.get<ProjectDoc>(`/api/projects/${state.project!._id}`));
   renderBoard();

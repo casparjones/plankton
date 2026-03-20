@@ -2,6 +2,7 @@
 
 import { state } from '../state';
 import { openProject, deleteProject } from '../services/project-service';
+import { toastConfirm } from '../toast';
 import type { ProjectDoc } from '../types';
 
 export function renderProjectList(): void {
@@ -26,7 +27,7 @@ export function renderProjectList(): void {
       delBtn.title = 'Projekt löschen';
       delBtn.addEventListener('click', (e: Event) => {
         e.stopPropagation();
-        if (confirm(`Projekt "${p.title}" und alle Tasks wirklich löschen?`)) deleteProject(p._id);
+        toastConfirm(`Projekt "${p.title}" und alle Tasks löschen?`).then(ok => ok && deleteProject(p._id));
       });
       li.appendChild(delBtn);
     }

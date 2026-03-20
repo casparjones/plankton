@@ -329,6 +329,7 @@ onMounted(initColumnSortable)
 
 // Re-init Sortable wenn Projekt wechselt (neues Board, anderes Projekt)
 watch(() => state.project?._id, () => {
+  refreshColumnTasks()
   initColumnSortable()
 })
 

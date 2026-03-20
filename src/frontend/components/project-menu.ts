@@ -8,6 +8,7 @@ import { renderJsonTree, toggleJsonView } from './json-view';
 import { loadProjects, renameProject } from '../services/project-service';
 import { updateProjectTitle } from './sidebar';
 import { subscribeSSE } from '../services/sse-service';
+import { toastConfirm } from '../toast';
 import { openGitModal } from './git-settings';
 import { generateSecretsMd, generateRulesMd, generateWorkflowMd } from './prompt-generator';
 import type { ProjectDoc, AgentToken } from '../types';
@@ -350,7 +351,7 @@ export async function importProjectJson(): Promise<void> {
     alert('Ungültiges JSON');
     return;
   }
-  if (!confirm('Neues Projekt aus diesem JSON erstellen?')) return;
+  if (!await toastConfirm('Neues Projekt aus diesem JSON erstellen?')) return;
   data._id = '';
   delete data._rev;
   data.title = data.title ? data.title + ' (Import)' : 'Import';
@@ -383,7 +384,7 @@ export async function saveProjectJson(): Promise<void> {
   data._id = state.project._id;
   data._rev = state.project._rev;
 
-  if (!confirm('Projekt mit diesem JSON überschreiben?')) return;
+  if (!await toastConfirm('Projekt mit diesem JSON überschreiben?')) return;
 
   try {
     state.project = await api.put<ProjectDoc>(`/api/projects/${state.project._id}`, data);

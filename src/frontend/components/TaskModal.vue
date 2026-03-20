@@ -7,6 +7,7 @@ import { state } from '../state'
 import { columnName, formatDate } from '../utils'
 // @ts-ignore
 import { saveTask, createTaskViaApi, deleteTask } from '../services/project-service'
+import { toastConfirm } from '../toast'
 
 const isOpen = ref(false)
 const isNew = ref(false)
@@ -178,9 +179,10 @@ async function save(): Promise<void> {
   close()
 }
 
-function handleDelete(): void {
+async function handleDelete(): Promise<void> {
   if (!editingTask.value) return
-  if (confirm(`Task "${editingTask.value.title}" wirklich löschen?`)) {
+  const ok = await toastConfirm(`Task "${editingTask.value.title}" löschen?`)
+  if (ok) {
     deleteTask(editingTask.value.id)
     close()
   }

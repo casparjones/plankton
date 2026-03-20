@@ -1,6 +1,7 @@
 // Admin-Modal (Nutzerverwaltung + Tokens).
 
 import { escapeHtml } from '../utils';
+import { toastConfirm } from '../toast';
 import type { AuthUser, AgentToken } from '../types';
 
 interface AdminState {
@@ -173,7 +174,7 @@ export async function saveAdminForm(): Promise<void> {
 
 export async function handleTokenAction(action: string, tid: string): Promise<void> {
   if (action === 'delete') {
-    if (!confirm('Token wirklich löschen?')) return;
+    if (!await toastConfirm('Token löschen?')) return;
     await fetch(`/api/admin/tokens/${tid}`, { method: 'DELETE' });
     await loadTokens();
   } else if (action === 'toggle') {
@@ -193,7 +194,7 @@ export async function handleAdminUserAction(action: string, uid: string): Promis
     const user = adminState.users.find(u => u.id === uid);
     if (user) showAdminForm(user);
   } else if (action === 'delete') {
-    if (!confirm('Nutzer wirklich löschen?')) return;
+    if (!await toastConfirm('Nutzer löschen?')) return;
     await fetch(`/api/admin/users/${uid}`, { method: 'DELETE' });
     await openAdminModal();
   } else if (action === 'reset-pw') {

@@ -33,3 +33,35 @@
 .Vue-Toastification__progress-bar {
     background: var(--accent) !important;
 }
+
+/* Toast Confirm Dialog */
+.toast-confirm-msg {
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+.toast-confirm-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.toast-confirm-yes,
+.toast-confirm-no {
+    padding: 4px 14px;
+    border-radius: var(--radius, 6px);
+    border: 1px solid var(--border, #2e2e38);
+    font-size: 12px;
+    font-family: var(--font-mono, monospace);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.toast-confirm-yes {
+    background: var(--danger, #e05c6a);
+    color: #fff;
+    border-color: var(--danger, #e05c6a);
+}
+.toast-confirm-yes:hover { opacity: 0.85; }
+.toast-confirm-no {
+    background: var(--surface-2, #222228);
+    color: var(--text, #e2e2e8);
+}
+.toast-confirm-no:hover { background: var(--border, #2e2e38); }

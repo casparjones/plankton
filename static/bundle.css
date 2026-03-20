@@ -2618,6 +2618,38 @@ body {
     background: var(--accent) !important;
 }
 
+/* Toast Confirm Dialog */
+.toast-confirm-msg {
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+.toast-confirm-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.toast-confirm-yes,
+.toast-confirm-no {
+    padding: 4px 14px;
+    border-radius: var(--radius, 6px);
+    border: 1px solid var(--border, #2e2e38);
+    font-size: 12px;
+    font-family: var(--font-mono, monospace);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.toast-confirm-yes {
+    background: var(--danger, #e05c6a);
+    color: #fff;
+    border-color: var(--danger, #e05c6a);
+}
+.toast-confirm-yes:hover { opacity: 0.85; }
+.toast-confirm-no {
+    background: var(--surface-2, #222228);
+    color: var(--text, #e2e2e8);
+}
+.toast-confirm-no:hover { background: var(--border, #2e2e38); }
+
 /* Plankton – Stylesheet (Module) */
 
 /* sass-plugin-1:/Users/maronato/Developer/vue-toastification/src/scss/index.scss */
@@ -3281,7 +3313,7 @@ body {
 }
 
 
-.board-columns[data-v-6cc0927f] {
+.board-columns[data-v-551a515b] {
   display: flex;
   gap: 12px;
   overflow-x: auto;
@@ -3289,7 +3321,7 @@ body {
   min-height: 200px;
   align-items: flex-start;
 }
-.kanban-column[data-v-6cc0927f] {
+.kanban-column[data-v-551a515b] {
   min-width: 280px;
   max-width: 320px;
   flex: 0 0 300px;
@@ -3299,7 +3331,7 @@ body {
   flex-direction: column;
   max-height: calc(100vh - 140px);
 }
-.kanban-board-header[data-v-6cc0927f] {
+.kanban-board-header[data-v-551a515b] {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3308,30 +3340,30 @@ body {
   flex-shrink: 0;
   cursor: grab;
 }
-.kanban-board-header[data-v-6cc0927f]:active {
+.kanban-board-header[data-v-551a515b]:active {
   cursor: grabbing;
 }
-.col-done .kanban-board-header[data-v-6cc0927f] {
+.col-done .kanban-board-header[data-v-551a515b] {
   cursor: default;
 }
-.column-dragging[data-v-6cc0927f] {
+.column-dragging[data-v-551a515b] {
   opacity: 0.4;
 }
-.kanban-drag[data-v-6cc0927f] {
+.kanban-drag[data-v-551a515b] {
   min-height: 40px;
   padding: 4px 8px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
-.kanban-item[data-v-6cc0927f] {
+.kanban-item[data-v-551a515b] {
   cursor: grab;
   margin-bottom: 6px;
 }
-.kanban-item[data-v-6cc0927f]:active {
+.kanban-item[data-v-551a515b]:active {
   cursor: grabbing;
 }
-.kanban-empty[data-v-6cc0927f] {
+.kanban-empty[data-v-551a515b] {
   padding: 16px;
   text-align: center;
   opacity: 0.5;
