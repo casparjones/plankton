@@ -235,27 +235,33 @@ function onSortUpdate(columnId: string, evt: any): void {
   persistMoves(moves)
 }
 
+/** SortableJS :move – prüft VOR dem Move ob ein blockierter Task auf Done gezogen wird. */
+function onMoveCheck(evt: any): boolean {
+  const taskEl = evt.dragged
+  const targetList = evt.to
+  const targetColId = targetList?.closest('.kanban-column')?.dataset?.id
+  if (!targetColId) return true
+  const doneCol = state.project?.columns.find((c: Column) => c.title === 'Done')
+  if (!doneCol || targetColId !== doneCol.id) return true
+  const taskId = taskEl?.querySelector('.task-inner')?.dataset?.taskId
+  if (!taskId) return true
+  const task = state.project?.tasks.find((t: Task) => t.id === taskId)
+  if (!task || !isBlocked(task)) return true
+  // Blockiert → Move verhindern und Toast zeigen
+  const blockerNames = (task.blocked_by || [])
+    .map(bid => state.project!.tasks.find((t: Task) => t.id === bid))
+    .filter(t => t && t.column_id !== doneCol.id)
+    .map(t => `"${t!.title}"`)
+    .join(', ')
+  toast.error(`Blockiert durch: ${blockerNames}`, { timeout: 5000 })
+  return false
+}
+
 /** SortableJS @add: Task aus anderer Spalte hierhin verschoben. */
 function onSortAdd(columnId: string, evt: any): void {
   const tasks = columnTasks.value[columnId] || []
   const task = tasks[evt.newIndex]
   if (!task) return
-  // Warnung: blockierte Tasks können nicht auf Done verschoben werden.
-  const doneCol = state.project?.columns.find((c: Column) => c.title === 'Done')
-  if (doneCol && columnId === doneCol.id && isBlocked(task)) {
-    const blockerNames = (task.blocked_by || [])
-      .map(bid => state.project!.tasks.find((t: Task) => t.id === bid))
-      .filter(t => t && t.column_id !== doneCol.id)
-      .map(t => `"${t!.title}"`)
-      .join(', ')
-    toast.error(`Blockiert durch: ${blockerNames}`, {
-      timeout: 5000,
-    })
-    // VueDraggable hat den Task ins neue Array verschoben.
-    // column_id ist aber noch die alte Spalte → refreshColumnTasks baut korrekt neu.
-    refreshColumnTasks()
-    return
-  }
   persistMoves([{ task_id: task.id, column_id: columnId, order: evt.newIndex }])
 }
 
@@ -391,6 +397,7 @@ window.__kanbanToggleSearch = toggleSearch
         :animation="150"
         class="kanban-drag"
         ghost-class="dragging"
+        :move="onMoveCheck"
         @start="onDragStart"
         @end="onDragEnd"
         @update="(evt: any) => onSortUpdate(col.id, evt)"
