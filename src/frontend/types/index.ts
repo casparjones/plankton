@@ -61,6 +61,11 @@ export interface Task {
   comments: string[]
   created_at: string
   updated_at: string
+  task_type: string
+  blocks: string[]
+  blocked_by: string[]
+  parent_id: string
+  subtask_ids: string[]
 }
 
 // === Auth-Datenmodell ===

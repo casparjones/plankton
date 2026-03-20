@@ -270,6 +270,116 @@
     border-radius: 50%;
 }
 
+.detail-comments-list {
+    max-height: 300px;
+}
+
+.detail-comment-input {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.detail-comment-input textarea {
+    flex: 1;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+    resize: vertical;
+    min-height: 36px;
+    transition: border-color 0.15s;
+}
+
+.detail-comment-input textarea:focus {
+    border-color: var(--accent);
+}
+
+.detail-comment-input textarea::placeholder {
+    color: var(--text-dim);
+}
+
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 12px;
+}
+
+.related-tickets {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.related-group-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.related-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.related-item:hover {
+    border-color: var(--accent);
+}
+
+.related-check {
+    font-size: 14px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    width: 18px;
+    text-align: center;
+}
+.related-check.done { color: #43a047; }
+
+.related-type {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    background: #1a2e1a;
+    color: #a5d6a7;
+    border: 1px solid #43a047;
+    flex-shrink: 0;
+}
+
+.related-title {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.related-col {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+}
+
 @media (max-width: 900px) {
     .detail-grid {
         grid-template-columns: 1fr;

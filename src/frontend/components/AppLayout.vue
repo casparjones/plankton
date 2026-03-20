@@ -171,7 +171,7 @@ onMounted(() => {
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <span class="logo"><img src="/icons/favicon-32.png" alt="" class="logo-icon" /> Plankton</span>
+        <span class="logo"><img src="/icons/logo.svg" alt="" class="logo-icon" /> Plankton</span>
         <button id="theme-toggle" class="theme-toggle" title="Theme wechseln">&#9728;</button>
       </div>
       <div class="sidebar-create">

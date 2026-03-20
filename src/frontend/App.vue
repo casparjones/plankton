@@ -149,8 +149,12 @@ onMounted(async () => {
 <template>
   <!-- Login-Ansicht (erst nach Auth-Check zeigen, verhindert Flash) -->
   <div v-if="authChecked && !isAuthenticated" class="login-page">
+    <img src="/icons/plankton-splash.png" alt="" class="login-splash" />
     <div class="login-card">
-      <div class="login-logo"><img src="/icons/favicon-64.png" alt="Plankton" class="login-logo-img" /> Plankton</div>
+      <div class="login-logo">
+        <img src="/icons/logo.svg" alt="Plankton" class="login-logo-img" />
+        Plankton
+      </div>
       <div v-if="loginError" class="login-error">{{ loginError }}</div>
       <form @submit.prevent="handleLogin">
         <label>

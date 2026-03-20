@@ -12,7 +12,7 @@ import api from '../api'
 import { updateBulkBar } from './bulk-actions'
 // @ts-ignore
 import { updateGitStatusIcon } from './git-settings'
-import { escapeHtml } from '../utils'
+import { escapeHtml, labelColor } from '../utils'
 
 // Feste Farbzuweisung pro Worker (Hash → Farbpalette).
 const WORKER_COLORS = [
@@ -31,6 +31,31 @@ function workerBorderColor(worker: string): string {
     workerColorCache[key] = WORKER_COLORS[Math.abs(hash) % WORKER_COLORS.length]
   }
   return workerColorCache[key]
+}
+
+/** Prüft ob ein Task blockiert ist (mindestens ein Blocker ist nicht in Done). */
+function isBlocked(task: Task): boolean {
+  if (!task.blocked_by?.length || !state.project) return false
+  const doneCol = state.project.columns.find((c: Column) => c.title === 'Done')
+  if (!doneCol) return task.blocked_by.length > 0
+  return task.blocked_by.some(bid => {
+    const blocker = state.project!.tasks.find((t: Task) => t.id === bid)
+    return blocker && blocker.column_id !== doneCol.id
+  })
+}
+
+/** Berechnet Subtask-Fortschritt für Epics. */
+function subtaskProgress(task: Task): { done: number; total: number; pct: number } {
+  if (!task.subtask_ids?.length || !state.project) return { done: 0, total: 0, pct: 0 }
+  const doneCol = state.project.columns.find((c: Column) => c.title === 'Done')
+  const total = task.subtask_ids.length
+  const done = doneCol
+    ? task.subtask_ids.filter(sid => {
+        const sub = state.project!.tasks.find((t: Task) => t.id === sid)
+        return sub && sub.column_id === doneCol.id
+      }).length
+    : 0
+  return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 }
 }
 
 /** Sichtbare Spalten, sortiert (Done immer zuletzt). */
@@ -262,15 +287,27 @@ window.__kanbanRefresh = refreshColumnTasks
                 @change="toggleTaskSelection(task.id, ($event.target as HTMLInputElement).checked)"
                 @click.stop
               />
+              <span v-if="task.task_type === 'epic'" class="type-badge type-epic" title="Epic">E</span>
+              <span v-else-if="task.task_type === 'job'" class="type-badge type-job" title="Job">J</span>
               <div class="task-title">{{ task.title }}</div>
+              <span v-if="isBlocked(task)" class="blocked-badge" title="Blocked">B</span>
               <span v-if="task.points" class="points-badge">{{ task.points }}</span>
+            </div>
+            <div v-if="task.task_type === 'epic' && (task.subtask_ids || []).length" class="subtask-progress">
+              <span class="subtask-bar">
+                <span class="subtask-fill" :style="{ width: subtaskProgress(task).pct + '%' }"></span>
+              </span>
+              <span :class="['subtask-count', { 'subtask-done': subtaskProgress(task).done === subtaskProgress(task).total }]">
+                {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}
+              </span>
             </div>
             <div v-if="task.description" class="task-desc">
               {{ task.description.substring(0, 80) }}{{ task.description.length > 80 ? '…' : '' }}
             </div>
             <div class="task-meta">
               <div class="task-labels">
-                <span v-for="label in (task.labels || [])" :key="label" class="label">{{ label }}</span>
+                <span v-for="label in (task.labels || [])" :key="label" class="label"
+                  :style="{ background: labelColor(label).bg, borderColor: labelColor(label).border, color: labelColor(label).color }">{{ label }}</span>
               </div>
               <div class="task-assignees">
                 <span v-if="task.worker" class="avatar" :title="task.worker">{{ task.worker[0].toUpperCase() }}</span>

@@ -200,6 +200,68 @@
     padding: 1px 6px;
 }
 
+.type-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.type-epic { background: #1a2e1a; color: #a5d6a7; border: 1px solid #43a047; }
+.type-job  { background: #1a2a3a; color: #90caf9; border: 1px solid #1e88e5; }
+
+.blocked-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    background: #3a1c1c;
+    color: #ff8a80;
+    border: 1px solid #e53935;
+    flex-shrink: 0;
+}
+
+.subtask-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+}
+.subtask-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.subtask-fill {
+    display: block;
+    height: 100%;
+    background: #43a047;
+    border-radius: 2px;
+    transition: width 0.2s;
+}
+.subtask-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+}
+.subtask-done { color: #43a047; }
+
+.subtask-item { display: flex; align-items: center; gap: 6px; }
+.subtask-check { font-size: 14px; color: var(--text-dim); }
+.subtask-check.done { color: #43a047; }
+
 .avatar {
     background: var(--surface);
     border: 1px solid var(--border);

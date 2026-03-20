@@ -527,6 +527,68 @@ VIBEEOF
     echo ""
 }}
 
+# ─── Projects & Tasks ─────────────────────────────────────────
+
+cmd_projects() {{
+    load_config
+    if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in. Run: plankton login <url>"; exit 1; fi
+    local resp
+    resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects") || {{ echo "Error fetching projects"; exit 1; }}
+    echo ""
+    echo "  Projects:"
+    echo "  ━━━━━━━━━"
+    echo "$resp" | jq -r '.[] | "  \(._id)  \(.title)  (\(.tasks | length) tasks)"'
+    echo ""
+}}
+
+cmd_view_project() {{
+    load_config
+    if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in."; exit 1; fi
+    local pid="${{1:-}}"
+    if [ -z "$pid" ]; then echo "Usage: plankton view <project_id>"; exit 1; fi
+    local resp
+    resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$pid") || {{ echo "Error fetching project"; exit 1; }}
+    echo ""
+    echo "  $(echo "$resp" | jq -r '.title')"
+    echo "  ━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "$resp" | jq -r '.columns[] | select(.hidden != true) | "  \(.title): \(.id)"'
+    echo ""
+    echo "  Tasks by column:"
+    echo "$resp" | jq -r '
+        .columns[] | select(.hidden != true) | .id as $cid | .title as $ctitle |
+        "\n  ── \($ctitle) ──",
+        ([$ctitle, (input_line_number // 0)] | ""),
+        (.. | objects | select(.column_id == $cid) | "    [\(.task_type // "task")] \(.title) (\(.worker // "-"))")
+    ' 2>/dev/null || echo "$resp" | jq -r '
+        .columns[] as $col |
+        if ($col.hidden != true) then
+            "\n  ── \($col.title) ──",
+            ([.tasks[] | select(.column_id == $col.id)] | if length > 0 then .[] | "    [\(.task_type // "task")] \(.title) (\(.worker // "-"))" else "    (empty)" end)
+        else empty end
+    '
+    echo ""
+}}
+
+cmd_tasks() {{
+    load_config
+    if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in."; exit 1; fi
+    local pid="${{1:-}}"
+    if [ -z "$pid" ]; then echo "Usage: plankton tasks <project_id>"; exit 1; fi
+    local resp
+    resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$pid") || {{ echo "Error fetching project"; exit 1; }}
+    echo ""
+    printf "  %-8s %-6s %-40s %-12s %-8s %s\n" "ID" "TYPE" "TITLE" "COLUMN" "PTS" "WORKER"
+    echo "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "$resp" | jq -r '
+        .columns as $cols |
+        .tasks[] |
+        . as $t |
+        ($cols[] | select(.id == $t.column_id) | .title) as $col |
+        "  \($t.id[:8]) \($t.task_type // "task" | .[0:6]) \($t.title[:40]) \($col[:12]) \($t.points) \($t.worker // "-")"
+    '
+    echo ""
+}}
+
 # ─── Help ────────────────────────────────────────────────────
 
 cmd_help() {{
@@ -540,6 +602,9 @@ cmd_help() {{
     echo "    login <url>          Login to a Plankton server (device flow)"
     echo "    logout               Clear stored credentials"
     echo "    status               Show connection info"
+    echo "    projects             List all projects"
+    echo "    view <project_id>    View project with columns and tasks"
+    echo "    tasks <project_id>   List tasks in a project"
     echo "    init                 Create .vibe/ project structure"
     echo "    skill install [-g]   Download & install SKILL.md"
     echo "    skill update  [-g]   Update installed SKILL.md"
@@ -562,6 +627,9 @@ case "${{1:-help}}" in
     login)      shift; cmd_login "$@" ;;
     logout)     cmd_logout ;;
     status)     cmd_status ;;
+    projects)   cmd_projects ;;
+    view)       shift; cmd_view_project "$@" ;;
+    tasks)      shift; cmd_tasks "$@" ;;
     init)       cmd_init ;;
     skill)
         shift

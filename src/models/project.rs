@@ -119,7 +119,20 @@ pub struct Task {
     pub comments: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// Task-Typ: "task" (Standard), "epic" oder "job".
+    pub task_type: String,
+    /// IDs der Tasks, die dieser Task blockiert.
+    pub blocks: Vec<String>,
+    /// IDs der Tasks, die diesen Task blockieren.
+    pub blocked_by: Vec<String>,
+    /// Parent-Task-ID (für Subtasks eines Epics).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub parent_id: String,
+    /// IDs der Subtasks (denormalisiert für schnellen Zugriff auf Epics).
+    pub subtask_ids: Vec<String>,
 }
+
+fn default_task_type() -> String { "task".to_string() }
 
 impl Default for Task {
     fn default() -> Self {
@@ -140,6 +153,11 @@ impl Default for Task {
             comments: vec![],
             created_at: String::new(),
             updated_at: String::new(),
+            task_type: "task".to_string(),
+            blocks: vec![],
+            blocked_by: vec![],
+            parent_id: String::new(),
+            subtask_ids: vec![],
         }
     }
 }

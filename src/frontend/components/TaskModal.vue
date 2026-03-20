@@ -19,8 +19,13 @@ const labels = ref('')
 const points = ref(0)
 const worker = ref('')
 const newComment = ref('')
+const taskType = ref('task')
+const parentId = ref('')
 
 const logs = computed(() => [...(editingTask.value?.logs || [])].reverse())
+const epics = computed(() =>
+  (state.project?.tasks || []).filter((t: Task) => t.task_type === 'epic' && t.id !== editingTask.value?.id)
+)
 const comments = ref<string[]>([])
 const createdAt = computed(() => formatDate(editingTask.value?.created_at))
 const updatedAt = computed(() => formatDate(editingTask.value?.updated_at))
@@ -45,6 +50,11 @@ function openNew(columnId: string): void {
     comments: [],
     created_at: '',
     updated_at: '',
+    task_type: 'task',
+    blocks: [],
+    blocked_by: [],
+    parent_id: '',
+    subtask_ids: [],
   }
   openModal(task, true)
 }
@@ -66,6 +76,8 @@ function openModal(task: Task, newTask: boolean): void {
   labels.value = (task.labels || []).join(', ')
   points.value = task.points || 0
   worker.value = task.worker || (newTask && state.currentUser ? state.currentUser.display_name : '')
+  taskType.value = task.task_type || 'task'
+  parentId.value = task.parent_id || ''
   comments.value = [...(task.comments || [])]
   newComment.value = ''
   isOpen.value = true
@@ -103,6 +115,8 @@ async function save(): Promise<void> {
     labels: labels.value.split(',').map(s => s.trim()).filter(Boolean),
     points: points.value || 0,
     worker: worker.value.trim(),
+    task_type: taskType.value,
+    parent_id: parentId.value,
     comments: comments.value,
   }
   if (isNew.value) {
@@ -159,6 +173,21 @@ defineExpose({ openNew, openEdit, close })
           <label>Beschreibung
             <textarea v-model="description" rows="8"></textarea>
           </label>
+          <div class="modal-row">
+            <label>Typ
+              <select v-model="taskType">
+                <option value="task">Task</option>
+                <option value="epic">Epic</option>
+                <option value="job">Job</option>
+              </select>
+            </label>
+            <label>Parent Epic
+              <select v-model="parentId">
+                <option value="">–</option>
+                <option v-for="e in epics" :key="e.id" :value="e.id">{{ e.title }}</option>
+              </select>
+            </label>
+          </div>
           <label>Labels <small>(kommagetrennt)</small>
             <input v-model="labels" type="text" />
           </label>

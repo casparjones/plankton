@@ -5,7 +5,8 @@ import { marked } from 'marked'
 import type { Task } from '../types'
 
 import { state } from '../state'
-import { columnName, formatDate } from '../utils'
+import { columnName, formatDate, labelColor } from '../utils'
+import { saveTask } from '../services/project-service'
 
 // Marked Optionen: keine async, Zeilenumbrüche als <br>
 marked.setOptions({ async: false, breaks: true })
@@ -31,6 +32,63 @@ const columnInfo = computed(() => {
 
 const logs = computed(() => [...(task.value?.logs || [])].reverse())
 const comments = computed(() => task.value?.comments || [])
+
+const doneColId = computed(() => {
+  return (state.project?.columns || []).find((c: { title: string }) => c.title === 'Done')?.id || ''
+})
+
+interface RelatedTask { id: string; title: string; done: boolean; taskType: string; colName: string }
+
+function findTask(id: string): RelatedTask | null {
+  const t = (state.project?.tasks || []).find((t: { id: string }) => t.id === id)
+  if (!t) return null
+  const col = (state.project?.columns || []).find((c: { id: string }) => c.id === t.column_id)
+  return { id: t.id, title: t.title, done: t.column_id === doneColId.value, taskType: t.task_type || 'task', colName: col?.title || '–' }
+}
+
+/** Alle verknüpften Tickets gruppiert. */
+const relatedTickets = computed(() => {
+  if (!task.value) return []
+  const groups: { label: string; icon: string; items: RelatedTask[] }[] = []
+
+  // Parent Epic
+  if (task.value.parent_id) {
+    const p = findTask(task.value.parent_id)
+    if (p) groups.push({ label: 'Epic', icon: '↑', items: [p] })
+  }
+
+  // Subtasks
+  const subs = (task.value.subtask_ids || []).map(findTask).filter(Boolean) as RelatedTask[]
+  if (subs.length) groups.push({ label: 'Subtasks', icon: '↳', items: subs })
+
+  // Blockiert durch
+  const by = (task.value.blocked_by || []).map(findTask).filter(Boolean) as RelatedTask[]
+  if (by.length) groups.push({ label: 'Blockiert durch', icon: '⛔', items: by })
+
+  // Blockiert
+  const bl = (task.value.blocks || []).map(findTask).filter(Boolean) as RelatedTask[]
+  if (bl.length) groups.push({ label: 'Blockiert', icon: '→', items: bl })
+
+  return groups
+})
+
+const hasRelations = computed(() => relatedTickets.value.length > 0)
+
+/** Öffnet ein verknüpftes Ticket im Detail-View. */
+function openRelated(id: string): void {
+  const t = (state.project?.tasks || []).find((t: Task) => t.id === id)
+  if (t) open(t)
+}
+const newComment = ref('')
+
+async function addComment(): Promise<void> {
+  const text = newComment.value.trim()
+  if (!text || !task.value) return
+  const userName = state.currentUser?.display_name || state.currentUser?.username || 'anonymous'
+  task.value.comments.push(`[${userName}] ${text}`)
+  newComment.value = ''
+  await saveTask(task.value)
+}
 
 function open(t: Task): void {
   task.value = t
@@ -76,12 +134,12 @@ defineExpose({ open, close })
   <div v-if="isOpen" class="modal-overlay open" @click="onOverlayClick">
     <div class="modal modal-detail">
       <div class="modal-header">
-        <span class="modal-heading">Task</span>
+        <span class="modal-heading">{{ task?.task_type === 'epic' ? 'Epic' : task?.task_type === 'job' ? 'Job' : 'Task' }}</span>
         <button class="modal-close" @click="close">&#10005;</button>
       </div>
       <div class="detail-title">{{ task?.title }}</div>
       <div v-if="columnInfo" class="detail-column-info">
-        <span class="column-badge" :style="{ backgroundColor: columnInfo.color }">{{ columnInfo.title }}</span>
+        <span class="label" :style="{ background: columnInfo.color + '22', borderColor: columnInfo.color, color: columnInfo.color }">{{ columnInfo.title }}</span>
       </div>
       <div class="detail-grid">
         <div class="detail-col-main">
@@ -93,18 +151,43 @@ defineExpose({ open, close })
             <span class="detail-section-title">Labels</span>
             <div class="detail-labels">
               <template v-if="(task?.labels || []).length">
-                <span v-for="label in task!.labels" :key="label" class="label">{{ label }}</span>
+                <span v-for="label in task!.labels" :key="label" class="label"
+                  :style="{ background: labelColor(label).bg, borderColor: labelColor(label).border, color: labelColor(label).color }">{{ label }}</span>
               </template>
               <span v-else>–</span>
             </div>
           </div>
+          <div v-if="hasRelations" class="detail-section">
+            <span class="detail-section-title">Verknüpfte Tickets</span>
+            <div class="related-tickets">
+              <div v-for="group in relatedTickets" :key="group.label" class="related-group">
+                <div class="related-group-label">{{ group.icon }} {{ group.label }}</div>
+                <div v-for="item in group.items" :key="item.id" class="related-item" @click="openRelated(item.id)">
+                  <span :class="['related-check', { done: item.done }]">{{ item.done ? '✓' : '○' }}</span>
+                  <span v-if="item.taskType !== 'task'" class="related-type">{{ item.taskType === 'epic' ? 'E' : 'J' }}</span>
+                  <span class="related-title">{{ item.title }}</span>
+                  <span class="related-col">{{ item.colName }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="detail-section">
             <span class="detail-section-title">Kommentare</span>
-            <div class="detail-list">
+            <div class="detail-list detail-comments-list">
               <template v-if="comments.length">
                 <div v-for="(c, i) in comments" :key="i" class="detail-list-item markdown-body" v-html="renderMarkdown(c)"></div>
               </template>
               <div v-else class="detail-list-empty">Keine Kommentare</div>
+            </div>
+            <div class="detail-comment-input">
+              <textarea
+                v-model="newComment"
+                placeholder="Kommentar schreiben…"
+                rows="2"
+                @keydown.ctrl.enter="addComment"
+                @keydown.meta.enter="addComment"
+              ></textarea>
+              <button class="btn-primary btn-sm" @click="addComment" :disabled="!newComment.trim()">Senden</button>
             </div>
           </div>
         </div>
@@ -112,6 +195,10 @@ defineExpose({ open, close })
           <div class="detail-section">
             <span class="detail-section-title">Details</span>
             <div class="detail-info-grid">
+              <div class="detail-info-item">
+                <span class="detail-info-item-label">Typ</span>
+                <span class="detail-info-item-value">{{ task?.task_type || 'task' }}</span>
+              </div>
               <div class="detail-info-item">
                 <span class="detail-info-item-label">Points</span>
                 <span class="detail-info-item-value">{{ task?.points || '–' }}</span>
@@ -129,10 +216,6 @@ defineExpose({ open, close })
                 <span class="detail-info-item-value">{{ formatDate(task?.updated_at) }}</span>
               </div>
             </div>
-          </div>
-          <div class="detail-section">
-            <span class="detail-section-title">Vorherige Spalte</span>
-            <div>{{ columnName(task?.previous_row) }}</div>
           </div>
           <div class="detail-section">
             <span class="detail-section-title">Logs</span>

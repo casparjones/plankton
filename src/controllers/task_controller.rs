@@ -9,8 +9,27 @@ use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::models::*;
-use crate::services::{extract_token_from_headers, publish_update, validate_jwt};
+use crate::services::{extract_token_from_headers, publish_event, publish_update, validate_jwt};
 use crate::state::AppState;
+
+/// Caller-Identität aus Headers auflösen (JWT oder Agent-Token).
+async fn resolve_caller(headers: &axum::http::HeaderMap, state: &AppState) -> String {
+    if let Some(t) = extract_token_from_headers(headers) {
+        if let Ok(claims) = validate_jwt(&t, &state.jwt_secret) {
+            return claims.display_name;
+        }
+    }
+    if let Some(bearer) = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+    {
+        if let Ok(agent_token) = state.store.get_token_by_value(bearer).await {
+            return agent_token.name;
+        }
+    }
+    "anonymous".to_string()
+}
 
 /// POST /api/projects/:id/import – Mehrere Tasks auf einmal importieren.
 pub async fn import_tasks(
@@ -20,10 +39,7 @@ pub async fn import_tasks(
     Json(req): Json<ImportRequest>,
 ) -> Result<Json<ImportResponse>, ApiError> {
     let mut project = state.store.get_project(&id).await?;
-    let user_name = extract_token_from_headers(&headers)
-        .and_then(|t| validate_jwt(&t, &state.jwt_secret).ok())
-        .map(|c| c.display_name)
-        .unwrap_or_else(|| "anonymous".to_string());
+    let user_name = resolve_caller(&headers, &state).await;
 
     let now = Utc::now().to_rfc3339();
     let today = Local::now().format("%Y-%m-%d %H:%M").to_string();
@@ -131,16 +147,13 @@ pub async fn create_task(
     let now = Utc::now().to_rfc3339();
     task.created_at = now.clone();
     task.updated_at = now;
-    let user_name = extract_token_from_headers(&headers)
-        .and_then(|t| validate_jwt(&t, &state.jwt_secret).ok())
-        .map(|c| c.display_name)
-        .unwrap_or_else(|| "anonymous".to_string());
+    let user_name = resolve_caller(&headers, &state).await;
     if task.creator.is_empty() {
         task.creator = user_name;
     }
-    project.tasks.push(task);
+    project.tasks.push(task.clone());
     let updated = state.store.put_project(project).await?;
-    publish_update(&state, &id).await;
+    publish_event(&state, &id, "task_created", serde_json::to_value(&task).unwrap_or_default()).await;
     Ok(Json(updated))
 }
 
@@ -179,12 +192,30 @@ pub async fn update_task(
         if let Some(logs) = req.logs {
             task.logs = logs;
         }
+        if let Some(task_type) = req.task_type {
+            task.task_type = task_type;
+        }
+        if let Some(blocks) = req.blocks {
+            task.blocks = blocks;
+        }
+        if let Some(blocked_by) = req.blocked_by {
+            task.blocked_by = blocked_by;
+        }
+        if let Some(parent_id) = req.parent_id {
+            task.parent_id = parent_id;
+        }
+        if let Some(subtask_ids) = req.subtask_ids {
+            task.subtask_ids = subtask_ids;
+        }
         task.updated_at = Utc::now().to_rfc3339();
     } else {
         return Err(ApiError::NotFound("Task not found".into()));
     }
+    let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
     let updated = state.store.put_project(project).await?;
-    publish_update(&state, &id).await;
+    if let Some(t) = task_data {
+        publish_event(&state, &id, "task_updated", serde_json::to_value(&t).unwrap_or_default()).await;
+    }
     Ok(Json(updated))
 }
 
@@ -194,9 +225,18 @@ pub async fn delete_task(
     Path((id, task_id)): Path<(String, String)>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
     let mut project = state.store.get_project(&id).await?;
+    // Relationen aufräumen: blocks, blocked_by, subtask_ids, parent_id
+    for task in &mut project.tasks {
+        task.blocks.retain(|id| id != &task_id);
+        task.blocked_by.retain(|id| id != &task_id);
+        task.subtask_ids.retain(|id| id != &task_id);
+        if task.parent_id == task_id {
+            task.parent_id.clear();
+        }
+    }
     project.tasks.retain(|t| t.id != task_id);
     let updated = state.store.put_project(project).await?;
-    publish_update(&state, &id).await;
+    publish_event(&state, &id, "task_deleted", serde_json::json!({ "task_id": task_id })).await;
     Ok(Json(updated))
 }
 
@@ -208,10 +248,7 @@ pub async fn move_task(
     Json(req): Json<MoveTaskRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut project = state.store.get_project(&id).await?;
-    let user_name = extract_token_from_headers(&headers)
-        .and_then(|t| validate_jwt(&t, &state.jwt_secret).ok())
-        .map(|c| c.display_name)
-        .unwrap_or_else(|| "anonymous".to_string());
+    let user_name = resolve_caller(&headers, &state).await;
     let column_name = |col_id: &str| -> String {
         project.columns.iter()
             .find(|c| c.id == col_id)
@@ -232,8 +269,11 @@ pub async fn move_task(
     } else {
         return Err(ApiError::NotFound("Task not found".into()));
     }
+    let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
     state.store.put_project(project).await?;
-    publish_update(&state, &id).await;
+    if let Some(t) = task_data {
+        publish_event(&state, &id, "task_moved", serde_json::to_value(&t).unwrap_or_default()).await;
+    }
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

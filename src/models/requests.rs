@@ -48,6 +48,11 @@ pub struct UpdateTaskRequest {
     pub order: Option<i32>,
     pub comments: Option<Vec<String>>,
     pub logs: Option<Vec<String>>,
+    pub task_type: Option<String>,
+    pub blocks: Option<Vec<String>>,
+    pub blocked_by: Option<Vec<String>>,
+    pub parent_id: Option<String>,
+    pub subtask_ids: Option<Vec<String>>,
 }
 
 /// Body für POST /mcp/call

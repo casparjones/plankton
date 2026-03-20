@@ -37,18 +37,18 @@
 
 .logo {
     font-family: var(--font-mono);
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--accent);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
 }
 
 .logo-icon {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
 }
 
 .sidebar-create {

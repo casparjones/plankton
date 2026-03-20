@@ -10,10 +10,20 @@ use crate::store::DataStore;
 use crate::services::auth_service::hash_password;
 
 /// SSE-Update an alle Listener eines Projekts senden und ggf. Git-Sync auslösen.
+/// Sendet ein generisches "project_update" Event (Full-Refetch).
 pub async fn publish_update(state: &AppState, project_id: &str) {
+    publish_event(state, project_id, "project_update", serde_json::json!({})).await;
+}
+
+/// Granulares SSE-Event senden. Format: `{"event":"<type>","data":<payload>}`
+pub async fn publish_event(state: &AppState, project_id: &str, event_type: &str, data: serde_json::Value) {
     let events = state.events.lock().await;
     if let Some(tx) = events.get(project_id) {
-        let _ = tx.send(project_id.to_string());
+        let payload = serde_json::json!({
+            "event": event_type,
+            "data": data
+        });
+        let _ = tx.send(payload.to_string());
     }
     drop(events);
 

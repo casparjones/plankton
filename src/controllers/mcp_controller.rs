@@ -32,6 +32,9 @@ fn all_tools() -> Vec<ToolDef> {
         ToolDef { name: "reject_task", description: "Reject task and move back with comment", roles: Some(&["tester", "manager", "admin"]) },
         ToolDef { name: "move_task", description: "Move a task between columns", roles: Some(&["manager", "admin"]) },
         ToolDef { name: "delete_task", description: "Delete a task", roles: Some(&["manager", "admin"]) },
+        ToolDef { name: "list_subtasks", description: "List subtasks of an epic with completion status", roles: None },
+        ToolDef { name: "add_relation", description: "Add a relation (blocks or subtask) between two tasks", roles: Some(&["developer", "manager", "admin"]) },
+        ToolDef { name: "remove_relation", description: "Remove a relation between two tasks", roles: Some(&["developer", "manager", "admin"]) },
     ]
 }
 
@@ -240,11 +243,13 @@ async fn execute_tool(
                     .unwrap_or_default(),
                 worker: args["worker"].as_str().unwrap_or("").to_string(),
                 points: args["points"].as_i64().unwrap_or(0) as i32,
+                task_type: args["task_type"].as_str().unwrap_or("task").to_string(),
+                parent_id: args["parent_id"].as_str().unwrap_or("").to_string(),
                 ..Task::default()
             };
-            project.tasks.push(task);
+            project.tasks.push(task.clone());
             let updated = state.store.put_project(project).await?;
-            publish_update(state, project_id).await;
+            publish_event(state, project_id, "task_created", serde_json::to_value(&task)?).await;
             Ok(serde_json::to_value(updated)?)
         }
         "update_task" => {
@@ -274,10 +279,19 @@ async fn execute_tool(
                 if let Some(points) = args["points"].as_i64() {
                     task.points = points as i32;
                 }
+                if let Some(task_type) = args["task_type"].as_str() {
+                    task.task_type = task_type.to_string();
+                }
+                if let Some(parent_id) = args["parent_id"].as_str() {
+                    task.parent_id = parent_id.to_string();
+                }
                 task.updated_at = Utc::now().to_rfc3339();
             }
+            let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             let _updated = state.store.put_project(project).await?;
-            publish_update(state, project_id).await;
+            if let Some(t) = task_data {
+                publish_event(state, project_id, "task_updated", serde_json::to_value(&t)?).await;
+            }
             Ok(serde_json::to_value(_updated)?)
         }
         "move_task" => {
@@ -314,8 +328,11 @@ async fn execute_tool(
                 );
                 task.logs.push(log);
             }
+            let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             let updated = state.store.put_project(project).await?;
-            publish_update(state, project_id).await;
+            if let Some(t) = task_data {
+                publish_event(state, project_id, "task_moved", serde_json::to_value(&t)?).await;
+            }
             Ok(serde_json::to_value(updated)?)
         }
         "delete_task" => {
@@ -326,9 +343,16 @@ async fn execute_tool(
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
             let mut project = state.store.get_project(project_id).await?;
+            // Relationen aufräumen
+            for task in &mut project.tasks {
+                task.blocks.retain(|id| id != task_id);
+                task.blocked_by.retain(|id| id != task_id);
+                task.subtask_ids.retain(|id| id != task_id);
+                if task.parent_id == task_id { task.parent_id.clear(); }
+            }
             project.tasks.retain(|t| t.id != task_id);
             let updated = state.store.put_project(project).await?;
-            publish_update(state, project_id).await;
+            publish_event(state, project_id, "task_deleted", serde_json::json!({ "task_id": task_id })).await;
             Ok(serde_json::to_value(updated)?)
         }
         "summarize_board" => {
@@ -387,8 +411,11 @@ async fn execute_tool(
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
+            let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             let _updated = state.store.put_project(project).await?;
-            publish_update(state, project_id).await;
+            if let Some(t) = task_data {
+                publish_event(state, project_id, "task_updated", serde_json::to_value(&t)?).await;
+            }
             Ok(serde_json::json!({"ok": true, "task_id": task_id}))
         }
         "get_assigned_tasks" => {
@@ -426,8 +453,11 @@ async fn execute_tool(
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
+            let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             state.store.put_project(project).await?;
-            publish_update(state, project_id).await;
+            if let Some(t) = task_data {
+                publish_event(state, project_id, "task_updated", serde_json::to_value(&t)?).await;
+            }
             Ok(serde_json::json!({"ok": true}))
         }
         "submit_for_review" => {
@@ -451,8 +481,11 @@ async fn execute_tool(
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
+            let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             state.store.put_project(project).await?;
-            publish_update(state, project_id).await;
+            if let Some(t) = task_data {
+                publish_event(state, project_id, "task_updated", serde_json::to_value(&t)?).await;
+            }
             Ok(serde_json::json!({"ok": true, "task_id": task_id}))
         }
         "get_review_queue" => {
@@ -485,8 +518,11 @@ async fn execute_tool(
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
+            let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             state.store.put_project(project).await?;
-            publish_update(state, project_id).await;
+            if let Some(t) = task_data {
+                publish_event(state, project_id, "task_updated", serde_json::to_value(&t)?).await;
+            }
             Ok(serde_json::json!({"ok": true}))
         }
         "approve_task" => {
@@ -517,8 +553,11 @@ async fn execute_tool(
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
+            let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             state.store.put_project(project).await?;
-            publish_update(state, project_id).await;
+            if let Some(t) = task_data {
+                publish_event(state, project_id, "task_moved", serde_json::to_value(&t)?).await;
+            }
             Ok(serde_json::json!({"ok": true, "task_id": task_id}))
         }
         "reject_task" => {
@@ -549,9 +588,111 @@ async fn execute_tool(
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
+            let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
+            state.store.put_project(project).await?;
+            if let Some(t) = task_data {
+                publish_event(state, project_id, "task_moved", serde_json::to_value(&t)?).await;
+            }
+            Ok(serde_json::json!({"ok": true, "task_id": task_id}))
+        }
+        "list_subtasks" => {
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let parent_id = args["parent_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("parent_id missing".into()))?;
+            let project = state.store.get_project(project_id).await?;
+            let done_col = project.columns.iter().find(|c| c.title == "Done").map(|c| c.id.as_str());
+            let subtasks: Vec<_> = project
+                .tasks
+                .iter()
+                .filter(|t| t.parent_id == parent_id)
+                .map(|t| {
+                    let is_done = done_col.map(|d| t.column_id == d).unwrap_or(false);
+                    let col_name = project.columns.iter().find(|c| c.id == t.column_id).map(|c| c.title.as_str()).unwrap_or("?");
+                    serde_json::json!({
+                        "id": t.id, "title": t.title, "task_type": t.task_type,
+                        "column": col_name, "worker": t.worker, "done": is_done
+                    })
+                })
+                .collect();
+            Ok(serde_json::json!({"parent_id": parent_id, "subtasks": subtasks}))
+        }
+        "add_relation" => {
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let from_id = args["from_task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("from_task_id missing".into()))?;
+            let to_id = args["to_task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("to_task_id missing".into()))?;
+            let relation = args["relation"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("relation missing (blocks|subtask)".into()))?;
+            let mut project = state.store.get_project(project_id).await?;
+            match relation {
+                "blocks" => {
+                    if let Some(t) = project.tasks.iter_mut().find(|t| t.id == from_id) {
+                        if !t.blocks.contains(&to_id.to_string()) { t.blocks.push(to_id.to_string()); }
+                    }
+                    if let Some(t) = project.tasks.iter_mut().find(|t| t.id == to_id) {
+                        if !t.blocked_by.contains(&from_id.to_string()) { t.blocked_by.push(from_id.to_string()); }
+                    }
+                }
+                "subtask" => {
+                    // from = parent (epic), to = child (subtask)
+                    if let Some(t) = project.tasks.iter_mut().find(|t| t.id == from_id) {
+                        if !t.subtask_ids.contains(&to_id.to_string()) { t.subtask_ids.push(to_id.to_string()); }
+                    }
+                    if let Some(t) = project.tasks.iter_mut().find(|t| t.id == to_id) {
+                        t.parent_id = from_id.to_string();
+                    }
+                }
+                _ => return Err(ApiError::BadRequest(format!("unknown relation: {relation} (use blocks|subtask)"))),
+            }
             state.store.put_project(project).await?;
             publish_update(state, project_id).await;
-            Ok(serde_json::json!({"ok": true, "task_id": task_id}))
+            Ok(serde_json::json!({"ok": true, "relation": relation, "from": from_id, "to": to_id}))
+        }
+        "remove_relation" => {
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let from_id = args["from_task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("from_task_id missing".into()))?;
+            let to_id = args["to_task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("to_task_id missing".into()))?;
+            let relation = args["relation"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("relation missing (blocks|subtask)".into()))?;
+            let mut project = state.store.get_project(project_id).await?;
+            match relation {
+                "blocks" => {
+                    if let Some(t) = project.tasks.iter_mut().find(|t| t.id == from_id) {
+                        t.blocks.retain(|id| id != to_id);
+                    }
+                    if let Some(t) = project.tasks.iter_mut().find(|t| t.id == to_id) {
+                        t.blocked_by.retain(|id| id != from_id);
+                    }
+                }
+                "subtask" => {
+                    if let Some(t) = project.tasks.iter_mut().find(|t| t.id == from_id) {
+                        t.subtask_ids.retain(|id| id != to_id);
+                    }
+                    if let Some(t) = project.tasks.iter_mut().find(|t| t.id == to_id) {
+                        t.parent_id.clear();
+                    }
+                }
+                _ => return Err(ApiError::BadRequest(format!("unknown relation: {relation}"))),
+            }
+            state.store.put_project(project).await?;
+            publish_update(state, project_id).await;
+            Ok(serde_json::json!({"ok": true}))
         }
         _ => Err(ApiError::BadRequest(format!("unknown tool: {tool}"))),
     }
@@ -652,7 +793,9 @@ Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Para
   - `labels` (string[], optional)
   - `worker` (string, optional)
   - `points` (number, optional)
-- Beispiel: `{{"name":"create_task","arguments":{{"project_id":"ID","title":"Feature X","description":"Beschreibung","column_id":"SPALTE","labels":["feature"],"points":5}}}}`
+  - `task_type` (string, optional – "task"|"epic"|"job", default: "task")
+  - `parent_id` (string, optional – Parent-Epic-ID für Subtasks)
+- Beispiel: `{{"name":"create_task","arguments":{{"project_id":"ID","title":"Feature X","task_type":"epic","labels":["feature"],"points":5}}}}`
 
 **move_task** – Task in andere Spalte verschieben
 - Parameter: `project_id`, `task_id`, `column_id` (alle string, required)
@@ -668,7 +811,7 @@ Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Para
 **get_assigned_tasks** – Dem Aufrufer zugewiesene Tasks
 - Parameter: `project_id` (string, required)
 
-**update_task** – Task bearbeiten (Titel, Beschreibung, Labels, Worker, Points)
+**update_task** – Task bearbeiten
 - Parameter:
   - `project_id` (string, required)
   - `task_id` (string, required)
@@ -677,6 +820,8 @@ Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Para
   - `labels` (string[], optional)
   - `worker` (string, optional)
   - `points` (number, optional)
+  - `task_type` (string, optional – "task"|"epic"|"job")
+  - `parent_id` (string, optional – Parent-Epic-ID)
 
 **add_log** – Log-Eintrag zu einem Task hinzufügen
 - Parameter: `project_id`, `task_id`, `message` (alle string, required)
@@ -697,6 +842,33 @@ Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Para
 
 **reject_task** – Task zurückweisen (verschiebt zurück, entfernt "review"-Label)
 - Parameter: `project_id`, `task_id` (beide string, required), `comment` (string, optional)
+
+### Relation Tools
+
+**list_subtasks** – Subtasks eines Epics mit Fertigstellungsstatus auflisten
+- Parameter: `project_id`, `parent_id` (beide string, required)
+- Gibt zurück: Array mit `id`, `title`, `task_type`, `column`, `worker`, `done` (boolean)
+
+**add_relation** – Relation zwischen zwei Tasks erstellen
+- Parameter:
+  - `project_id` (string, required)
+  - `from_task_id` (string, required) – Bei "blocks": der blockierende Task; bei "subtask": der Parent-Epic
+  - `to_task_id` (string, required) – Bei "blocks": der blockierte Task; bei "subtask": der Subtask
+  - `relation` (string, required – "blocks"|"subtask")
+
+**remove_relation** – Relation zwischen zwei Tasks entfernen
+- Parameter: `project_id`, `from_task_id`, `to_task_id`, `relation` (alle string, required)
+
+## Task-Typen
+
+- **task** (Standard) – Normale Aufgabe
+- **epic** – Große User-Story mit Subtasks. Hat `subtask_ids` und zeigt Fortschritt an.
+- **job** – Automatisierte/wiederkehrende Aufgabe
+
+## Task-Relationen
+
+- **blocks** – Task A blockiert Task B (B kann nicht bearbeitet werden solange A nicht in Done ist)
+- **subtask** – Task B ist Subtask von Epic A. Wird automatisch bidirektional gesetzt (parent_id ↔ subtask_ids)
 
 ## Typischer Workflow
 

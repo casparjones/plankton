@@ -45,6 +45,9 @@
 .modal-col-main { display: flex; flex-direction: column; gap: 12px; }
 .modal-col-side { display: flex; flex-direction: column; gap: 12px; }
 
+.modal-row { display: flex; gap: 12px; }
+.modal-row > label { flex: 1; }
+
 .modal-info {
     display: flex;
     flex-direction: column;
