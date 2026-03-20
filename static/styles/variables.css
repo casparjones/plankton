@@ -15,6 +15,15 @@
     --radius:       6px;
     --font-mono:    'IBM Plex Mono', monospace;
     --font-sans:    'IBM Plex Sans', sans-serif;
+    --badge-epic-bg:      #1a2e1a;
+    --badge-epic-text:    #a5d6a7;
+    --badge-epic-border:  #43a047;
+    --badge-job-bg:       #1a2a3a;
+    --badge-job-text:     #90caf9;
+    --badge-job-border:   #1e88e5;
+    --badge-blocked-bg:     #3a1c1c;
+    --badge-blocked-text:   #ff8a80;
+    --badge-blocked-border: #e53935;
     color-scheme: dark;
 }
 
@@ -28,5 +37,14 @@ body[data-theme="light"] {
     --text:         #1a1a2e;
     --text-dim:     #6e6e82;
     --danger:       #d94452;
+    --badge-epic-bg:      #e8f5e9;
+    --badge-epic-text:    #2e7d32;
+    --badge-epic-border:  #66bb6a;
+    --badge-job-bg:       #e3f2fd;
+    --badge-job-text:     #1565c0;
+    --badge-job-border:   #42a5f5;
+    --badge-blocked-bg:     #ffebee;
+    --badge-blocked-text:   #c62828;
+    --badge-blocked-border: #ef5350;
     color-scheme: light;
 }

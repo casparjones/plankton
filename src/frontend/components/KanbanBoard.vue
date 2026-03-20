@@ -309,10 +309,13 @@ function onColumnReorder(evt: Sortable.SortableEvent): void {
 /** Template ref für den Spalten-Container. */
 const columnsRef = ref<HTMLElement | null>(null)
 
-onMounted(() => {
+let columnSortable: Sortable | null = null
+
+function initColumnSortable(): void {
+  if (columnSortable) columnSortable.destroy()
   nextTick(() => {
     if (!columnsRef.value) return
-    Sortable.create(columnsRef.value, {
+    columnSortable = Sortable.create(columnsRef.value, {
       animation: 150,
       handle: '.kanban-board-header',
       draggable: '.kanban-column:not(.col-done)',
@@ -320,6 +323,13 @@ onMounted(() => {
       onEnd: onColumnReorder,
     })
   })
+}
+
+onMounted(initColumnSortable)
+
+// Re-init Sortable wenn Projekt wechselt (neues Board, anderes Projekt)
+watch(() => state.project?._id, () => {
+  initColumnSortable()
 })
 
 /** Checkbox-Handler für Bulk-Selection. */
@@ -496,7 +506,7 @@ window.__kanbanToggleSearch = toggleSearch
   min-width: 280px;
   max-width: 320px;
   flex: 0 0 300px;
-  background: var(--board-bg, #1a1a2e);
+  background: var(--surface);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
