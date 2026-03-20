@@ -118,7 +118,7 @@ function onSearchKeydown(e: KeyboardEvent): void {
 
 // Ctrl+K / Cmd+K Shortcut
 function handleGlobalKeydown(e: KeyboardEvent): void {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 's')) {
     e.preventDefault()
     showSearch.value = true
     nextTick(() => searchInputRef.value?.focus())
