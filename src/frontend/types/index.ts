@@ -8,6 +8,7 @@ export interface ProjectDoc {
   _id: string
   _rev?: string
   title: string
+  slug: string
   columns: Column[]
   users: User[]
   tasks: Task[]
@@ -46,6 +47,7 @@ export interface User {
 /** Eine einzelne Aufgabe (Karte) im Board. */
 export interface Task {
   id: string
+  slug: string
   title: string
   description: string
   column_id: string

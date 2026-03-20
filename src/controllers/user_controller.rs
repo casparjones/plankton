@@ -17,7 +17,7 @@ pub async fn create_user(
     Path(id): Path<String>,
     Json(mut user): Json<User>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     if user.id.is_empty() {
         user.id = Uuid::new_v4().to_string();
     }
@@ -33,7 +33,7 @@ pub async fn update_user(
     Path((id, user_id)): Path<(String, String)>,
     Json(user): Json<User>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     if let Some(existing) = project.users.iter_mut().find(|u| u.id == user_id) {
         *existing = user;
     }
@@ -47,7 +47,7 @@ pub async fn delete_user(
     State(state): State<AppState>,
     Path((id, user_id)): Path<(String, String)>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     project.users.retain(|u| u.id != user_id);
     for task in &mut project.tasks {
         task.assignee_ids.retain(|uid| uid != &user_id);

@@ -38,7 +38,7 @@ pub async fn import_tasks(
     headers: axum::http::HeaderMap,
     Json(req): Json<ImportRequest>,
 ) -> Result<Json<ImportResponse>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     let user_name = resolve_caller(&headers, &state).await;
 
     let now = Utc::now().to_rfc3339();
@@ -100,6 +100,7 @@ pub async fn import_tasks(
 
         // Auto-set fields
         task.id = Uuid::new_v4().to_string();
+        task.slug = unique_task_slug(&task.title, &project.tasks, "");
         task.created_at = now.clone();
         task.updated_at = now.clone();
 
@@ -130,10 +131,11 @@ pub async fn create_task(
     headers: axum::http::HeaderMap,
     Json(mut task): Json<Task>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     if task.id.is_empty() {
         task.id = Uuid::new_v4().to_string();
     }
+    task.slug = unique_task_slug(&task.title, &project.tasks, "");
     // Resolve column_slug to column_id if provided
     if task.column_id.is_empty() && !task.column_slug.is_empty() {
         let slug = task.column_slug.to_uppercase();
@@ -163,9 +165,19 @@ pub async fn update_task(
     Path((id, task_id)): Path<(String, String)>,
     Json(req): Json<UpdateTaskRequest>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
-    if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
+    let mut project = state.store.resolve_project(&id).await?;
+    // Resolve task_id (could be slug) to real ID
+    let real_task_id = project.tasks.iter()
+        .find(|t| t.id == task_id || t.slug == task_id)
+        .map(|t| t.id.clone())
+        .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
+    // Pre-compute new slug if title is changing
+    let new_slug = req.title.as_ref().map(|title| {
+        unique_task_slug(title, &project.tasks, &real_task_id)
+    });
+    if let Some(task) = project.tasks.iter_mut().find(|t| t.id == real_task_id) {
         if let Some(title) = req.title {
+            task.slug = new_slug.unwrap();
             task.title = title;
         }
         if let Some(description) = req.description {
@@ -207,11 +219,13 @@ pub async fn update_task(
         if let Some(subtask_ids) = req.subtask_ids {
             task.subtask_ids = subtask_ids;
         }
+        // Auto-migrate: Slug generieren falls leer
+        if task.slug.is_empty() {
+            task.slug = unique_task_slug(&task.title, &[], "");
+        }
         task.updated_at = Utc::now().to_rfc3339();
-    } else {
-        return Err(ApiError::NotFound("Task not found".into()));
     }
-    let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
+    let task_data = project.tasks.iter().find(|t| t.id == real_task_id).cloned();
     let updated = state.store.put_project(project).await?;
     if let Some(t) = task_data {
         publish_event(&state, &id, "task_updated", serde_json::to_value(&t).unwrap_or_default()).await;
@@ -224,17 +238,21 @@ pub async fn delete_task(
     State(state): State<AppState>,
     Path((id, task_id)): Path<(String, String)>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
+    let real_task_id = project.tasks.iter()
+        .find(|t| t.id == task_id || t.slug == task_id)
+        .map(|t| t.id.clone())
+        .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
     // Relationen aufräumen: blocks, blocked_by, subtask_ids, parent_id
     for task in &mut project.tasks {
-        task.blocks.retain(|id| id != &task_id);
-        task.blocked_by.retain(|id| id != &task_id);
-        task.subtask_ids.retain(|id| id != &task_id);
-        if task.parent_id == task_id {
+        task.blocks.retain(|id| id != &real_task_id);
+        task.blocked_by.retain(|id| id != &real_task_id);
+        task.subtask_ids.retain(|id| id != &real_task_id);
+        if task.parent_id == real_task_id {
             task.parent_id.clear();
         }
     }
-    project.tasks.retain(|t| t.id != task_id);
+    project.tasks.retain(|t| t.id != real_task_id);
     let updated = state.store.put_project(project).await?;
     publish_event(&state, &id, "task_deleted", serde_json::json!({ "task_id": task_id })).await;
     Ok(Json(updated))
@@ -247,7 +265,7 @@ pub async fn move_task(
     headers: axum::http::HeaderMap,
     Json(req): Json<MoveTaskRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     let user_name = resolve_caller(&headers, &state).await;
     let column_name = |col_id: &str| -> String {
         project.columns.iter()
@@ -255,7 +273,11 @@ pub async fn move_task(
             .map(|c| c.title.clone())
             .unwrap_or_else(|| col_id.to_string())
     };
-    if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
+    let real_task_id = project.tasks.iter()
+        .find(|t| t.id == task_id || t.slug == task_id)
+        .map(|t| t.id.clone())
+        .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
+    if let Some(task) = project.tasks.iter_mut().find(|t| t.id == real_task_id) {
         let old_col = task.column_id.clone();
         let old_name = column_name(&old_col);
         let new_name = column_name(&req.column_id);
@@ -266,10 +288,8 @@ pub async fn move_task(
         let log = format!("[{}] {} moved from {} to {}",
             user_name, Local::now().format("%Y-%m-%d %H:%M"), old_name, new_name);
         task.logs.push(log);
-    } else {
-        return Err(ApiError::NotFound("Task not found".into()));
     }
-    let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
+    let task_data = project.tasks.iter().find(|t| t.id == real_task_id).cloned();
     state.store.put_project(project).await?;
     if let Some(t) = task_data {
         publish_event(&state, &id, "task_moved", serde_json::to_value(&t).unwrap_or_default()).await;
@@ -283,7 +303,7 @@ pub async fn batch_move_tasks(
     Path(id): Path<String>,
     Json(req): Json<BatchMoveRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     for m in &req.moves {
         if let Some(task) = project.tasks.iter_mut().find(|t| t.id == m.task_id) {
             task.column_id = m.column_id.clone();

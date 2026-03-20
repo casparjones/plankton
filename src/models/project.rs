@@ -13,6 +13,9 @@ pub struct ProjectDoc {
     #[serde(rename = "_rev", skip_serializing_if = "Option::is_none")]
     pub rev: Option<String>,
     pub title: String,
+    /// URL-freundlicher Slug (auto-generiert aus Titel, z.B. "mein-projekt").
+    #[serde(default)]
+    pub slug: String,
     pub columns: Vec<Column>,
     pub users: Vec<User>,
     pub tasks: Vec<Task>,
@@ -79,6 +82,67 @@ pub fn slugify(title: &str) -> String {
         .to_uppercase()
 }
 
+/// Generiert einen URL-freundlichen Slug aus einem Projekttitel.
+/// "Mein tolles Projekt!" → "mein-tolles-projekt"
+pub fn project_slugify(title: &str) -> String {
+    let s: String = title
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'ä' => "ae".to_string(),
+            'ö' => "oe".to_string(),
+            'ü' => "ue".to_string(),
+            'ß' => "ss".to_string(),
+            c if c.is_ascii_alphanumeric() => c.to_string(),
+            ' ' | '_' | '-' => "-".to_string(),
+            _ => String::new(),
+        })
+        .collect();
+    // Collapse multiple hyphens and trim them
+    let mut result = String::new();
+    let mut prev_hyphen = true; // start true to trim leading hyphens
+    for c in s.chars() {
+        if c == '-' {
+            if !prev_hyphen { result.push('-'); }
+            prev_hyphen = true;
+        } else {
+            result.push(c);
+            prev_hyphen = false;
+        }
+    }
+    // Trim trailing hyphen
+    if result.ends_with('-') { result.pop(); }
+    // Truncate to 60 chars on word boundary
+    if result.len() > 60 {
+        if let Some(pos) = result[..60].rfind('-') {
+            result.truncate(pos);
+        } else {
+            result.truncate(60);
+        }
+    }
+    result
+}
+
+/// Generiert einen eindeutigen Task-Slug innerhalb einer Task-Liste.
+pub fn unique_task_slug(title: &str, existing_tasks: &[Task], exclude_id: &str) -> String {
+    let base = project_slugify(title);
+    let existing: Vec<&str> = existing_tasks.iter()
+        .filter(|t| t.id != exclude_id)
+        .map(|t| t.slug.as_str())
+        .collect();
+    if !existing.contains(&base.as_str()) {
+        return base;
+    }
+    for i in 2.. {
+        let candidate = format!("{base}-{i}");
+        if !existing.contains(&candidate.as_str()) {
+            return candidate;
+        }
+    }
+    unreachable!()
+}
+
 /// Ein Teammitglied, das Aufgaben zugewiesen bekommen kann.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
@@ -94,6 +158,9 @@ pub struct User {
 #[serde(default)]
 pub struct Task {
     pub id: String,
+    /// URL-freundlicher Slug (auto-generiert aus Titel).
+    #[serde(default)]
+    pub slug: String,
     pub title: String,
     pub description: String,
     /// ID der Spalte, in der sich die Aufgabe befindet.
@@ -138,6 +205,7 @@ impl Default for Task {
     fn default() -> Self {
         Self {
             id: String::new(),
+            slug: String::new(),
             title: String::new(),
             description: String::new(),
             column_id: String::new(),

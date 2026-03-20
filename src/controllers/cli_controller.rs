@@ -537,7 +537,7 @@ cmd_projects() {{
     echo ""
     echo "  Projects:"
     echo "  ━━━━━━━━━"
-    echo "$resp" | jq -r '.[] | "  \(._id)  \(.title)  (\(.tasks | length) tasks)"'
+    echo "$resp" | jq -r '.[] | "  \(.slug // ._id)  \(.title)  (\(.tasks | length) tasks)"'
     echo ""
 }}
 
@@ -545,7 +545,7 @@ cmd_view_project() {{
     load_config
     if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in."; exit 1; fi
     local pid="${{1:-}}"
-    if [ -z "$pid" ]; then echo "Usage: plankton view <project_id>"; exit 1; fi
+    if [ -z "$pid" ]; then echo "Usage: plankton view <slug>"; exit 1; fi
     local resp
     resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$pid") || {{ echo "Error fetching project"; exit 1; }}
     echo ""
@@ -573,7 +573,7 @@ cmd_tasks() {{
     load_config
     if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in."; exit 1; fi
     local pid="${{1:-}}"
-    if [ -z "$pid" ]; then echo "Usage: plankton tasks <project_id>"; exit 1; fi
+    if [ -z "$pid" ]; then echo "Usage: plankton tasks <slug>"; exit 1; fi
     local resp
     resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$pid") || {{ echo "Error fetching project"; exit 1; }}
     echo ""
@@ -603,8 +603,8 @@ cmd_help() {{
     echo "    logout               Clear stored credentials"
     echo "    status               Show connection info"
     echo "    projects             List all projects"
-    echo "    view <project_id>    View project with columns and tasks"
-    echo "    tasks <project_id>   List tasks in a project"
+    echo "    view <slug>          View project with columns and tasks"
+    echo "    tasks <slug>         List tasks in a project"
     echo "    init                 Create .vibe/ project structure"
     echo "    skill install [-g]   Download & install SKILL.md"
     echo "    skill update  [-g]   Update installed SKILL.md"

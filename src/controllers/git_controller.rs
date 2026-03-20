@@ -17,7 +17,7 @@ pub async fn get_git_config(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Option<GitConfig>>, ApiError> {
-    let project = state.store.get_project(&id).await?;
+    let project = state.store.resolve_project(&id).await?;
     Ok(Json(project.git))
 }
 
@@ -27,7 +27,7 @@ pub async fn update_git_config(
     Path(id): Path<String>,
     Json(config): Json<GitConfig>,
 ) -> Result<Json<GitConfig>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     project.git = Some(config.clone());
     state.store.put_project(project).await?;
     publish_update(&state, &id).await;

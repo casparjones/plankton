@@ -15,7 +15,7 @@ export function renderProjectList(): void {
     const nameSpan = document.createElement('span');
     nameSpan.className = 'project-name';
     nameSpan.textContent = p.title;
-    nameSpan.addEventListener('click', () => openProject(p._id));
+    nameSpan.addEventListener('click', () => openProject(p.slug || p._id));
 
     li.appendChild(nameSpan);
 

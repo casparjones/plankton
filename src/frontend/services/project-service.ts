@@ -28,19 +28,21 @@ export async function loadProjects(): Promise<void> {
 export async function openProject(id: string, skipPush?: boolean): Promise<void> {
   state.project = await api.get<ProjectDoc>(`/api/projects/${id}`);
   state.selectedTasks.clear();
-  saveLastProject(id);
+  const slug = state.project.slug || state.project._id;
+  saveLastProject(slug);
   renderProjectList();
   renderBoard();
   updateProjectTitle();
-  subscribeSSE(id);
+  subscribeSSE(state.project._id);
   if (!skipPush) {
-    history.pushState({ project: id }, '', `/p/${id}`);
+    history.pushState({ project: slug }, '', `/p/${slug}`);
   }
 }
 
 export async function createProject(title: string): Promise<void> {
   const payload: ProjectDoc = {
     _id: '',
+    slug: '',
     title: title || 'Untitled',
     columns: [
       { id: crypto.randomUUID(), title: 'Todo',        order: 0, color: '#90CAF9', hidden: false, slug: '', locked: false },
@@ -53,21 +55,26 @@ export async function createProject(title: string): Promise<void> {
     tasks: [],
   };
   state.project = await api.post<ProjectDoc>('/api/projects', payload);
-  saveLastProject(state.project._id);
+  const newSlug = state.project.slug || state.project._id;
+  saveLastProject(newSlug);
   await loadProjects();
   renderBoard();
   updateProjectTitle();
   subscribeSSE(state.project._id);
+  history.pushState({ project: newSlug }, '', `/p/${newSlug}`);
 }
 
 export async function renameProject(id: string, newTitle: string): Promise<void> {
   const project = await api.get<ProjectDoc>(`/api/projects/${id}`);
   project.title = newTitle;
-  await api.put<ProjectDoc>(`/api/projects/${id}`, project);
+  const updated = await api.put<ProjectDoc>(`/api/projects/${id}`, project);
   await loadProjects();
-  if (state.project?._id === id) {
-    state.project.title = newTitle;
+  if (state.project?._id === id || state.project?.slug === id) {
+    state.project = updated;
     updateProjectTitle();
+    const newSlug = updated.slug || updated._id;
+    saveLastProject(newSlug);
+    history.replaceState({ project: newSlug }, '', `/p/${newSlug}`);
   }
 }
 
@@ -76,7 +83,7 @@ export async function deleteProject(id: string): Promise<void> {
   const rev = project._rev;
   await api.del(`/api/projects/${id}?rev=${rev}`);
   await loadProjects();
-  if (state.project?._id === id) {
+  if (state.project?._id === id || state.project?.slug === id) {
     if (state.projects.length > 0) {
       await openProject(state.projects[0]._id);
     } else {

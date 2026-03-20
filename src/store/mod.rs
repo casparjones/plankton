@@ -42,6 +42,41 @@ impl DataStore {
         }
     }
 
+    /// Löst eine Projekt-Referenz auf: akzeptiert UUID oder Slug.
+    pub async fn resolve_project(&self, id_or_slug: &str) -> Result<ProjectDoc, ApiError> {
+        // Try direct ID lookup first
+        match self.get_project(id_or_slug).await {
+            Ok(p) => return Ok(p),
+            Err(ApiError::NotFound(_)) => {}
+            Err(e) => return Err(e),
+        }
+        // Fallback: search by slug
+        let projects = self.list_projects().await?;
+        projects
+            .into_iter()
+            .find(|p| p.slug == id_or_slug)
+            .ok_or_else(|| ApiError::NotFound(format!("Project '{id_or_slug}' not found")))
+    }
+
+    /// Löst eine Projekt-Referenz auf und gibt nur die ID zurück.
+    pub async fn resolve_project_id(&self, id_or_slug: &str) -> Result<String, ApiError> {
+        // If it looks like a UUID, try direct lookup
+        if id_or_slug.len() == 36 && id_or_slug.contains('-') {
+            match self.get_project(id_or_slug).await {
+                Ok(p) => return Ok(p.id),
+                Err(ApiError::NotFound(_)) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        // Search by slug
+        let projects = self.list_projects().await?;
+        projects
+            .iter()
+            .find(|p| p.slug == id_or_slug || p.id == id_or_slug)
+            .map(|p| p.id.clone())
+            .ok_or_else(|| ApiError::NotFound(format!("Project '{id_or_slug}' not found")))
+    }
+
     pub async fn put_project(&self, project: ProjectDoc) -> Result<ProjectDoc, ApiError> {
         match self {
             DataStore::Couch(c) => c.put_project(project).await,

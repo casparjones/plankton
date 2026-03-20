@@ -54,6 +54,7 @@ pub fn default_project(title: String) -> ProjectDoc {
     ProjectDoc {
         id: Uuid::new_v4().to_string(),
         rev: None,
+        slug: crate::models::project_slugify(&title),
         title,
         columns: vec![
             Column {

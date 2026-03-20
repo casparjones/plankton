@@ -21,10 +21,14 @@ const worker = ref('')
 const newComment = ref('')
 const taskType = ref('task')
 const parentId = ref('')
+const blockedBy = ref<string[]>([])
 
 const logs = computed(() => [...(editingTask.value?.logs || [])].reverse())
 const epics = computed(() =>
   (state.project?.tasks || []).filter((t: Task) => t.task_type === 'epic' && t.id !== editingTask.value?.id)
+)
+const otherTasks = computed(() =>
+  (state.project?.tasks || []).filter((t: Task) => t.id !== editingTask.value?.id)
 )
 const comments = ref<string[]>([])
 const createdAt = computed(() => formatDate(editingTask.value?.created_at))
@@ -35,6 +39,7 @@ const previousRow = computed(() => columnName(editingTask.value?.previous_row))
 function openNew(columnId: string): void {
   const task: Task = {
     id: '',
+    slug: '',
     title: '',
     description: '',
     column_id: columnId,
@@ -78,13 +83,14 @@ function openModal(task: Task, newTask: boolean): void {
   worker.value = task.worker || (newTask && state.currentUser ? state.currentUser.display_name : '')
   taskType.value = task.task_type || 'task'
   parentId.value = task.parent_id || ''
+  blockedBy.value = [...(task.blocked_by || [])]
   comments.value = [...(task.comments || [])]
   newComment.value = ''
   isOpen.value = true
 
   // URL aktualisieren (nur bei existierenden Tasks).
   if (!newTask && task.id && state.project) {
-    history.pushState({ project: state.project._id, task: task.id }, '', `/p/${state.project._id}/t/${task.id}`)
+    history.pushState({ project: state.project.slug || state.project._id, task: task.slug || task.id }, '', `/p/${state.project.slug || state.project._id}/t/${task.slug || task.id}`)
   }
 
   if (newTask) {
@@ -102,12 +108,14 @@ function close(): void {
   state.isNewTask = false
   // URL zurück auf Projekt-Ebene.
   if (state.project) {
-    history.pushState({ project: state.project._id }, '', `/p/${state.project._id}`)
+    history.pushState({ project: state.project.slug || state.project._id }, '', `/p/${state.project.slug || state.project._id}`)
   }
 }
 
 async function save(): Promise<void> {
   if (!editingTask.value) return
+  const oldBlockedBy = editingTask.value.blocked_by || []
+  const newBlockedBy = blockedBy.value
   const task = {
     ...editingTask.value,
     title: title.value || 'Untitled',
@@ -117,12 +125,30 @@ async function save(): Promise<void> {
     worker: worker.value.trim(),
     task_type: taskType.value,
     parent_id: parentId.value,
+    blocked_by: newBlockedBy,
     comments: comments.value,
   }
   if (isNew.value) {
     await createTaskViaApi(task)
   } else {
     await saveTask(task)
+    // Bidirektionale Synchronisation: blocks-Feld der betroffenen Tasks aktualisieren
+    const taskId = editingTask.value.id
+    const added = newBlockedBy.filter(id => !oldBlockedBy.includes(id))
+    const removed = oldBlockedBy.filter(id => !newBlockedBy.includes(id))
+    const allTasks = state.project?.tasks || []
+    for (const blockerId of added) {
+      const blocker = allTasks.find((t: Task) => t.id === blockerId)
+      if (blocker && !blocker.blocks.includes(taskId)) {
+        await saveTask({ ...blocker, blocks: [...blocker.blocks, taskId] })
+      }
+    }
+    for (const blockerId of removed) {
+      const blocker = allTasks.find((t: Task) => t.id === blockerId)
+      if (blocker && blocker.blocks.includes(taskId)) {
+        await saveTask({ ...blocker, blocks: blocker.blocks.filter(id => id !== taskId) })
+      }
+    }
   }
   close()
 }
@@ -223,6 +249,15 @@ defineExpose({ openNew, openEdit, close })
           <div class="modal-info">
             <span class="modal-info-label">Vorherige Spalte</span>
             <span class="modal-info-value">{{ previousRow }}</span>
+          </div>
+          <div class="modal-section" v-if="otherTasks.length">
+            <span class="modal-section-title">Blockiert durch</span>
+            <div class="blocked-by-list">
+              <label v-for="t in otherTasks" :key="t.id" class="blocked-by-item">
+                <input type="checkbox" :value="t.id" v-model="blockedBy" />
+                <span class="blocked-by-title">{{ t.title }}</span>
+              </label>
+            </div>
           </div>
           <div class="modal-section">
             <span class="modal-section-title">Logs</span>

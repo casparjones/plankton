@@ -17,7 +17,7 @@ pub async fn create_column(
     Path(id): Path<String>,
     Json(mut column): Json<Column>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     if column.id.is_empty() {
         column.id = Uuid::new_v4().to_string();
     }
@@ -41,7 +41,7 @@ pub async fn update_column(
     Path((id, column_id)): Path<(String, String)>,
     Json(column): Json<Column>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     // Compute unique slug before mutably borrowing
     let mut new_slug = slugify(&column.title);
     let base_slug = new_slug.clone();
@@ -67,7 +67,7 @@ pub async fn delete_column(
     State(state): State<AppState>,
     Path((id, column_id)): Path<(String, String)>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
-    let mut project = state.store.get_project(&id).await?;
+    let mut project = state.store.resolve_project(&id).await?;
     if project.columns.iter().any(|c| c.id == column_id && c.locked) {
         return Err(ApiError::BadRequest("Locked columns cannot be deleted".into()));
     }

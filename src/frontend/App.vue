@@ -6,7 +6,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useTheme } from './composables/useTheme'
 import AppLayout from './components/AppLayout.vue'
 import ImportPage from './components/ImportPage.vue'
-import type { Claims, Task } from './types'
+import type { Claims, Task, ProjectDoc } from './types'
 
 import { checkAuth, doLogin, updateUserSection } from './components/auth'
 // @ts-ignore
@@ -50,14 +50,16 @@ async function startApp(): Promise<void> {
 
   if (state.projects.length > 0) {
     const route = parseRoute()
+    // Projekt über ID oder Slug finden.
+    const findProject = (ref: string | undefined) =>
+      ref && state.projects.find((p: ProjectDoc) => p._id === ref || p.slug === ref)
     // URL-Projekt hat Vorrang, dann localStorage, dann erstes Projekt.
-    const target = route.projectId && state.projects.find((p: { _id: string }) => p._id === route.projectId)
-      ? route.projectId
+    const target = findProject(route.projectId)
+      ? (findProject(route.projectId)!.slug || findProject(route.projectId)!._id)
       : (() => {
-          const lastId = getLastProject()
-          return lastId && state.projects.find((p: { _id: string }) => p._id === lastId)
-            ? lastId
-            : state.projects[0]._id
+          const last = getLastProject()
+          const found = findProject(last ?? undefined)
+          return found ? (found.slug || found._id) : (state.projects[0].slug || state.projects[0]._id)
         })()
     await openProject(target, true)
     // URL setzen falls noch auf / (ohne pushState-Duplikat).
@@ -66,7 +68,7 @@ async function startApp(): Promise<void> {
     }
     // Task aus URL öffnen.
     if (route.taskId && state.project) {
-      const task = state.project.tasks.find((t: Task) => t.id === route.taskId)
+      const task = state.project.tasks.find((t: Task) => t.id === route.taskId || t.slug === route.taskId)
       if (task) {
         await nextTick()
         // @ts-ignore
@@ -78,11 +80,11 @@ async function startApp(): Promise<void> {
   // Browser-Back/Forward: Projekt und Task synchronisieren.
   window.addEventListener('popstate', async (e) => {
     const s = e.state as { project?: string; task?: string } | null
-    if (s?.project && s.project !== state.project?._id) {
+    if (s?.project && s.project !== state.project?._id && s.project !== state.project?.slug) {
       await openProject(s.project, true)
     }
     if (s?.task && state.project) {
-      const task = state.project.tasks.find((t: Task) => t.id === s.task)
+      const task = state.project.tasks.find((t: Task) => t.id === s.task || t.slug === s.task)
       if (task) {
         // @ts-ignore
         window.__openTaskDetail?.(task)

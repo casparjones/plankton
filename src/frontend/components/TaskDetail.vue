@@ -96,7 +96,8 @@ function open(t: Task): void {
   isOpen.value = true
   // URL aktualisieren.
   if (t.id && state.project) {
-    history.pushState({ project: state.project._id, task: t.id }, '', `/p/${state.project._id}/t/${t.id}`)
+    const pSlug = state.project.slug || state.project._id
+    history.pushState({ project: pSlug, task: t.slug || t.id }, '', `/p/${pSlug}/t/${t.slug || t.id}`)
   }
 }
 
@@ -106,7 +107,7 @@ function close(): void {
   state.detailTask = null
   // URL zurück auf Projekt-Ebene.
   if (state.project) {
-    history.pushState({ project: state.project._id }, '', `/p/${state.project._id}`)
+    history.pushState({ project: state.project.slug || state.project._id }, '', `/p/${state.project.slug || state.project._id}`)
   }
 }
 
@@ -128,7 +129,7 @@ function copyMcpLink(): void {
   const colName = col?.title || '–'
 
   const prompt = [
-    `Plankton-Ticket: ${url}/p/${p._id}/t/${t.id}`,
+    `Plankton-Ticket: ${url}/p/${p.slug || p._id}/t/${t.slug || t.id}`,
     `Projekt: "${p.title}" | ${t.task_type || 'task'}: "${t.title}" [${colName}]`,
     '',
     `Lade das Ticket mit dem plankton skill:`,
