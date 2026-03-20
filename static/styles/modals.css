@@ -163,6 +163,19 @@
 
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 
+.btn-mcp {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.btn-mcp:hover { border-color: var(--accent); color: var(--accent); }
+
 /* Column Context Menu */
 .col-context-menu {
     position: fixed;

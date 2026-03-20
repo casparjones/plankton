@@ -117,6 +117,64 @@ function editTask(): void {
   emit('edit', t)
 }
 
+const mcpLinkCopied = ref(false)
+
+function copyMcpLink(): void {
+  if (!task.value || !state.project) return
+  const t = task.value
+  const p = state.project
+  const url = window.location.origin
+  const col = (p.columns || []).find((c: { id: string }) => c.id === t.column_id)
+  const colName = col?.title || '–'
+
+  const prompt = [
+    `Plankton-Ticket: ${url}/p/${p._id}/t/${t.id}`,
+    `Projekt: "${p.title}" | ${t.task_type || 'task'}: "${t.title}" [${colName}]`,
+    '',
+    `Lade das Ticket mit dem plankton skill:`,
+    `curl -s -X POST ${url}/mcp \\`,
+    `  -H "Content-Type: application/json" \\`,
+    `  -H "Authorization: Bearer $PLANKTON_TOKEN" \\`,
+    `  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_project","arguments":{"id":"${p._id}"}},"id":1}'`,
+    '',
+    `Task-ID: ${t.id}`,
+    t.description ? `Beschreibung: ${t.description.substring(0, 200)}` : '',
+    (t.labels || []).length ? `Labels: ${t.labels.join(', ')}` : '',
+    t.worker ? `Worker: ${t.worker}` : '',
+    t.points ? `Points: ${t.points}` : '',
+  ].filter(Boolean).join('\n')
+
+  // Clipboard API mit Fallback auf execCommand
+  const doCopy = () => {
+    mcpLinkCopied.value = true
+    setTimeout(() => { mcpLinkCopied.value = false }, 2000)
+  }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(prompt).then(doCopy).catch(() => {
+      // Fallback: textarea + execCommand
+      const ta = document.createElement('textarea')
+      ta.value = prompt
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      doCopy()
+    })
+  } else {
+    const ta = document.createElement('textarea')
+    ta.value = prompt
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    doCopy()
+  }
+}
+
 function onOverlayClick(e: Event): void {
   if ((e.target as HTMLElement).classList.contains('modal-overlay')) close()
 }
@@ -229,6 +287,9 @@ defineExpose({ open, close })
         </div>
       </div>
       <div class="modal-actions">
+        <button class="btn-mcp" @click="copyMcpLink" :title="mcpLinkCopied ? 'Kopiert!' : 'MCP-Link für Claude Code kopieren'">
+          {{ mcpLinkCopied ? '✓ Kopiert' : 'MCP Link' }}
+        </button>
         <button class="btn-primary" @click="editTask">Bearbeiten</button>
       </div>
     </div>
