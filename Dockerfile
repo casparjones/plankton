@@ -65,8 +65,11 @@ WORKDIR /app
 
 # Laufzeit-Abhängigkeiten für OpenSSL
 RUN apt-get update \
-    && apt-get install -y libssl3 ca-certificates \
+    && apt-get install -y libssl3 ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -sf http://localhost:3000/healthz || exit 1
 
 COPY --from=backend-builder /app/target/release/plankton /usr/local/bin/plankton
 COPY --from=backend-builder /app/static ./static
