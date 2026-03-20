@@ -195,9 +195,12 @@ onMounted(() => {
       </div>
     </aside>
 
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay" onclick="document.querySelector('.sidebar').classList.remove('sidebar-open')"></div>
     <!-- Hauptbereich -->
     <main class="main">
       <header class="board-header">
+        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('sidebar-open')">&#9776;</button>
         <h1 id="project-title" class="board-title"></h1>
         <span id="git-status-icon" class="git-status-icon" style="display:none" title="Git"></span>
         <button class="search-toggle-btn" title="Suche (Ctrl+K)" onclick="window.__kanbanToggleSearch?.()">&#128269;</button>
