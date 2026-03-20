@@ -1,0 +1,35 @@
+/* Plankton – Toast Overrides (vue-toastification) */
+
+.Vue-Toastification__toast.plankton-toast {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--text);
+}
+
+.Vue-Toastification__toast.plankton-toast.Vue-Toastification__toast--error {
+    border-left: 3px solid var(--danger);
+}
+
+.Vue-Toastification__toast.plankton-toast.Vue-Toastification__toast--success {
+    border-left: 3px solid #4caf50;
+}
+
+.Vue-Toastification__toast.plankton-toast.Vue-Toastification__toast--warning {
+    border-left: 3px solid #ff9800;
+}
+
+.Vue-Toastification__toast.plankton-toast.Vue-Toastification__toast--info {
+    border-left: 3px solid var(--accent);
+}
+
+.Vue-Toastification__close-button.plankton-toast {
+    color: var(--text-dim);
+}
+
+.Vue-Toastification__progress-bar {
+    background: var(--accent) !important;
+}

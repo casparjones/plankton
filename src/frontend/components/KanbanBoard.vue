@@ -9,6 +9,9 @@ import type { Task, Column } from '../types'
 
 import { state } from '../state'
 import api from '../api'
+import { useToast } from 'vue-toastification'
+
+const toast = useToast()
 import { updateBulkBar } from './bulk-actions'
 // @ts-ignore
 import { updateGitStatusIcon } from './git-settings'
@@ -231,9 +234,12 @@ function onSortAdd(columnId: string, evt: any): void {
       .filter(t => t && t.column_id !== doneCol.id)
       .map(t => `"${t!.title}"`)
       .join(', ')
-    alert(`Task "${task.title}" ist blockiert durch: ${blockerNames}\n\nBitte erst die blockierenden Tasks abschließen.`)
-    // Revert: Board neu rendern um den Task zurückzulegen
-    renderBoard()
+    toast.error(`Blockiert durch: ${blockerNames}`, {
+      timeout: 5000,
+    })
+    // SortableJS hat das DOM-Element verschoben, aber der State ist noch korrekt.
+    // renderBoard() baut das Board aus dem State neu → Task springt zurück.
+    nextTick(() => renderBoard())
     return
   }
   persistMoves([{ task_id: task.id, column_id: columnId, order: evt.newIndex }])
