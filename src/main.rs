@@ -162,8 +162,9 @@ async fn main() -> anyhow::Result<()> {
             "/api/projects/:id/users/:user_id",
             put(update_user).delete(delete_user),
         )
-        .route("/api/projects/:id/git", get(get_git_config).put(update_git_config))
-        .route("/api/projects/:id/git/sync", post(git_sync))
+        // Git-Integration deaktiviert (siehe git_controller.rs)
+        // .route("/api/projects/:id/git", get(get_git_config).put(update_git_config))
+        // .route("/api/projects/:id/git/sync", post(git_sync))
         .route("/api/projects/:id/events", get(project_events))
         // Admin-Routen
         .route(

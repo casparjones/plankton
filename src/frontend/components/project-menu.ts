@@ -25,7 +25,6 @@ export function openProjectDropdown(): void {
   const dropdown = document.getElementById('project-dropdown')!;
   dropdown.innerHTML = `
     <button class="proj-dropdown-item" data-action="edit">&#9998; Projekt editieren</button>
-    <button class="proj-dropdown-item" data-action="git">&#128268; Git-Einstellungen</button>
     <button class="proj-dropdown-item" data-action="prompt">&#9733; Show Prompt</button>
     <button class="proj-dropdown-item" data-action="cli">&#9881; Install CLI</button>
   `;

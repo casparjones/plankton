@@ -38,8 +38,8 @@ pub async fn publish_event(state: &AppState, project_id: &str, event_type: &str,
     }
     drop(events);
 
-    // Async Git-Sync auslösen (non-blocking)
-    trigger_git_sync(state.clone(), project_id.to_string());
+    // Git-Sync deaktiviert
+    // trigger_git_sync(state.clone(), project_id.to_string());
 }
 
 /// Löst einen asynchronen Git-Sync aus (fire-and-forget).
