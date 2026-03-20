@@ -5,7 +5,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import Sortable from 'sortablejs'
-import type { Task, Column } from '../types'
+import type { Task, Column, ProjectDoc } from '../types'
 
 import { state } from '../state'
 import api from '../api'
@@ -214,6 +214,11 @@ function persistMoves(moves: { task_id: string; column_id: string; order: number
     }
   }
   api.post(`/api/projects/${state.project!._id}/tasks/batch-move`, { moves })
+    .then(async () => {
+      // Server-State nachladen um Logs und andere serverseitige Änderungen zu erhalten
+      const p = await api.get<ProjectDoc>(`/api/projects/${state.project!._id}`)
+      state.project = p
+    })
     .catch(err => {
       console.error('[DnD] ❌ batch-move failed:', err)
       toast.error('Verschieben fehlgeschlagen')

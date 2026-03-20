@@ -21,9 +21,12 @@ function patchTask(task: Task): void {
   } else {
     state.project.tasks.push(task);
   }
-  // Detail-Ansicht aktualisieren falls derselbe Task offen ist
+  // Offene Ansichten aktualisieren falls derselbe Task offen ist
   if (state.detailTask && state.detailTask.id === task.id) {
     Object.assign(state.detailTask, task);
+  }
+  if (state.editingTask && state.editingTask.id === task.id) {
+    Object.assign(state.editingTask, task);
   }
 }
 
