@@ -189,8 +189,9 @@ async fn main() -> anyhow::Result<()> {
         // Docs & Skill
         .route("/docs", get(docs_page))
         .route("/skill.md", get(skill_md))
-        // SPA-Fallback: /p/* liefert index.html (URL-Routing im Frontend).
+        // SPA-Fallback: /p/* und /import liefert index.html (URL-Routing im Frontend).
         .route("/p/*rest", get(spa_fallback))
+        .route("/import", get(spa_fallback))
         // Statische Dateien
         .nest_service(
             "/",

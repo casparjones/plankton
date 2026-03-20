@@ -2,9 +2,10 @@
 // Plankton – Root-Komponente.
 // Steuert die Hauptansicht: Login-Screen oder Board (via AppLayout).
 
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useTheme } from './composables/useTheme'
 import AppLayout from './components/AppLayout.vue'
+import ImportPage from './components/ImportPage.vue'
 import type { Claims, Task } from './types'
 
 import { checkAuth, doLogin, updateUserSection } from './components/auth'
@@ -19,6 +20,7 @@ const { initTheme } = useTheme()
 
 const authChecked = ref(false)
 const isAuthenticated = ref(false)
+const isImportRoute = computed(() => location.pathname === '/import')
 const loginError = ref('')
 const loginUsername = ref('')
 const loginPassword = ref('')
@@ -138,7 +140,9 @@ onMounted(async () => {
   console.log('[App] Authenticated, isAuthenticated=true')
 
   await nextTick()
-  await startApp()
+  if (location.pathname !== '/import') {
+    await startApp()
+  }
 
   if (user.must_change_password) {
     setTimeout(() => openPasswordModal(true), 100)
@@ -178,6 +182,8 @@ onMounted(async () => {
       </form>
     </div>
   </div>
+  <!-- Import-Seite (mobile-optimiert) -->
+  <ImportPage v-if="isAuthenticated && isImportRoute" />
   <!-- Board-Ansicht via AppLayout -->
-  <AppLayout v-if="isAuthenticated" :on-logout="showLogin" />
+  <AppLayout v-else-if="isAuthenticated" :on-logout="showLogin" />
 </template>
