@@ -139,6 +139,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/install", get(serve_installer))
         .route("/cli/plankton", get(serve_cli_script))
         .route("/cli-login", get(cli_login_page))
+        // Healthcheck (kein Auth)
+        .route("/healthz", get(|| async { axum::Json(serde_json::json!({"status":"ok"})) }))
         // Öffentliche User-Liste
         .route("/api/users", get(public_list_users))
         // Projekt-API
