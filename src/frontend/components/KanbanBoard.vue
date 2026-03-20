@@ -200,10 +200,13 @@ function onDragEnd(evt: any): void {
 /** Batch-Move: alle Moves in einem Request. Lokalen State sofort aktualisieren. */
 function persistMoves(moves: { task_id: string; column_id: string; order: number }[]): void {
   if (!moves.length) return
+  // Snapshot für Rollback bei Fehler
+  const snapshot: { task_id: string; column_id: string; order: number }[] = []
   // Lokalen State sofort aktualisieren (column_id + order)
   for (const m of moves) {
     const task = state.project?.tasks.find((t: Task) => t.id === m.task_id)
     if (task) {
+      snapshot.push({ task_id: task.id, column_id: task.column_id, order: task.order })
       const isColumnChange = task.column_id !== m.column_id
       task.column_id = m.column_id
       task.order = m.order
@@ -222,11 +225,15 @@ function persistMoves(moves: { task_id: string; column_id: string; order: number
     .catch(err => {
       console.error('[DnD] ❌ batch-move failed:', err)
       toast.error('Verschieben fehlgeschlagen')
-      // Bei Fehler: Server-State laden
-      api.get<any>(`/api/projects/${state.project!._id}`).then(p => {
-        state.project = p
-        refreshColumnTasks()
-      })
+      // Rollback: optimistic update rückgängig machen
+      for (const s of snapshot) {
+        const task = state.project?.tasks.find((t: Task) => t.id === s.task_id)
+        if (task) {
+          task.column_id = s.column_id
+          task.order = s.order
+        }
+      }
+      refreshColumnTasks()
     })
 }
 
