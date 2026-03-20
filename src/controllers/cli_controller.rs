@@ -596,35 +596,51 @@ cmd_export() {{
     if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in. Run: plankton login <url>"; exit 1; fi
     local force=0
     local target_dir="."
+    local filter_slug=""
     while [ $# -gt 0 ]; do
         case "$1" in
             -f|--force) force=1; shift ;;
             -d|--dir) shift; target_dir="${{1:-.}}"; shift ;;
+            -p|--project) shift; filter_slug="${{1:-}}"; shift ;;
             *) shift ;;
         esac
     done
     mkdir -p "$target_dir"
     local resp
     resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects") || {{ echo "Error fetching projects"; exit 1; }}
+
+    # Einzelnes Projekt per Slug filtern
+    if [ -n "$filter_slug" ]; then
+        local match=$(echo "$resp" | jq -r ".[] | select(.slug == \"$filter_slug\") | ._id")
+        if [ -z "$match" ]; then
+            echo "  Error: project '$filter_slug' not found on server"
+            exit 1
+        fi
+    fi
+
     local count=0
     local skipped=0
-    for id in $(echo "$resp" | jq -r '.[]._id'); do
-        local file="$target_dir/$id.json"
+    echo "$resp" | jq -c '.[]' | while IFS= read -r entry; do
+        local id=$(echo "$entry" | jq -r '._id')
+        local slug=$(echo "$entry" | jq -r '.slug // empty')
+        local title=$(echo "$entry" | jq -r '.title')
+        [ -z "$slug" ] && slug="$id"
+
+        # Filter: nur das angegebene Projekt
+        if [ -n "$filter_slug" ] && [ "$slug" != "$filter_slug" ]; then
+            continue
+        fi
+
+        local file="$target_dir/$slug.json"
         if [ -f "$file" ] && [ "$force" -eq 0 ]; then
-            local title=$(echo "$resp" | jq -r ".[] | select(._id == \"$id\") | .title")
             echo "  skip  $title ($file exists, use -f to overwrite)"
-            skipped=$((skipped + 1))
             continue
         fi
         local project
-        project=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$id?include_archived=true") || {{ echo "  error fetching $id"; continue; }}
-        local title=$(echo "$project" | jq -r '.title')
+        project=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$id?include_archived=true") || {{ echo "  error fetching $title"; continue; }}
         echo "$project" | jq '.' > "$file"
         echo "  saved $title → $file"
-        count=$((count + 1))
     done
-    echo ""
-    echo "  Exported $count project(s), skipped $skipped."
     echo ""
 }}
 
@@ -633,44 +649,67 @@ cmd_import() {{
     if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in. Run: plankton login <url>"; exit 1; fi
     local force=0
     local target_dir="."
+    local filter_slug=""
     while [ $# -gt 0 ]; do
         case "$1" in
             -f|--force) force=1; shift ;;
             -d|--dir) shift; target_dir="${{1:-.}}"; shift ;;
+            -p|--project) shift; filter_slug="${{1:-}}"; shift ;;
             *) shift ;;
         esac
     done
+
+    # Einzelnes Projekt: Datei muss existieren
+    if [ -n "$filter_slug" ]; then
+        local file="$target_dir/$filter_slug.json"
+        if [ ! -f "$file" ]; then
+            echo "  Error: file '$file' not found"
+            exit 1
+        fi
+    fi
+
     # Bestehende Projekte auf dem Server laden
-    local server_ids
-    server_ids=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects" | jq -r '.[]._id') || {{ echo "Error fetching projects"; exit 1; }}
+    local server_projects
+    server_projects=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects") || {{ echo "Error fetching projects"; exit 1; }}
+
     local count=0
     local skipped=0
     for file in "$target_dir"/*.json; do
         [ -f "$file" ] || continue
+        local basename=$(basename "$file" .json)
+
+        # Filter: nur das angegebene Projekt
+        if [ -n "$filter_slug" ] && [ "$basename" != "$filter_slug" ]; then
+            continue
+        fi
+
         local id=$(jq -r '._id' "$file" 2>/dev/null)
         local title=$(jq -r '.title' "$file" 2>/dev/null)
-        [ -z "$id" ] && continue
-        # Prüfen ob Projekt auf dem Server existiert
-        if echo "$server_ids" | grep -qx "$id"; then
+        [ -z "$id" ] || [ "$id" = "null" ] && {{ echo "  skip  $file (no _id)"; continue; }}
+
+        # Prüfen ob Projekt auf dem Server existiert (per ID oder Slug)
+        local server_match=$(echo "$server_projects" | jq -r ".[] | select(._id == \"$id\" or .slug == \"$basename\") | ._id")
+        if [ -n "$server_match" ]; then
             if [ "$force" -eq 0 ]; then
-                echo "  skip  $title ($id exists on server, use -f to overwrite)"
+                echo "  skip  $title (exists on server, use -f to overwrite)"
                 skipped=$((skipped + 1))
                 continue
             fi
-            # Force: überschreiben via PUT
+            # Force: überschreiben via PUT (aktuelle _rev vom Server holen)
             local rev
-            rev=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$id" | jq -r '._rev')
-            local data=$(jq --arg rev "$rev" '._rev = $rev' "$file")
+            rev=$(echo "$server_projects" | jq -r ".[] | select(._id == \"$server_match\") | ._rev")
+            local data=$(jq --arg rev "$rev" --arg id "$server_match" '._rev = $rev | ._id = $id' "$file")
             curl -sf -X PUT -H "Authorization: Bearer $PLANKTON_TOKEN" -H "Content-Type: application/json" \
-                "$PLANKTON_SERVER/api/projects/$id" -d "$data" > /dev/null || {{ echo "  error updating $title"; continue; }}
-            echo "  updated $title ($id)"
+                "$PLANKTON_SERVER/api/projects/$server_match" -d "$data" > /dev/null || {{ echo "  error updating $title"; continue; }}
+            echo "  updated $title → $server_match"
+            count=$((count + 1))
         else
             # Neu: POST
             curl -sf -X POST -H "Authorization: Bearer $PLANKTON_TOKEN" -H "Content-Type: application/json" \
                 "$PLANKTON_SERVER/api/projects" -d @"$file" > /dev/null || {{ echo "  error creating $title"; continue; }}
-            echo "  created $title ($id)"
+            echo "  created $title"
+            count=$((count + 1))
         fi
-        count=$((count + 1))
     done
     echo ""
     echo "  Imported $count project(s), skipped $skipped."
@@ -693,8 +732,8 @@ cmd_help() {{
     echo "    projects             List all projects"
     echo "    view <slug>          View project with columns and tasks"
     echo "    tasks <slug>         List tasks in a project"
-    echo "    export [-f] [-d dir] Export all projects as JSON files"
-    echo "    import [-f] [-d dir] Import JSON files to server"
+    echo "    export [-f] [-p slug] [-d dir]  Export projects as JSON"
+    echo "    import [-f] [-p slug] [-d dir]  Import JSON to server"
     echo "    init                 Create .vibe/ project structure"
     echo "    skill install [-g]   Download & install SKILL.md"
     echo "    skill update  [-g]   Update installed SKILL.md"
