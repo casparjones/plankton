@@ -16,14 +16,25 @@ pub async fn publish_update(state: &AppState, project_id: &str) {
 }
 
 /// Granulares SSE-Event senden. Format: `{"event":"<type>","data":<payload>}`
+/// Akzeptiert sowohl UUID als auch Slug als project_id.
 pub async fn publish_event(state: &AppState, project_id: &str, event_type: &str, data: serde_json::Value) {
     let events = state.events.lock().await;
-    if let Some(tx) = events.get(project_id) {
-        let payload = serde_json::json!({
-            "event": event_type,
-            "data": data
-        });
-        let _ = tx.send(payload.to_string());
+    // Versuche erst direkt, dann per aufgelöster ID (Slug → UUID).
+    let found = if events.contains_key(project_id) {
+        Some(project_id.to_string())
+    } else {
+        // Slug → UUID auflösen
+        state.store.resolve_project_id(project_id).await.ok()
+            .filter(|real_id| events.contains_key(real_id.as_str()))
+    };
+    if let Some(ref key) = found {
+        if let Some(tx) = events.get(key.as_str()) {
+            let payload = serde_json::json!({
+                "event": event_type,
+                "data": data
+            });
+            let _ = tx.send(payload.to_string());
+        }
     }
     drop(events);
 

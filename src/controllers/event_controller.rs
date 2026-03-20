@@ -10,13 +10,16 @@ use tokio::sync::broadcast;
 use crate::state::AppState;
 
 /// GET /api/projects/:id/events – Server-Sent Events Stream für ein Projekt.
+/// Akzeptiert sowohl UUID als auch Slug.
 pub async fn project_events(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    // Slug → UUID auflösen, damit SSE immer auf der UUID subscribed.
+    let real_id = state.store.resolve_project_id(&id).await.unwrap_or(id);
     let mut events = state.events.lock().await;
     let tx = events
-        .entry(id.clone())
+        .entry(real_id.clone())
         .or_insert_with(|| broadcast::channel::<String>(100).0)
         .clone();
     let rx = tx.subscribe();
