@@ -31,6 +31,54 @@
     padding: 20px 24px;
 }
 
+/* Search & Filter Bar */
+.board-search {
+    padding: 8px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+.search-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.search-input {
+    flex: 1;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+    font-family: var(--font-sans);
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--text-dim); }
+.search-select {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+    font-family: var(--font-mono);
+    max-width: 160px;
+}
+.search-select:focus { border-color: var(--accent); }
+.search-clear, .search-close {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+}
+.search-clear:hover, .search-close:hover { border-color: var(--accent); color: var(--accent); }
+
 /* jKanban Overrides */
 .kanban-container {
     display: flex !important;

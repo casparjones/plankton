@@ -2,7 +2,7 @@
 // Kanban-Board Komponente mit VueDraggablePlus für Drag&Drop.
 // Ersetzt die bisherige jKanban-Implementierung.
 
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import Sortable from 'sortablejs'
 import type { Task, Column } from '../types'
@@ -58,6 +58,75 @@ function subtaskProgress(task: Task): { done: number; total: number; pct: number
   return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 }
 }
 
+// ─── Suche & Filter ──────────────────────────────────────────
+const searchQuery = ref('')
+const filterLabel = ref('')
+const filterWorker = ref('')
+const searchInputRef = ref<HTMLInputElement | null>(null)
+const showSearch = ref(false)
+
+/** Alle einzigartigen Labels im Projekt. */
+const allLabels = computed(() => {
+  const set = new Set<string>()
+  for (const t of (state.project?.tasks || [])) {
+    for (const l of (t.labels || [])) set.add(l)
+  }
+  return [...set].sort()
+})
+
+/** Alle einzigartigen Worker im Projekt. */
+const allWorkers = computed(() => {
+  const set = new Set<string>()
+  for (const t of (state.project?.tasks || [])) {
+    if (t.worker) set.add(t.worker)
+  }
+  return [...set].sort()
+})
+
+const hasActiveFilter = computed(() => searchQuery.value || filterLabel.value || filterWorker.value)
+
+/** Prüft ob ein Task den aktiven Filtern entspricht. */
+function matchesFilter(task: Task): boolean {
+  if (!hasActiveFilter.value) return true
+  const q = searchQuery.value.toLowerCase()
+  if (q && !task.title.toLowerCase().includes(q) && !task.description?.toLowerCase().includes(q)) return false
+  if (filterLabel.value && !(task.labels || []).includes(filterLabel.value)) return false
+  if (filterWorker.value && task.worker !== filterWorker.value) return false
+  return true
+}
+
+function toggleSearch(): void {
+  showSearch.value = !showSearch.value
+  if (showSearch.value) {
+    nextTick(() => searchInputRef.value?.focus())
+  } else {
+    clearFilters()
+  }
+}
+
+function clearFilters(): void {
+  searchQuery.value = ''
+  filterLabel.value = ''
+  filterWorker.value = ''
+}
+
+function onSearchKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Escape') {
+    toggleSearch()
+  }
+}
+
+// Ctrl+K / Cmd+K Shortcut
+function handleGlobalKeydown(e: KeyboardEvent): void {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault()
+    showSearch.value = true
+    nextTick(() => searchInputRef.value?.focus())
+  }
+}
+onMounted(() => document.addEventListener('keydown', handleGlobalKeydown))
+onUnmounted(() => document.removeEventListener('keydown', handleGlobalKeydown))
+
 /** Sichtbare Spalten, sortiert (Done immer zuletzt). */
 const sortedColumns = computed<Column[]>(() => {
   console.log('[KanbanBoard] sortedColumns computed, state.project:', state.project?._id, 'columns:', state.project?.columns?.length)
@@ -75,10 +144,10 @@ const sortedColumns = computed<Column[]>(() => {
   return result
 })
 
-/** Tasks pro Spalte, sortiert nach order. */
+/** Tasks pro Spalte, sortiert nach order, gefiltert nach Suchkriterien. */
 function tasksForColumn(columnId: string): Task[] {
   return (state.project?.tasks || [])
-    .filter((t: Task) => t.column_id === columnId)
+    .filter((t: Task) => t.column_id === columnId && matchesFilter(t))
     .sort((a: Task, b: Task) => a.order - b.order)
 }
 
@@ -100,16 +169,18 @@ function refreshColumnTasks(): void {
 }
 
 // Initialer Aufbau und bei Projekt-Änderungen aktualisieren.
-console.log('[KanbanBoard] Setting up watcher on state.project, current state:', typeof state, 'project:', state.project)
-console.log('[KanbanBoard] state object keys:', Object.keys(state))
-watch(() => state.project, (newVal, oldVal) => {
-  console.log('[KanbanBoard] watch triggered! old:', oldVal?._id, '→ new:', newVal?._id, newVal?.title)
+watch(() => state.project, () => {
   nextTick(() => {
     refreshColumnTasks()
     updateGitStatusIcon()
     updateBulkBar()
   })
 }, { deep: true, immediate: true })
+
+// Filter-Änderungen aktualisieren das Board.
+watch([searchQuery, filterLabel, filterWorker], () => {
+  refreshColumnTasks()
+})
 
 /** Handler für Task-Drag-Start. */
 function onDragStart(): void {
@@ -232,9 +303,34 @@ function openColMenu(event: Event, columnId: string): void {
 // Globale Funktion für SSE-Updates und Legacy-Code (board.js Bridge).
 // @ts-ignore
 window.__kanbanRefresh = refreshColumnTasks
+// @ts-ignore
+window.__kanbanToggleSearch = toggleSearch
 </script>
 
 <template>
+  <!-- Suchleiste -->
+  <div v-if="showSearch" class="board-search">
+    <div class="search-bar">
+      <input
+        ref="searchInputRef"
+        v-model="searchQuery"
+        type="text"
+        placeholder="Suche in Titel & Beschreibung… (Esc zum Schließen)"
+        class="search-input"
+        @keydown="onSearchKeydown"
+      />
+      <select v-model="filterLabel" class="search-select">
+        <option value="">Alle Labels</option>
+        <option v-for="l in allLabels" :key="l" :value="l">{{ l }}</option>
+      </select>
+      <select v-model="filterWorker" class="search-select">
+        <option value="">Alle Worker</option>
+        <option v-for="w in allWorkers" :key="w" :value="w">{{ w }}</option>
+      </select>
+      <button v-if="hasActiveFilter" class="search-clear" @click="clearFilters" title="Filter zurücksetzen">&#10005;</button>
+      <button class="search-close" @click="toggleSearch" title="Suche schließen">Esc</button>
+    </div>
+  </div>
   <div ref="columnsRef" class="board-columns">
     <!-- Spalten-Container (Drag&Drop für Spaltenreihenfolge deaktiviert für Done) -->
     <div
