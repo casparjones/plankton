@@ -197,25 +197,31 @@ function onDragEnd(evt: any): void {
   setTimeout(() => { state.isDragging = false }, 50)
 }
 
-/** Batch-Move: alle Moves in einem Request. */
+/** Batch-Move: alle Moves in einem Request. Lokalen State sofort aktualisieren. */
 function persistMoves(moves: { task_id: string; column_id: string; order: number }[]): void {
   if (!moves.length) return
-  api.post(`/api/projects/${state.project!._id}/tasks/batch-move`, { moves })
-    .then(() => {
-      // Toast nur bei Spalten-Wechsel (nicht bei Reorder innerhalb einer Spalte)
-      if (moves.length === 1) {
-        const m = moves[0]
-        const task = state.project?.tasks.find((t: Task) => t.id === m.task_id)
+  // Lokalen State sofort aktualisieren (column_id + order)
+  for (const m of moves) {
+    const task = state.project?.tasks.find((t: Task) => t.id === m.task_id)
+    if (task) {
+      const isColumnChange = task.column_id !== m.column_id
+      task.column_id = m.column_id
+      task.order = m.order
+      if (isColumnChange) {
         const col = state.project?.columns.find((c: Column) => c.id === m.column_id)
-        if (task && col && task.column_id !== m.column_id) {
-          toast.success(`"${task.title}" → ${col.title}`)
-        }
+        if (col) toast.success(`"${task.title}" → ${col.title}`)
       }
-    })
+    }
+  }
+  api.post(`/api/projects/${state.project!._id}/tasks/batch-move`, { moves })
     .catch(err => {
       console.error('[DnD] ❌ batch-move failed:', err)
       toast.error('Verschieben fehlgeschlagen')
-      refreshColumnTasks()
+      // Bei Fehler: Server-State laden
+      api.get<any>(`/api/projects/${state.project!._id}`).then(p => {
+        state.project = p
+        refreshColumnTasks()
+      })
     })
 }
 
