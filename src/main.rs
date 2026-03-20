@@ -16,7 +16,7 @@ mod middleware;
 use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Router,
 };
 use reqwest::Client;
@@ -86,6 +86,7 @@ async fn main() -> anyhow::Result<()> {
         events: Arc::new(Mutex::new(HashMap::new())),
         jwt_secret,
         cli_sessions: Arc::new(Mutex::new(HashMap::new())),
+        mcp_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
 
     // Users-Verzeichnis sicherstellen und Default-Admin anlegen.
@@ -181,10 +182,10 @@ async fn main() -> anyhow::Result<()> {
             "/api/admin/tokens/:token_id",
             put(admin_update_token).delete(admin_delete_token),
         )
-        // MCP (Legacy + JSON-RPC 2.0)
+        // MCP (Legacy + Streamable HTTP Transport)
         .route("/mcp/tools", get(list_tools))
         .route("/mcp/call", post(call_tool))
-        .route("/mcp", post(mcp_jsonrpc))
+        .route("/mcp", post(mcp_jsonrpc).get(mcp_sse_stream).delete(mcp_session_delete))
         // Docs & Skill
         .route("/docs", get(docs_page))
         .route("/skill.md", get(skill_md))

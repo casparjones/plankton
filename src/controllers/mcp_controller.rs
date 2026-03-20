@@ -1,16 +1,19 @@
-// Handler für MCP-Endpunkte (Legacy + JSON-RPC 2.0) und Docs.
+// Handler für MCP-Endpunkte (Legacy + Streamable HTTP Transport) und Docs.
 
 use axum::{
     extract::State,
+    response::{sse::Event, Sse},
     Json,
 };
 use chrono::{Local, Utc};
+use futures::{stream, Stream};
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::models::*;
 use crate::services::*;
-use crate::state::AppState;
+use crate::state::{AppState, McpSession};
 
 /// Alle verfügbaren MCP-Tools mit optionaler Rollen-Einschränkung.
 fn all_tools() -> Vec<ToolDef> {
@@ -92,43 +95,86 @@ pub async fn call_tool(
     Ok(Json(out))
 }
 
-/// POST /mcp – JSON-RPC 2.0 MCP-Endpunkt.
+/// POST /mcp – JSON-RPC 2.0 MCP-Endpunkt mit Streamable HTTP Transport.
+/// Erstellt bei "initialize" eine Session und gibt Mcp-Session-Id Header zurück.
 pub async fn mcp_jsonrpc(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
-) -> Json<JsonRpcResponse> {
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    use axum::http::{header, StatusCode};
+
     let (caller, caller_role) = resolve_caller(&headers, &state).await;
     let rpc: JsonRpcRequest = match serde_json::from_slice(&body) {
         Ok(r) => r,
         Err(e) => {
-            return Json(JsonRpcResponse {
+            let resp = JsonRpcResponse {
                 jsonrpc: "2.0".into(),
                 result: None,
                 error: Some(JsonRpcError { code: -32700, message: format!("Parse error: {e}") }),
                 id: serde_json::Value::Null,
-            })
+            };
+            return Json(resp).into_response();
         }
     };
     let id = rpc.id.clone().unwrap_or(serde_json::Value::Null);
 
-    match rpc.method.as_str() {
-        "initialize" => Json(JsonRpcResponse {
-            jsonrpc: "2.0".into(),
-            result: Some(serde_json::json!({
-                "protocolVersion": "2024-11-05",
-                "capabilities": { "tools": {} },
-                "serverInfo": { "name": "plankton-mcp", "version": "0.1.0" }
-            })),
-            error: None,
-            id,
-        }),
-        "initialized" | "notifications/initialized" => Json(JsonRpcResponse {
+    // Session-ID aus Header lesen oder bei initialize neu erstellen
+    let session_id = headers
+        .get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    // Validate session if header provided (except for initialize)
+    if let Some(ref sid) = session_id {
+        if rpc.method != "initialize" {
+            let sessions = state.mcp_sessions.lock().await;
+            if !sessions.contains_key(sid) {
+                let resp = JsonRpcResponse {
+                    jsonrpc: "2.0".into(),
+                    result: None,
+                    error: Some(JsonRpcError { code: -32001, message: "Invalid session".into() }),
+                    id,
+                };
+                return (StatusCode::NOT_FOUND, Json(resp)).into_response();
+            }
+        }
+    }
+
+    let response = match rpc.method.as_str() {
+        "initialize" => {
+            let new_session_id = Uuid::new_v4().to_string();
+            let (tx, _) = broadcast::channel::<String>(100);
+            let session = McpSession {
+                caller: caller.clone(),
+                role: caller_role.clone(),
+                created_at: Utc::now(),
+                tx,
+            };
+            state.mcp_sessions.lock().await.insert(new_session_id.clone(), session);
+
+            let resp = JsonRpcResponse {
+                jsonrpc: "2.0".into(),
+                result: Some(serde_json::json!({
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": { "tools": {} },
+                    "serverInfo": { "name": "plankton-mcp", "version": "0.2.0" }
+                })),
+                error: None,
+                id,
+            };
+            return (
+                [(header::HeaderName::from_static("mcp-session-id"), new_session_id)],
+                Json(resp),
+            ).into_response();
+        }
+        "initialized" | "notifications/initialized" => JsonRpcResponse {
             jsonrpc: "2.0".into(),
             result: Some(serde_json::json!({})),
             error: None,
             id,
-        }),
+        },
         "tools/list" => {
             let tools = if caller_role.is_empty() {
                 all_tools()
@@ -145,12 +191,12 @@ pub async fn mcp_jsonrpc(
                     })
                 })
                 .collect();
-            Json(JsonRpcResponse {
+            JsonRpcResponse {
                 jsonrpc: "2.0".into(),
                 result: Some(serde_json::json!({ "tools": tool_list })),
                 error: None,
                 id,
-            })
+            }
         }
         "tools/call" => {
             let tool_name = rpc.params["name"]
@@ -160,15 +206,15 @@ pub async fn mcp_jsonrpc(
                 .cloned()
                 .unwrap_or(serde_json::json!({}));
             match execute_tool(&state, tool_name, &arguments, &caller).await {
-                Ok(result) => Json(JsonRpcResponse {
+                Ok(result) => JsonRpcResponse {
                     jsonrpc: "2.0".into(),
                     result: Some(serde_json::json!({
                         "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
                     })),
                     error: None,
                     id,
-                }),
-                Err(e) => Json(JsonRpcResponse {
+                },
+                Err(e) => JsonRpcResponse {
                     jsonrpc: "2.0".into(),
                     result: None,
                     error: Some(JsonRpcError {
@@ -176,10 +222,10 @@ pub async fn mcp_jsonrpc(
                         message: format!("{e:?}"),
                     }),
                     id,
-                }),
+                },
             }
         }
-        _ => Json(JsonRpcResponse {
+        _ => JsonRpcResponse {
             jsonrpc: "2.0".into(),
             result: None,
             error: Some(JsonRpcError {
@@ -187,7 +233,75 @@ pub async fn mcp_jsonrpc(
                 message: format!("Method not found: {}", rpc.method),
             }),
             id,
-        }),
+        },
+    };
+
+    // Antwort mit Session-ID Header falls vorhanden
+    if let Some(sid) = session_id {
+        (
+            [(header::HeaderName::from_static("mcp-session-id"), sid)],
+            Json(response),
+        ).into_response()
+    } else {
+        Json(response).into_response()
+    }
+}
+
+/// GET /mcp – SSE-Stream für Server-initiierte Nachrichten (Streamable HTTP Transport).
+pub async fn mcp_sse_stream(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    use axum::http::StatusCode;
+
+    let session_id = match headers
+        .get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+    {
+        Some(sid) => sid.to_string(),
+        None => return StatusCode::BAD_REQUEST.into_response(),
+    };
+
+    let sessions = state.mcp_sessions.lock().await;
+    let rx = match sessions.get(&session_id) {
+        Some(session) => session.tx.subscribe(),
+        None => return StatusCode::NOT_FOUND.into_response(),
+    };
+    drop(sessions);
+
+    let out = stream::unfold(rx, move |mut rx| async move {
+        match rx.recv().await {
+            Ok(msg) => Some((Ok::<_, std::convert::Infallible>(Event::default().data(msg)), rx)),
+            Err(broadcast::error::RecvError::Lagged(_)) => {
+                Some((Ok::<_, std::convert::Infallible>(Event::default().event("heartbeat").data("ping")), rx))
+            }
+            Err(broadcast::error::RecvError::Closed) => None,
+        }
+    });
+    Sse::new(out).into_response()
+}
+
+/// DELETE /mcp – MCP-Session beenden (Streamable HTTP Transport).
+pub async fn mcp_session_delete(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::http::StatusCode {
+    use axum::http::StatusCode;
+
+    let session_id = match headers
+        .get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+    {
+        Some(sid) => sid.to_string(),
+        None => return StatusCode::BAD_REQUEST,
+    };
+
+    let mut sessions = state.mcp_sessions.lock().await;
+    if sessions.remove(&session_id).is_some() {
+        StatusCode::OK
+    } else {
+        StatusCode::NOT_FOUND
     }
 }
 
