@@ -85,7 +85,9 @@ async function addComment(): Promise<void> {
   const text = newComment.value.trim()
   if (!text || !task.value) return
   const userName = state.currentUser?.display_name || state.currentUser?.username || 'anonymous'
-  task.value.comments.push(`[${userName}] ${text}`)
+  const now = new Date()
+  const ts = `${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+  task.value.comments.push({ ts, user: userName, msg: text } as any)
   newComment.value = ''
   await saveTask(task.value)
 }
@@ -234,7 +236,16 @@ defineExpose({ open, close })
             <span class="detail-section-title">Kommentare</span>
             <div class="detail-list detail-comments-list">
               <template v-if="comments.length">
-                <div v-for="(c, i) in comments" :key="i" class="detail-list-item markdown-body" v-html="renderMarkdown(c)"></div>
+                <div v-for="(c, i) in comments" :key="i" class="detail-list-item log-entry">
+                  <template v-if="typeof c === 'object' && c !== null">
+                    <span class="log-ts">{{ c.ts }}</span>
+                    <span class="log-user">{{ c.user }}</span>
+                    <span class="log-msg markdown-body" v-html="renderMarkdown(c.msg)"></span>
+                  </template>
+                  <template v-else>
+                    <span class="log-msg markdown-body" v-html="renderMarkdown(String(c))"></span>
+                  </template>
+                </div>
               </template>
               <div v-else class="detail-list-empty">Keine Kommentare</div>
             </div>

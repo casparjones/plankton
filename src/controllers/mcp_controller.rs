@@ -606,7 +606,7 @@ async fn execute_tool(
                 .ok_or_else(|| ApiError::BadRequest("text missing".into()))?;
             let mut project = state.store.get_project(project_id).await?;
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
-                task.comments.push(format!("[{}] {}", caller, text));
+                task.comments.push(log_entry(&caller, text));
                 task.updated_at = Utc::now().to_rfc3339();
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
@@ -667,7 +667,7 @@ async fn execute_tool(
                     task.column_id = prev;
                 }
                 task.updated_at = Utc::now().to_rfc3339();
-                task.comments.push(format!("[{}] {}", caller, comment));
+                task.comments.push(log_entry(&caller, &comment));
                 task.logs.push(log_entry(&caller, &format!("✗ rejected: {}", comment)));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));

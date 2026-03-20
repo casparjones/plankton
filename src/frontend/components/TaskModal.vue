@@ -191,7 +191,10 @@ async function handleDelete(): Promise<void> {
 function addComment(): void {
   const text = newComment.value.trim()
   if (!text || !editingTask.value) return
-  comments.value.push(text)
+  const userName = state.currentUser?.display_name || state.currentUser?.username || 'anonymous'
+  const now = new Date()
+  const ts = `${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+  comments.value.push({ ts, user: userName, msg: text } as any)
   editingTask.value.comments = comments.value
   newComment.value = ''
 }
@@ -233,7 +236,14 @@ defineExpose({ openNew, openEdit, close })
             <span class="modal-section-title">Kommentare</span>
             <div class="modal-list">
               <template v-if="comments.length">
-                <div v-for="(c, i) in comments" :key="i" class="modal-list-item">{{ c }}</div>
+                <div v-for="(c, i) in comments" :key="i" class="modal-list-item log-entry">
+                  <template v-if="typeof c === 'object' && c !== null">
+                    <span class="log-ts">{{ c.ts }}</span>
+                    <span class="log-user">{{ c.user }}</span>
+                    <span class="log-msg">{{ c.msg }}</span>
+                  </template>
+                  <template v-else>{{ c }}</template>
+                </div>
               </template>
               <div v-else class="modal-list-empty">Keine Kommentare</div>
             </div>

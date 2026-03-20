@@ -61,7 +61,7 @@ export interface Task {
   worker: string
   creator: string
   logs: (string | { ts: string; user: string; msg: string })[]
-  comments: string[]
+  comments: (string | { ts: string; user: string; msg: string })[]
   created_at: string
   updated_at: string
   task_type: string

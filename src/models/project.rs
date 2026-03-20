@@ -185,8 +185,8 @@ pub struct Task {
     pub creator: String,
     /// Audit-Log: String (legacy) oder Objekt `{"ts","user","msg"}`.
     pub logs: Vec<serde_json::Value>,
-    /// Kommentare: z.B. "Frank: Bitte Prio erhöhen".
-    pub comments: Vec<String>,
+    /// Kommentare: String (legacy) oder Objekt `{"ts","user","msg"}`.
+    pub comments: Vec<serde_json::Value>,
     pub created_at: String,
     pub updated_at: String,
     /// Task-Typ: "task" (Standard), "epic" oder "job".

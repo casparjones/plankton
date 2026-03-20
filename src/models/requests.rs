@@ -46,7 +46,7 @@ pub struct UpdateTaskRequest {
     pub worker: Option<String>,
     pub points: Option<i32>,
     pub order: Option<i32>,
-    pub comments: Option<Vec<String>>,
+    pub comments: Option<Vec<serde_json::Value>>,
     pub logs: Option<Vec<serde_json::Value>>,
     pub task_type: Option<String>,
     pub blocks: Option<Vec<String>>,
