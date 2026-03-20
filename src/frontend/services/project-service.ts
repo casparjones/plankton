@@ -44,6 +44,7 @@ export async function createProject(title: string): Promise<void> {
   const payload: ProjectDoc = {
     _id: '',
     slug: '',
+    owner: state.currentUser?.display_name ?? null,
     title: title || 'Untitled',
     columns: [
       { id: crypto.randomUUID(), title: 'Todo',        order: 0, color: '#90CAF9', hidden: false, slug: '', locked: false },

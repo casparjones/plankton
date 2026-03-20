@@ -13,6 +13,7 @@ import { checkAuth, doLogin, updateUserSection } from './components/auth'
 import { loadProjects, openProject, getLastProject } from './services/project-service'
 // @ts-ignore
 import { openPasswordModal } from './components/password-modal'
+import api from './api'
 import { state } from './state'
 import { toggleTheme as legacyToggleTheme } from './components/theme'
 
@@ -46,6 +47,7 @@ async function startApp(): Promise<void> {
   }
 
   updateUserSection()
+  try { state.allUsers = await api.get('/api/users') } catch { /* ignore */ }
   await loadProjects()
 
   if (state.projects.length > 0) {

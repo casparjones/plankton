@@ -13,6 +13,22 @@ use crate::models::*;
 use crate::services::*;
 use crate::state::AppState;
 
+// ---- Öffentliche User-Liste (nur username + display_name) ----
+
+/// GET /api/users – Alle aktiven Benutzer (öffentlich, minimale Daten).
+pub async fn public_list_users(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
+    let users = state.store.list_users().await?;
+    Ok(Json(users.iter()
+        .filter(|u| u.active)
+        .map(|u| serde_json::json!({
+            "username": u.username,
+            "display_name": u.display_name,
+        }))
+        .collect()))
+}
+
 // ---- User-Verwaltung ----
 
 /// GET /api/admin/users – Alle Benutzer auflisten.

@@ -134,6 +134,72 @@
 .project-item:hover .project-delete-btn { opacity: 1; }
 .project-delete-btn:hover { color: var(--danger); }
 
+/* Owner-Gruppen */
+.owner-group {
+    list-style: none;
+}
+
+.owner-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    transition: color 0.12s;
+    user-select: none;
+}
+.owner-group-header:hover { color: var(--text); }
+
+.owner-toggle {
+    font-size: 8px;
+    width: 12px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.owner-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.owner-count {
+    font-size: 10px;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 0 5px;
+    min-width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.owner-projects {
+    list-style: none;
+    padding: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+}
+
+.owner-group--expanded > .owner-projects {
+    max-height: 2000px;
+}
+
+.owner-projects .project-item {
+    padding-left: 30px;
+}
+
+.sidebar-drag-ghost {
+    opacity: 0.4;
+}
+
 .project-rename-input {
     background: var(--surface-2);
     border: 1px solid var(--accent);

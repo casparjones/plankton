@@ -16,6 +16,9 @@ pub struct ProjectDoc {
     /// URL-freundlicher Slug (auto-generiert aus Titel, z.B. "mein-projekt").
     #[serde(default)]
     pub slug: String,
+    /// Besitzer des Projekts (display_name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
     pub columns: Vec<Column>,
     pub users: Vec<User>,
     pub tasks: Vec<Task>,

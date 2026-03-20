@@ -15,6 +15,7 @@ export const state: AppState = reactive({
   currentUser: null,
   isDragging: false,
   detailTask: null,
+  allUsers: [],
 });
 
 // 20 vordefinierte Farben für Spalten.

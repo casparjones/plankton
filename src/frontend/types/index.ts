@@ -9,6 +9,7 @@ export interface ProjectDoc {
   _rev?: string
   title: string
   slug: string
+  owner?: string | null
   columns: Column[]
   users: User[]
   tasks: Task[]
@@ -162,6 +163,7 @@ export interface AppState {
   currentUser: Claims | null
   isDragging: boolean
   detailTask: Task | null
+  allUsers: { username: string; display_name: string }[]
 }
 
 /** API-Fehler-Response vom Backend. */
