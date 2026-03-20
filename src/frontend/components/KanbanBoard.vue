@@ -271,9 +271,11 @@ function onMoveCheck(evt: any): boolean {
 /** SortableJS @add: Task aus anderer Spalte hierhin verschoben. */
 function onSortAdd(columnId: string, evt: any): void {
   const tasks = columnTasks.value[columnId] || []
-  const task = tasks[evt.newIndex]
-  if (!task) return
-  persistMoves([{ task_id: task.id, column_id: columnId, order: evt.newIndex }])
+  if (!tasks.length) return
+  // Alle Tasks in der Zielspalte mit neuen order-Werten persistieren,
+  // damit die Reihenfolge nach Server-Reload korrekt bleibt.
+  const moves = tasks.map((t, i) => ({ task_id: t.id, column_id: columnId, order: i }))
+  persistMoves(moves)
 }
 
 /** Spalten-Reihenfolge nach Drag persistieren. */
