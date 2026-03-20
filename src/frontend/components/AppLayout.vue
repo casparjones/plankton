@@ -200,6 +200,7 @@ onMounted(() => {
       <header class="board-header">
         <h1 id="project-title" class="board-title"></h1>
         <span id="git-status-icon" class="git-status-icon" style="display:none" title="Git"></span>
+        <button class="search-toggle-btn" title="Suche (Ctrl+K)" onclick="window.__kanbanToggleSearch?.()">&#128269;</button>
         <button id="import-btn" class="import-btn" title="Issues importieren">&#8615; Import</button>
         <button id="project-menu-btn" class="project-menu-btn" title="Projekt-Menü">&#9776;</button>
         <div id="project-dropdown" class="project-dropdown"></div>
