@@ -5,6 +5,7 @@ import { state } from '../state';
 import { renderBoard } from '../components/board';
 import { renderProjectList, updateProjectTitle } from '../components/sidebar';
 import { subscribeSSE } from './sse-service';
+import { toast } from '../toast';
 import type { ProjectDoc, Task } from '../types';
 
 function lastProjectKey(): string {
@@ -62,6 +63,7 @@ export async function createProject(title: string): Promise<void> {
   updateProjectTitle();
   subscribeSSE(state.project._id);
   history.pushState({ project: newSlug }, '', `/p/${newSlug}`);
+  toast.success(`Projekt "${state.project.title}" erstellt`);
 }
 
 export async function renameProject(id: string, newTitle: string): Promise<void> {
@@ -76,12 +78,15 @@ export async function renameProject(id: string, newTitle: string): Promise<void>
     saveLastProject(newSlug);
     history.replaceState({ project: newSlug }, '', `/p/${newSlug}`);
   }
+  toast.success(`Projekt umbenannt zu "${newTitle}"`);
 }
 
 export async function deleteProject(id: string): Promise<void> {
   const project = await api.get<ProjectDoc>(`/api/projects/${id}?include_archived=true`);
+  const projectTitle = project.title;
   const rev = project._rev;
   await api.del(`/api/projects/${id}?rev=${rev}`);
+  toast.success(`Projekt "${projectTitle}" gelöscht`);
   await loadProjects();
   if (state.project?._id === id || state.project?.slug === id) {
     if (state.projects.length > 0) {
@@ -94,23 +99,28 @@ export async function deleteProject(id: string): Promise<void> {
   }
 }
 
-export async function saveTask(task: Task): Promise<void> {
+export async function saveTask(task: Task, silent?: boolean): Promise<void> {
   state.project = await api.put<ProjectDoc>(
       `/api/projects/${state.project!._id}/tasks/${task.id}`,
       task
   );
   renderBoard();
+  if (!silent) toast.success(`"${task.title}" gespeichert`);
 }
 
 export async function createTaskViaApi(task: Task): Promise<void> {
   state.project = await api.post<ProjectDoc>(`/api/projects/${state.project!._id}/tasks`, task);
   renderBoard();
+  toast.success(`"${task.title}" erstellt`);
 }
 
 export async function deleteTask(taskId: string): Promise<void> {
+  const task = state.project?.tasks.find(t => t.id === taskId);
+  const taskTitle = task?.title || taskId;
   await api.del(`/api/projects/${state.project!._id}/tasks/${taskId}`);
   state.project = await api.get<ProjectDoc>(`/api/projects/${state.project!._id}`);
   renderBoard();
+  toast.success(`"${taskTitle}" gelöscht`);
 }
 
 export async function moveTask(taskId: string, columnId: string, order: number, skipRender?: boolean): Promise<void> {

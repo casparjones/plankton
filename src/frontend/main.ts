@@ -9,8 +9,8 @@ import App from './App.vue'
 
 const app = createApp(App)
 app.use(Toast, {
-  position: 'top-right',
-  timeout: 4000,
+  position: 'bottom-right',
+  timeout: 3000,
   closeOnClick: true,
   pauseOnHover: true,
   draggable: true,

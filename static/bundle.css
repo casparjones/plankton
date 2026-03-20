@@ -3237,7 +3237,7 @@ body {
 }
 
 
-.board-columns[data-v-d1cc4982] {
+.board-columns[data-v-c397e570] {
   display: flex;
   gap: 12px;
   overflow-x: auto;
@@ -3245,7 +3245,7 @@ body {
   min-height: 200px;
   align-items: flex-start;
 }
-.kanban-column[data-v-d1cc4982] {
+.kanban-column[data-v-c397e570] {
   min-width: 280px;
   max-width: 320px;
   flex: 0 0 300px;
@@ -3255,7 +3255,7 @@ body {
   flex-direction: column;
   max-height: calc(100vh - 140px);
 }
-.kanban-board-header[data-v-d1cc4982] {
+.kanban-board-header[data-v-c397e570] {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3264,30 +3264,30 @@ body {
   flex-shrink: 0;
   cursor: grab;
 }
-.kanban-board-header[data-v-d1cc4982]:active {
+.kanban-board-header[data-v-c397e570]:active {
   cursor: grabbing;
 }
-.col-done .kanban-board-header[data-v-d1cc4982] {
+.col-done .kanban-board-header[data-v-c397e570] {
   cursor: default;
 }
-.column-dragging[data-v-d1cc4982] {
+.column-dragging[data-v-c397e570] {
   opacity: 0.4;
 }
-.kanban-drag[data-v-d1cc4982] {
+.kanban-drag[data-v-c397e570] {
   min-height: 40px;
   padding: 4px 8px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
-.kanban-item[data-v-d1cc4982] {
+.kanban-item[data-v-c397e570] {
   cursor: grab;
   margin-bottom: 6px;
 }
-.kanban-item[data-v-d1cc4982]:active {
+.kanban-item[data-v-c397e570]:active {
   cursor: grabbing;
 }
-.kanban-empty[data-v-d1cc4982] {
+.kanban-empty[data-v-c397e570] {
   padding: 16px;
   text-align: center;
   opacity: 0.5;

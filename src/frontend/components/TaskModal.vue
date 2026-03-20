@@ -157,13 +157,13 @@ async function save(): Promise<void> {
     for (const blockerId of added) {
       const blocker = allTasks.find((t: Task) => t.id === blockerId)
       if (blocker && !blocker.blocks.includes(taskId)) {
-        await saveTask({ ...blocker, blocks: [...blocker.blocks, taskId] })
+        await saveTask({ ...blocker, blocks: [...blocker.blocks, taskId] }, true)
       }
     }
     for (const blockerId of removed) {
       const blocker = allTasks.find((t: Task) => t.id === blockerId)
       if (blocker && blocker.blocks.includes(taskId)) {
-        await saveTask({ ...blocker, blocks: blocker.blocks.filter(id => id !== taskId) })
+        await saveTask({ ...blocker, blocks: blocker.blocks.filter(id => id !== taskId) }, true)
       }
     }
   }

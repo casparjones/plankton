@@ -201,8 +201,22 @@ function onDragEnd(evt: any): void {
 function persistMoves(moves: { task_id: string; column_id: string; order: number }[]): void {
   if (!moves.length) return
   api.post(`/api/projects/${state.project!._id}/tasks/batch-move`, { moves })
-    .then(() => console.log('[DnD] ✅ batch-move', moves.length, 'tasks'))
-    .catch(err => console.error('[DnD] ❌ batch-move failed:', err))
+    .then(() => {
+      // Toast nur bei Spalten-Wechsel (nicht bei Reorder innerhalb einer Spalte)
+      if (moves.length === 1) {
+        const m = moves[0]
+        const task = state.project?.tasks.find((t: Task) => t.id === m.task_id)
+        const col = state.project?.columns.find((c: Column) => c.id === m.column_id)
+        if (task && col && task.column_id !== m.column_id) {
+          toast.success(`"${task.title}" → ${col.title}`)
+        }
+      }
+    })
+    .catch(err => {
+      console.error('[DnD] ❌ batch-move failed:', err)
+      toast.error('Verschieben fehlgeschlagen')
+      refreshColumnTasks()
+    })
 }
 
 /** SortableJS @update: Task innerhalb derselben Spalte verschoben. */
@@ -237,9 +251,9 @@ function onSortAdd(columnId: string, evt: any): void {
     toast.error(`Blockiert durch: ${blockerNames}`, {
       timeout: 5000,
     })
-    // SortableJS hat das DOM-Element verschoben, aber der State ist noch korrekt.
-    // renderBoard() baut das Board aus dem State neu → Task springt zurück.
-    nextTick(() => renderBoard())
+    // VueDraggable hat den Task ins neue Array verschoben.
+    // column_id ist aber noch die alte Spalte → refreshColumnTasks baut korrekt neu.
+    refreshColumnTasks()
     return
   }
   persistMoves([{ task_id: task.id, column_id: columnId, order: evt.newIndex }])
