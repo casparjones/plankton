@@ -222,7 +222,21 @@ function onSortUpdate(columnId: string, evt: any): void {
 function onSortAdd(columnId: string, evt: any): void {
   const tasks = columnTasks.value[columnId] || []
   const task = tasks[evt.newIndex]
-  if (task) persistMoves([{ task_id: task.id, column_id: columnId, order: evt.newIndex }])
+  if (!task) return
+  // Warnung: blockierte Tasks können nicht auf Done verschoben werden.
+  const doneCol = state.project?.columns.find((c: Column) => c.title === 'Done')
+  if (doneCol && columnId === doneCol.id && isBlocked(task)) {
+    const blockerNames = (task.blocked_by || [])
+      .map(bid => state.project!.tasks.find((t: Task) => t.id === bid))
+      .filter(t => t && t.column_id !== doneCol.id)
+      .map(t => `"${t!.title}"`)
+      .join(', ')
+    alert(`Task "${task.title}" ist blockiert durch: ${blockerNames}\n\nBitte erst die blockierenden Tasks abschließen.`)
+    // Revert: Board neu rendern um den Task zurückzulegen
+    renderBoard()
+    return
+  }
+  persistMoves([{ task_id: task.id, column_id: columnId, order: evt.newIndex }])
 }
 
 /** Spalten-Reihenfolge nach Drag persistieren. */

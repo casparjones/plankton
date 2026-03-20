@@ -277,6 +277,25 @@ pub async fn move_task(
         .find(|t| t.id == task_id || t.slug == task_id)
         .map(|t| t.id.clone())
         .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
+    // Blocked-Check: Task darf nicht auf Done verschoben werden, wenn Blocker offen sind.
+    let done_col_id = project.columns.iter().find(|c| c.title == "Done").map(|c| c.id.clone());
+    if let Some(ref done_id) = done_col_id {
+        if &req.column_id == done_id {
+            if let Some(task) = project.tasks.iter().find(|t| t.id == real_task_id) {
+                let open_blockers: Vec<&str> = task.blocked_by.iter()
+                    .filter_map(|bid| project.tasks.iter().find(|t| t.id == *bid))
+                    .filter(|t| Some(&t.column_id) != done_col_id.as_ref())
+                    .map(|t| t.title.as_str())
+                    .collect();
+                if !open_blockers.is_empty() {
+                    return Err(ApiError::BadRequest(format!(
+                        "Task ist blockiert durch: {}",
+                        open_blockers.join(", ")
+                    )));
+                }
+            }
+        }
+    }
     if let Some(task) = project.tasks.iter_mut().find(|t| t.id == real_task_id) {
         let old_col = task.column_id.clone();
         let old_name = column_name(&old_col);
@@ -304,6 +323,27 @@ pub async fn batch_move_tasks(
     Json(req): Json<BatchMoveRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut project = state.store.resolve_project(&id).await?;
+    // Blocked-Check: keine blockierten Tasks auf Done verschieben.
+    let done_col_id = project.columns.iter().find(|c| c.title == "Done").map(|c| c.id.clone());
+    if let Some(ref done_id) = done_col_id {
+        for m in &req.moves {
+            if &m.column_id == done_id {
+                if let Some(task) = project.tasks.iter().find(|t| t.id == m.task_id) {
+                    let open_blockers: Vec<&str> = task.blocked_by.iter()
+                        .filter_map(|bid| project.tasks.iter().find(|t| t.id == *bid))
+                        .filter(|t| Some(&t.column_id) != done_col_id.as_ref())
+                        .map(|t| t.title.as_str())
+                        .collect();
+                    if !open_blockers.is_empty() {
+                        return Err(ApiError::BadRequest(format!(
+                            "Task \"{}\" ist blockiert durch: {}",
+                            task.title, open_blockers.join(", ")
+                        )));
+                    }
+                }
+            }
+        }
+    }
     for m in &req.moves {
         if let Some(task) = project.tasks.iter_mut().find(|t| t.id == m.task_id) {
             task.column_id = m.column_id.clone();
