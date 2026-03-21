@@ -1,5 +1,11 @@
 /* Task Detail View */
 
+.detail-side-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
 .detail-title {
     font-size: 22px;
     font-weight: 700;
@@ -15,7 +21,7 @@
     min-height: 300px;
 }
 
-.detail-col-main { display: flex; flex-direction: column; gap: 20px; }
+.detail-col-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .detail-col-side { display: flex; flex-direction: column; gap: 16px; }
 
 .detail-section {
@@ -83,6 +89,8 @@
     padding: 10px 12px;
     overflow-x: auto;
     margin: 0.5em 0;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 .markdown-body pre code {
     background: none;

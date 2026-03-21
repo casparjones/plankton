@@ -387,3 +387,12 @@
 }
 
 .bulk-bar.visible { display: flex; }
+
+/* New task glow animation */
+@keyframes task-glow {
+    0%   { box-shadow: 0 0 8px 2px var(--accent); border-color: var(--accent); }
+    100% { box-shadow: none; border-color: var(--border); }
+}
+.kanban-item.task-new-glow {
+    animation: task-glow 2s ease-out forwards;
+}

@@ -5,7 +5,16 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import Sortable from 'sortablejs'
+import { marked } from 'marked'
 import type { Task, Column, ProjectDoc } from '../types'
+
+/** Markdown → Plaintext für Task-Preview (Tags strippen) */
+function stripMarkdown(text: string): string {
+  const html = marked.parse(text, { async: false }) as string
+  const tmp = document.createElement('div')
+  tmp.innerHTML = html
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim()
+}
 
 import { state } from '../state'
 import api from '../api'
@@ -169,6 +178,19 @@ function refreshColumnTasks(): void {
   }
   columnTasks.value = result
   console.log('[KanbanBoard] columnTasks updated:', Object.keys(result).length, 'columns')
+  // Apply glow animation to newly created task.
+  const glowId = (window as any).__newTaskGlowId
+  if (glowId) {
+    delete (window as any).__newTaskGlowId
+    nextTick(() => {
+      const el = document.querySelector(`.task-inner[data-task-id="${glowId}"]`)?.closest('.kanban-item') as HTMLElement | null
+      if (el) {
+        el.classList.add('task-new-glow')
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        setTimeout(() => el.classList.remove('task-new-glow'), 2500)
+      }
+    })
+  }
 }
 
 // Initialer Aufbau und bei Projekt-Änderungen aktualisieren.
@@ -470,7 +492,7 @@ window.__kanbanToggleSearch = toggleSearch
               </span>
             </div>
             <div v-if="task.description" class="task-desc">
-              {{ task.description.substring(0, 80) }}{{ task.description.length > 80 ? '…' : '' }}
+              {{ ((p) => p.substring(0, 80) + (p.length > 80 ? '…' : ''))(stripMarkdown(task.description)) }}
             </div>
             <div class="task-meta">
               <div class="task-labels">

@@ -13,10 +13,11 @@ use crate::services::{extract_token_from_headers, publish_event, publish_update,
 use crate::state::AppState;
 
 /// Caller-Identität aus Headers auflösen (JWT oder Agent-Token).
-async fn resolve_caller(headers: &axum::http::HeaderMap, state: &AppState) -> String {
+/// Gibt Err(Unauthorized) zurück wenn kein gültiger Token gefunden wird.
+async fn resolve_caller(headers: &axum::http::HeaderMap, state: &AppState) -> Result<String, ApiError> {
     if let Some(t) = extract_token_from_headers(headers) {
         if let Ok(claims) = validate_jwt(&t, &state.jwt_secret) {
-            return claims.display_name;
+            return Ok(claims.display_name);
         }
     }
     if let Some(bearer) = headers
@@ -25,10 +26,10 @@ async fn resolve_caller(headers: &axum::http::HeaderMap, state: &AppState) -> St
         .and_then(|s| s.strip_prefix("Bearer "))
     {
         if let Ok(agent_token) = state.store.get_token_by_value(bearer).await {
-            return agent_token.name;
+            return Ok(agent_token.name);
         }
     }
-    "anonymous".to_string()
+    Err(ApiError::Unauthorized("Invalid or missing token".into()))
 }
 
 /// POST /api/projects/:id/import – Mehrere Tasks auf einmal importieren.
@@ -39,7 +40,7 @@ pub async fn import_tasks(
     Json(req): Json<ImportRequest>,
 ) -> Result<Json<ImportResponse>, ApiError> {
     let mut project = state.store.resolve_project(&id).await?;
-    let user_name = resolve_caller(&headers, &state).await;
+    let user_name = resolve_caller(&headers, &state).await?;
 
     let now = Utc::now().to_rfc3339();
     let today = Local::now().format("%Y-%m-%d %H:%M").to_string();
@@ -149,9 +150,15 @@ pub async fn create_task(
     let now = Utc::now().to_rfc3339();
     task.created_at = now.clone();
     task.updated_at = now;
-    let user_name = resolve_caller(&headers, &state).await;
+    let user_name = resolve_caller(&headers, &state).await?;
     if task.creator.is_empty() {
         task.creator = user_name;
+    }
+    // Shift existing tasks in the same column to make room at the top (order 0).
+    for t in project.tasks.iter_mut() {
+        if t.column_id == task.column_id && t.order >= task.order {
+            t.order += 1;
+        }
     }
     project.tasks.push(task.clone());
     let updated = state.store.put_project(project).await?;
@@ -266,7 +273,7 @@ pub async fn move_task(
     Json(req): Json<MoveTaskRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut project = state.store.resolve_project(&id).await?;
-    let user_name = resolve_caller(&headers, &state).await;
+    let user_name = resolve_caller(&headers, &state).await?;
     let column_name = |col_id: &str| -> String {
         project.columns.iter()
             .find(|c| c.id == col_id)
@@ -314,6 +321,26 @@ pub async fn move_task(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// POST /api/projects/:id/tasks/reorder – Tasks innerhalb einer Spalte umsortieren.
+pub async fn reorder_tasks(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<ReorderRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut project = state.store.resolve_project(&id).await?;
+    let mut reordered = 0;
+    for (i, tid) in req.task_ids.iter().enumerate() {
+        if let Some(task) = project.tasks.iter_mut().find(|t| (t.id == *tid || t.slug == *tid) && t.column_id == req.column_id) {
+            task.order = i as i32;
+            task.updated_at = Utc::now().to_rfc3339();
+            reordered += 1;
+        }
+    }
+    state.store.put_project(project).await?;
+    publish_update(&state, &id).await;
+    Ok(Json(serde_json::json!({ "ok": true, "reordered": reordered })))
+}
+
 /// POST /api/projects/:id/tasks/batch-move – Mehrere Tasks auf einmal verschieben.
 pub async fn batch_move_tasks(
     State(state): State<AppState>,
@@ -322,7 +349,7 @@ pub async fn batch_move_tasks(
     Json(req): Json<BatchMoveRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut project = state.store.resolve_project(&id).await?;
-    let user_name = resolve_caller(&headers, &state).await;
+    let user_name = resolve_caller(&headers, &state).await?;
     // Blocked-Check: keine blockierten Tasks auf Done verschieben.
     let done_col_id = project.columns.iter().find(|c| c.title == "Done").map(|c| c.id.clone());
     if let Some(ref done_id) = done_col_id {

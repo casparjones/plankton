@@ -111,6 +111,9 @@ export async function saveTask(task: Task, silent?: boolean): Promise<void> {
 
 export async function createTaskViaApi(task: Task): Promise<void> {
   state.project = await api.post<ProjectDoc>(`/api/projects/${state.project!._id}/tasks`, task);
+  // Mark the newly created task for glow animation.
+  const created = state.project.tasks.find(t => t.title === task.title && t.column_id === task.column_id);
+  if (created) (window as any).__newTaskGlowId = created.id;
   renderBoard();
   toast.success(`"${task.title}" erstellt`);
 }

@@ -225,23 +225,202 @@ CONFIG_DIR="${{HOME}}/.config/plankton"
 CONFIG_FILE="${{CONFIG_DIR}}/config"
 DEFAULT_SERVER="{default_url}"
 
-# ─── Konfiguration ──────────────────────────────────────────
+# ─── Konfiguration (Multi-Remote INI-Format) ────────────────
 
 load_config() {{
     PLANKTON_SERVER=""
     PLANKTON_TOKEN=""
-    if [[ -f "$CONFIG_FILE" ]]; then
-        source "$CONFIG_FILE"
+    CURRENT_REMOTE=""
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        return
+    fi
+
+    # Legacy-Format erkennen (flaches PLANKTON_SERVER=... ohne Sektionen)
+    if grep -q '^PLANKTON_SERVER=' "$CONFIG_FILE" 2>/dev/null && ! grep -q '^\[' "$CONFIG_FILE" 2>/dev/null; then
+        migrate_legacy_config
+        return
+    fi
+
+    # INI-Format lesen
+    CURRENT_REMOTE=$(grep '^CURRENT_REMOTE=' "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d= -f2-)
+    if [[ -z "$CURRENT_REMOTE" ]]; then
+        return
+    fi
+
+    # Aktiven Remote laden
+    local in_section=false
+    while IFS= read -r line; do
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
+        if [[ "$line" == "[$CURRENT_REMOTE]" ]]; then
+            in_section=true
+            continue
+        fi
+        if [[ "$line" =~ ^\[ ]]; then
+            $in_section && break
+            continue
+        fi
+        if $in_section; then
+            case "$line" in
+                URL=*) PLANKTON_SERVER="${{line#URL=}}" ;;
+                PLANKTON_TOKEN=*) PLANKTON_TOKEN="${{line#PLANKTON_TOKEN=}}" ;;
+            esac
+        fi
+    done < "$CONFIG_FILE"
+}}
+
+migrate_legacy_config() {{
+    local old_server="" old_token=""
+    source "$CONFIG_FILE"
+    old_server="${{PLANKTON_SERVER:-}}"
+    old_token="${{PLANKTON_TOKEN:-}}"
+
+    if [[ -n "$old_server" ]]; then
+        # Name aus URL ableiten
+        local name="default"
+        CURRENT_REMOTE="$name"
+        PLANKTON_SERVER="$old_server"
+        PLANKTON_TOKEN="$old_token"
+        save_config_remote "$name" "$old_server" "$old_token"
     fi
 }}
 
-save_config() {{
+# Einen einzelnen Remote in die Config schreiben (upsert)
+save_config_remote() {{
+    local name="$1" url="$2" token="$3"
     mkdir -p "$CONFIG_DIR"
-    cat > "$CONFIG_FILE" <<CONF
-PLANKTON_SERVER=$PLANKTON_SERVER
-PLANKTON_TOKEN=$PLANKTON_TOKEN
+
+    if [[ ! -f "$CONFIG_FILE" ]] || ! grep -q '^\[' "$CONFIG_FILE" 2>/dev/null; then
+        # Neue Config anlegen
+        cat > "$CONFIG_FILE" <<CONF
+CURRENT_REMOTE=$CURRENT_REMOTE
+
+[$name]
+URL=$url
+PLANKTON_TOKEN=$token
 CONF
+        chmod 600 "$CONFIG_FILE"
+        return
+    fi
+
+    # CURRENT_REMOTE aktualisieren
+    if grep -q '^CURRENT_REMOTE=' "$CONFIG_FILE"; then
+        sed -i "s|^CURRENT_REMOTE=.*|CURRENT_REMOTE=$CURRENT_REMOTE|" "$CONFIG_FILE"
+    else
+        sed -i "1i CURRENT_REMOTE=$CURRENT_REMOTE" "$CONFIG_FILE"
+    fi
+
+    # Sektion ersetzen oder hinzufügen
+    local tmpfile
+    tmpfile=$(mktemp)
+    local in_section=false replaced=false
+    while IFS= read -r line; do
+        if [[ "$line" == "[$name]" ]]; then
+            in_section=true
+            replaced=true
+            echo "[$name]" >> "$tmpfile"
+            echo "URL=$url" >> "$tmpfile"
+            echo "PLANKTON_TOKEN=$token" >> "$tmpfile"
+            continue
+        fi
+        if [[ "$line" =~ ^\[ ]]; then
+            in_section=false
+        fi
+        if ! $in_section; then
+            echo "$line" >> "$tmpfile"
+        fi
+    done < "$CONFIG_FILE"
+
+    if ! $replaced; then
+        echo "" >> "$tmpfile"
+        echo "[$name]" >> "$tmpfile"
+        echo "URL=$url" >> "$tmpfile"
+        echo "PLANKTON_TOKEN=$token" >> "$tmpfile"
+    fi
+
+    mv "$tmpfile" "$CONFIG_FILE"
     chmod 600 "$CONFIG_FILE"
+}}
+
+# Remote aus Config entfernen
+remove_config_remote() {{
+    local name="$1"
+    if [[ ! -f "$CONFIG_FILE" ]]; then return; fi
+
+    local tmpfile
+    tmpfile=$(mktemp)
+    local in_section=false
+    while IFS= read -r line; do
+        if [[ "$line" == "[$name]" ]]; then
+            in_section=true
+            continue
+        fi
+        if [[ "$line" =~ ^\[ ]]; then
+            in_section=false
+        fi
+        if ! $in_section; then
+            echo "$line" >> "$tmpfile"
+        fi
+    done < "$CONFIG_FILE"
+
+    # Falls gelöschter Remote der aktive war, CURRENT_REMOTE leeren
+    if [[ "$CURRENT_REMOTE" == "$name" ]]; then
+        sed -i "s|^CURRENT_REMOTE=.*|CURRENT_REMOTE=|" "$tmpfile"
+    fi
+
+    mv "$tmpfile" "$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"
+}}
+
+# Alle Remote-Namen auflisten
+list_remotes() {{
+    if [[ ! -f "$CONFIG_FILE" ]]; then return; fi
+    grep '^\[' "$CONFIG_FILE" | tr -d '[]'
+}}
+
+# plankton_secrets.md generieren
+update_secrets_md() {{
+    local secrets_dir="${{HOME}}/.claude"
+    local secrets_file="${{secrets_dir}}/plankton_secrets.md"
+    mkdir -p "$secrets_dir"
+
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        rm -f "$secrets_file"
+        return
+    fi
+
+    local content="# Plankton Server Tokens"
+    content+=$'\n'
+
+    local current_section="" current_url="" current_token=""
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        [[ "$line" =~ ^CURRENT_REMOTE= ]] && continue
+        if [[ "$line" =~ ^\[(.+)\]$ ]]; then
+            # Vorherige Sektion schreiben
+            if [[ -n "$current_section" && -n "$current_url" && -n "$current_token" ]]; then
+                local host
+                host=$(echo "$current_url" | sed 's|https\?://||;s|/$||')
+                content+=$'\n'"[$host]"$'\n'"PLANKTON_TOKEN=$current_token"$'\n'
+            fi
+            current_section="${{BASH_REMATCH[1]}}"
+            current_url=""
+            current_token=""
+            continue
+        fi
+        case "$line" in
+            URL=*) current_url="${{line#URL=}}" ;;
+            PLANKTON_TOKEN=*) current_token="${{line#PLANKTON_TOKEN=}}" ;;
+        esac
+    done < "$CONFIG_FILE"
+
+    # Letzte Sektion schreiben
+    if [[ -n "$current_section" && -n "$current_url" && -n "$current_token" ]]; then
+        local host
+        host=$(echo "$current_url" | sed 's|https\?://||;s|/$||')
+        content+=$'\n'"[$host]"$'\n'"PLANKTON_TOKEN=$current_token"$'\n'
+    fi
+
+    echo "$content" > "$secrets_file"
 }}
 
 need_auth() {{
@@ -264,6 +443,7 @@ api() {{
 # ─── Login (Device Flow) ────────────────────────────────────
 
 cmd_login() {{
+    load_config
     local server="${{1:-$DEFAULT_SERVER}}"
     server="${{server%/}}"
 
@@ -300,7 +480,12 @@ cmd_login() {{
             token=$(echo "$resp" | jq -r '.token')
             PLANKTON_SERVER="$server"
             PLANKTON_TOKEN="$token"
-            save_config
+
+            # Remote-Name bestimmen: aktueller Remote oder "default"
+            local remote_name="${{CURRENT_REMOTE:-default}}"
+            CURRENT_REMOTE="$remote_name"
+            save_config_remote "$remote_name" "$server" "$token"
+            update_secrets_md
             echo "  ✓ Login successful!"
             echo ""
 
@@ -312,6 +497,7 @@ cmd_login() {{
             role=$(echo "$me" | jq -r '.role // "unknown"')
             echo "  Logged in as: $name ($role)"
             echo "  Server: $PLANKTON_SERVER"
+            echo "  Remote: $remote_name"
             echo ""
             return 0
         fi
@@ -408,6 +594,7 @@ cmd_status() {{
         return
     fi
 
+    echo "  Remote: ${{CURRENT_REMOTE:-default}}"
     echo "  Server: $PLANKTON_SERVER"
 
     local me
@@ -429,11 +616,12 @@ cmd_status() {{
 
 cmd_logout() {{
     load_config
-    PLANKTON_SERVER=""
-    PLANKTON_TOKEN=""
-    save_config
+    if [[ -n "$CURRENT_REMOTE" ]]; then
+        save_config_remote "$CURRENT_REMOTE" "$PLANKTON_SERVER" ""
+    fi
+    update_secrets_md
     echo ""
-    echo "  ✓ Logged out."
+    echo "  ✓ Logged out from ${{CURRENT_REMOTE:-default}}."
     echo ""
 }}
 
@@ -453,6 +641,7 @@ cmd_info() {{
     echo "  Version:        $VERSION"
     echo "  Installed from: $INSTALLED_FROM"
     echo "  Config:         $CONFIG_FILE"
+    echo "  Active remote:  ${{CURRENT_REMOTE:-(none)}}"
     echo ""
 
     if [[ -z "$PLANKTON_SERVER" ]]; then
@@ -532,61 +721,134 @@ VIBEEOF
 cmd_projects() {{
     load_config
     if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in. Run: plankton login <url>"; exit 1; fi
-    local resp
+    local resp md=false
+    for arg in "$@"; do [[ "$arg" == "--md" ]] && md=true; done
     resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects") || {{ echo "Error fetching projects"; exit 1; }}
-    echo ""
-    echo "  Projects:"
-    echo "  ━━━━━━━━━"
-    echo "$resp" | jq -r '.[] | "  \(.slug // ._id)  \(.title)  (\(.tasks | length) tasks)"'
-    echo ""
+    if $md; then
+        echo "# Projects"
+        echo ""
+        echo "| Slug | Title | Tasks |"
+        echo "|------|-------|-------|"
+        echo "$resp" | jq -r '.[] | "| \(.slug // ._id) | \(.title) | \(.tasks | length) |"'
+    else
+        echo ""
+        echo "  Projects:"
+        echo "  ━━━━━━━━━"
+        echo "$resp" | jq -r '.[] | "  \(.slug // ._id)  \(.title)  (\(.tasks | length) tasks)"'
+        echo ""
+    fi
 }}
 
 cmd_view_project() {{
     load_config
     if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in."; exit 1; fi
-    local pid="${{1:-}}"
-    if [ -z "$pid" ]; then echo "Usage: plankton view <slug>"; exit 1; fi
+    local pid="" md=false
+    for arg in "$@"; do
+        case "$arg" in
+            --md) md=true ;;
+            *) [ -z "$pid" ] && pid="$arg" ;;
+        esac
+    done
+    if [ -z "$pid" ]; then echo "Usage: plankton view <slug> [--md]"; exit 1; fi
     local resp
-    resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$pid") || {{ echo "Error fetching project"; exit 1; }}
-    echo ""
-    echo "  $(echo "$resp" | jq -r '.title')"
-    echo "  ━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "$resp" | jq -r '.columns[] | select(.hidden != true) | "  \(.title): \(.id)"'
-    echo ""
-    echo "  Tasks by column:"
-    echo "$resp" | jq -r '
-        .columns[] | select(.hidden != true) | .id as $cid | .title as $ctitle |
-        "\n  ── \($ctitle) ──",
-        ([$ctitle, (input_line_number // 0)] | ""),
-        (.. | objects | select(.column_id == $cid) | "    [\(.task_type // "task")] \(.title) (\(.worker // "-"))")
-    ' 2>/dev/null || echo "$resp" | jq -r '
-        .columns[] as $col |
-        if ($col.hidden != true) then
-            "\n  ── \($col.title) ──",
-            ([.tasks[] | select(.column_id == $col.id)] | if length > 0 then .[] | "    [\(.task_type // "task")] \(.title) (\(.worker // "-"))" else "    (empty)" end)
-        else empty end
-    '
-    echo ""
+    resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$pid?sort=order&group_epics=true") || {{ echo "Error fetching project"; exit 1; }}
+    if $md; then
+        local title
+        title=$(echo "$resp" | jq -r '.title')
+        echo "# $title"
+        echo ""
+        local hdr='#''#'
+        echo "$resp" | jq -r --arg hdr "$hdr" '
+            .columns[] as $col |
+            if ($col.hidden != true) then
+                .tasks as $tasks |
+                ($hdr + " " + $col.title),
+                "",
+                ([$tasks[] | select(.column_id == $col.id) | select(.parent_id == "" or .parent_id == null)] | sort_by(.order) | if length > 0 then .[] |
+                    . as $t |
+                    "- **" + .title + "**" +
+                    (if .task_type == "epic" then " [epic]" elif .task_type == "job" then " [job]" else "" end) +
+                    (if .points > 0 then " (" + (.points|tostring) + "pt)" else "" end) +
+                    (if .worker != "" then " @" + .worker else "" end) +
+                    (if (.labels | length) > 0 then " `" + (.labels | join("` `")) + "`" else "" end),
+                    ([$tasks[] | select(.parent_id == $t.id)] | sort_by(.order) | .[] |
+                        "  - " + .title +
+                        (if .points > 0 then " (" + (.points|tostring) + "pt)" else "" end) +
+                        (if .worker != "" then " @" + .worker else "" end) +
+                        (if (.labels | length) > 0 then " `" + (.labels | join("` `")) + "`" else "" end)
+                    )
+                else "_(empty)_" end),
+                ""
+            else empty end
+        '
+    else
+        echo ""
+        echo "  $(echo "$resp" | jq -r '.title')"
+        echo "  ━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "$resp" | jq -r '.columns[] | select(.hidden != true) | "  \(.title): \(.id)"'
+        echo ""
+        echo "  Tasks by column:"
+        echo "$resp" | jq -r '
+            .columns[] as $col |
+            if ($col.hidden != true) then
+                "\n  ── \($col.title) ──",
+                ([.tasks[] | select(.column_id == $col.id) | select(.parent_id == "" or .parent_id == null)] | sort_by(.order) | if length > 0 then .[] |
+                    . as $t |
+                    "    [\(.task_type // "task")] \(.title) (\(.worker // "-"))",
+                    ([.tasks[] | select(.parent_id == $t.id)] | sort_by(.order) | .[] |
+                        "      └─ \(.title) (\(.worker // "-"))"
+                    )
+                else "    (empty)" end)
+            else empty end
+        ' 2>/dev/null || echo "$resp" | jq -r '
+            .columns[] as $col |
+            if ($col.hidden != true) then
+                "\n  ── \($col.title) ──",
+                ([.tasks[] | select(.column_id == $col.id)] | sort_by(.order) | if length > 0 then .[] | "    [\(.task_type // "task")] \(.title) (\(.worker // "-"))" else "    (empty)" end)
+            else empty end
+        '
+        echo ""
+    fi
 }}
 
 cmd_tasks() {{
     load_config
     if [ -z "$PLANKTON_TOKEN" ]; then echo "Not logged in."; exit 1; fi
-    local pid="${{1:-}}"
-    if [ -z "$pid" ]; then echo "Usage: plankton tasks <slug>"; exit 1; fi
+    local pid="" md=false
+    for arg in "$@"; do
+        case "$arg" in
+            --md) md=true ;;
+            *) [ -z "$pid" ] && pid="$arg" ;;
+        esac
+    done
+    if [ -z "$pid" ]; then echo "Usage: plankton tasks <slug> [--md]"; exit 1; fi
     local resp
-    resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$pid") || {{ echo "Error fetching project"; exit 1; }}
-    echo ""
-    printf "  %-8s %-6s %-40s %-12s %-8s %s\n" "ID" "TYPE" "TITLE" "COLUMN" "PTS" "WORKER"
-    echo "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "$resp" | jq -r '
-        .columns as $cols |
-        .tasks[] |
-        . as $t |
-        ($cols[] | select(.id == $t.column_id) | .title) as $col |
-        "  \($t.id[:8]) \($t.task_type // "task" | .[0:6]) \($t.title[:40]) \($col[:12]) \($t.points) \($t.worker // "-")"
-    '
-    echo ""
+    resp=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" "$PLANKTON_SERVER/api/projects/$pid?sort=order&group_epics=true") || {{ echo "Error fetching project"; exit 1; }}
+    if $md; then
+        echo "# Tasks – $(echo "$resp" | jq -r '.title')"
+        echo ""
+        echo "| # | Type | Title | Column | Pts | Worker | Labels |"
+        echo "|---|------|-------|--------|-----|--------|--------|"
+        echo "$resp" | jq -r '
+            .columns as $cols |
+            .tasks | to_entries[] |
+            .key as $idx | .value as $t |
+            ($cols[] | select(.id == $t.column_id) | .title) as $col |
+            "| \($idx + 1) | \($t.task_type // "task") | \(if $t.parent_id != "" and $t.parent_id != null then "  -> " else "" end)\($t.title) | \($col) | \($t.points) | \($t.worker // "-") | \($t.labels | join(", ")) |"
+        '
+    else
+        echo ""
+        printf "  %-4s %-6s %-40s %-12s %-4s %s\n" "#" "TYPE" "TITLE" "COLUMN" "PTS" "WORKER"
+        echo "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "$resp" | jq -r '
+            .columns as $cols |
+            .tasks | to_entries[] |
+            .key as $idx | .value as $t |
+            ($cols[] | select(.id == $t.column_id) | .title) as $col |
+            "  \($idx + 1 | tostring | .[0:4]) \($t.task_type // "task" | .[0:6]) \(if $t.parent_id != "" and $t.parent_id != null then "  └ " else "" end)\($t.title[:40]) \($col[:12]) \($t.points) \($t.worker // "-")"
+        '
+        echo ""
+    fi
 }}
 
 # ─── Export / Import ──────────────────────────────────────────
@@ -716,6 +978,118 @@ cmd_import() {{
     echo ""
 }}
 
+# ─── Remote ──────────────────────────────────────────────────
+
+cmd_remote() {{
+    load_config
+    local subcmd="${{1:-list}}"
+    shift 2>/dev/null || true
+
+    case "$subcmd" in
+        add)
+            local name="$1" url="$2"
+            if [[ -z "$name" || -z "$url" ]]; then
+                echo "Usage: plankton remote add <name> <url>"
+                exit 1
+            fi
+            url="${{url%/}}"
+            if [[ -z "$CURRENT_REMOTE" ]]; then
+                CURRENT_REMOTE="$name"
+            fi
+            save_config_remote "$name" "$url" ""
+            update_secrets_md
+            echo ""
+            echo "  ✓ Remote '$name' added: $url"
+            if [[ "$CURRENT_REMOTE" == "$name" ]]; then
+                echo "  (set as active remote)"
+            fi
+            echo "  Run: plankton login $url"
+            echo ""
+            ;;
+        remove|rm)
+            local name="$1"
+            if [[ -z "$name" ]]; then
+                echo "Usage: plankton remote remove <name>"
+                exit 1
+            fi
+            remove_config_remote "$name"
+            load_config
+            update_secrets_md
+            echo ""
+            echo "  ✓ Remote '$name' removed."
+            echo ""
+            ;;
+        switch)
+            local name="$1"
+            if [[ -z "$name" ]]; then
+                echo "Usage: plankton remote switch <name>"
+                exit 1
+            fi
+            local found=false
+            for r in $(list_remotes); do
+                [[ "$r" == "$name" ]] && found=true
+            done
+            if ! $found; then
+                echo "  ✗ Remote '$name' not found."
+                echo "  Available: $(list_remotes | tr '\n' ' ')"
+                exit 1
+            fi
+            CURRENT_REMOTE="$name"
+            # CURRENT_REMOTE in Config aktualisieren
+            if grep -q '^CURRENT_REMOTE=' "$CONFIG_FILE" 2>/dev/null; then
+                sed -i "s|^CURRENT_REMOTE=.*|CURRENT_REMOTE=$name|" "$CONFIG_FILE"
+            fi
+            load_config
+            echo ""
+            echo "  ✓ Switched to remote '$name' ($PLANKTON_SERVER)"
+            echo ""
+            ;;
+        list|"")
+            echo ""
+            echo "  Remotes:"
+            echo "  ━━━━━━━━"
+            if [[ ! -f "$CONFIG_FILE" ]]; then
+                echo "  (none configured)"
+                echo ""
+                return
+            fi
+            local current_section="" current_url=""
+            while IFS= read -r line; do
+                [[ -z "$line" ]] && continue
+                [[ "$line" =~ ^CURRENT_REMOTE= ]] && continue
+                if [[ "$line" =~ ^\[(.+)\]$ ]]; then
+                    if [[ -n "$current_section" ]]; then
+                        local marker="  "
+                        [[ "$current_section" == "$CURRENT_REMOTE" ]] && marker="* "
+                        echo "  $marker$current_section  $current_url"
+                    fi
+                    current_section="${{BASH_REMATCH[1]}}"
+                    current_url=""
+                    continue
+                fi
+                case "$line" in
+                    URL=*) current_url="${{line#URL=}}" ;;
+                esac
+            done < "$CONFIG_FILE"
+            if [[ -n "$current_section" ]]; then
+                local marker="  "
+                [[ "$current_section" == "$CURRENT_REMOTE" ]] && marker="* "
+                echo "  $marker$current_section  $current_url"
+            fi
+            echo ""
+            ;;
+        *)
+            echo "Unknown remote command: $subcmd"
+            echo "Usage: plankton remote [add|remove|switch|list]"
+            exit 1
+            ;;
+    esac
+}}
+
+cmd_use() {{
+    cmd_remote switch "$@"
+}}
+
 # ─── Help ────────────────────────────────────────────────────
 
 cmd_help() {{
@@ -726,12 +1100,17 @@ cmd_help() {{
     echo "  Usage: plankton <command> [options]"
     echo ""
     echo "  Commands:"
-    echo "    login <url>          Login to a Plankton server (device flow)"
-    echo "    logout               Clear stored credentials"
+    echo "    login [url]          Login to current (or given) server"
+    echo "    logout               Clear credentials for current remote"
     echo "    status               Show connection info"
-    echo "    projects             List all projects"
-    echo "    view <slug>          View project with columns and tasks"
-    echo "    tasks <slug>         List tasks in a project"
+    echo "    remote               List configured remotes"
+    echo "    remote add <n> <url> Add a remote server"
+    echo "    remote remove <n>    Remove a remote"
+    echo "    remote switch <n>    Switch active remote"
+    echo "    use <name>           Shortcut for remote switch"
+    echo "    projects [--md]      List all projects (--md for Markdown output)"
+    echo "    view <slug> [--md]   View project with columns and tasks"
+    echo "    tasks <slug> [--md]  List tasks in a project"
     echo "    export [-f] [-p slug] [-d dir]  Export projects as JSON"
     echo "    import [-f] [-p slug] [-d dir]  Import JSON to server"
     echo "    init                 Create .vibe/ project structure"
@@ -756,7 +1135,9 @@ case "${{1:-help}}" in
     login)      shift; cmd_login "$@" ;;
     logout)     cmd_logout ;;
     status)     cmd_status ;;
-    projects)   cmd_projects ;;
+    remote)     shift; cmd_remote "$@" ;;
+    use)        shift; cmd_use "$@" ;;
+    projects)   shift; cmd_projects "$@" ;;
     view)       shift; cmd_view_project "$@" ;;
     tasks)      shift; cmd_tasks "$@" ;;
     export)     shift; cmd_export "$@" ;;
@@ -811,43 +1192,73 @@ pub async fn cli_login_page(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plankton – CLI Login</title>
 <style>
+  :root {{
+    --cli-bg: #1a1a2e; --cli-surface: #16213e; --cli-input-bg: #0f3460;
+    --cli-text: #e0e0e0; --cli-text-dim: #aaa; --cli-border: #333;
+    --cli-accent: #64ffda; --cli-accent-text: #1a1a2e;
+    --cli-shadow: rgba(0,0,0,0.3);
+    --cli-ok-bg: rgba(100,255,218,0.1); --cli-err-bg: rgba(255,82,82,0.1); --cli-err: #ff5252;
+    color-scheme: dark;
+  }}
+  @media (prefers-color-scheme: light) {{
+    :root:not([data-theme="dark"]) {{
+      --cli-bg: #f5f5f7; --cli-surface: #ffffff; --cli-input-bg: #eeeef2;
+      --cli-text: #1a1a2e; --cli-text-dim: #6e6e82; --cli-border: #d0d0d8;
+      --cli-accent: #6b5ce7; --cli-accent-text: #ffffff;
+      --cli-shadow: rgba(0,0,0,0.08);
+      --cli-ok-bg: rgba(107,92,231,0.1); --cli-err-bg: rgba(255,82,82,0.1); --cli-err: #d94452;
+      color-scheme: light;
+    }}
+  }}
+  [data-theme="light"] {{
+    --cli-bg: #f5f5f7; --cli-surface: #ffffff; --cli-input-bg: #eeeef2;
+    --cli-text: #1a1a2e; --cli-text-dim: #6e6e82; --cli-border: #d0d0d8;
+    --cli-accent: #6b5ce7; --cli-accent-text: #ffffff;
+    --cli-shadow: rgba(0,0,0,0.08);
+    --cli-ok-bg: rgba(107,92,231,0.1); --cli-err-bg: rgba(255,82,82,0.1); --cli-err: #d94452;
+    color-scheme: light;
+  }}
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #1a1a2e; color: #e0e0e0;
+    background: var(--cli-bg); color: var(--cli-text);
     display: flex; justify-content: center; align-items: center;
     min-height: 100vh;
   }}
   .card {{
-    background: #16213e; border-radius: 12px; padding: 40px;
-    max-width: 420px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    background: var(--cli-surface); border-radius: 12px; padding: 40px;
+    max-width: 420px; width: 100%; box-shadow: 0 8px 32px var(--cli-shadow);
   }}
   h1 {{ font-size: 24px; margin-bottom: 8px; }}
-  .subtitle {{ color: #888; margin-bottom: 24px; }}
+  .subtitle {{ color: var(--cli-text-dim); margin-bottom: 24px; }}
   .code {{ font-family: monospace; font-size: 28px; letter-spacing: 4px;
-    color: #64ffda; text-align: center; padding: 16px;
-    background: #0f3460; border-radius: 8px; margin: 16px 0; }}
-  label {{ display: block; margin-bottom: 4px; font-size: 14px; color: #aaa; }}
-  input {{ width: 100%; padding: 10px 12px; border: 1px solid #333;
-    border-radius: 6px; background: #0f3460; color: #e0e0e0;
+    color: var(--cli-accent); text-align: center; padding: 16px;
+    background: var(--cli-input-bg); border-radius: 8px; margin: 16px 0; }}
+  label {{ display: block; margin-bottom: 4px; font-size: 14px; color: var(--cli-text-dim); }}
+  input {{ width: 100%; padding: 10px 12px; border: 1px solid var(--cli-border);
+    border-radius: 6px; background: var(--cli-input-bg); color: var(--cli-text);
     font-size: 14px; margin-bottom: 12px; outline: none; }}
-  input:focus {{ border-color: #64ffda; }}
+  input:focus {{ border-color: var(--cli-accent); }}
   button {{
     width: 100%; padding: 12px; border: none; border-radius: 6px;
-    background: #64ffda; color: #1a1a2e; font-size: 16px;
+    background: var(--cli-accent); color: var(--cli-accent-text); font-size: 16px;
     font-weight: 600; cursor: pointer; transition: opacity 0.2s;
   }}
   button:hover {{ opacity: 0.9; }}
   button:disabled {{ opacity: 0.5; cursor: default; }}
   .msg {{ text-align: center; padding: 12px; border-radius: 6px;
     margin-top: 16px; font-size: 14px; }}
-  .msg.ok {{ background: rgba(100,255,218,0.1); color: #64ffda; }}
-  .msg.err {{ background: rgba(255,82,82,0.1); color: #ff5252; }}
+  .msg.ok {{ background: var(--cli-ok-bg); color: var(--cli-accent); }}
+  .msg.err {{ background: var(--cli-err-bg); color: var(--cli-err); }}
   .step {{ display: none; }}
   .step.active {{ display: block; }}
 </style>
 </head>
 <body>
+<script>
+// Theme vom Plankton-Board uebernehmen (localStorage) oder System-Preference nutzen.
+(function(){{var t=localStorage.getItem('plankton-theme');if(t)document.documentElement.setAttribute('data-theme',t)}})();
+</script>
 <div class="card">
   <h1><img src="/icons/favicon-32.png" alt="" style="vertical-align:middle;margin-right:8px" />Plankton CLI Login</h1>
   <p class="subtitle">Authorize your terminal session</p>

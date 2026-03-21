@@ -113,6 +113,50 @@ pub async fn get_project(
         project.tasks.retain(|t| !hidden_col_ids.contains(&t.column_id));
         project.columns.retain(|c| !c.hidden);
     }
+    // Sort tasks based on query parameter (default: order).
+    match query.sort.as_deref() {
+        Some("title") => project.tasks.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
+        Some("created") => project.tasks.sort_by(|a, b| a.created_at.cmp(&b.created_at)),
+        Some("updated") => project.tasks.sort_by(|a, b| b.updated_at.cmp(&a.updated_at)),
+        Some("points") => project.tasks.sort_by(|a, b| b.points.cmp(&a.points)),
+        _ => project.tasks.sort_by_key(|t| t.order),
+    }
+    // Group epics with their subtasks: epic first, then its children in order.
+    if query.group_epics {
+        let mut grouped: Vec<Task> = Vec::with_capacity(project.tasks.len());
+        let mut placed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        // Collect subtask IDs for quick lookup.
+        let subtask_parent: std::collections::HashMap<String, String> = project.tasks.iter()
+            .filter(|t| !t.parent_id.is_empty())
+            .map(|t| (t.id.clone(), t.parent_id.clone()))
+            .collect();
+        for task in &project.tasks {
+            if placed.contains(&task.id) { continue; }
+            // Skip subtasks here; they'll be placed after their parent.
+            if subtask_parent.contains_key(&task.id) { continue; }
+            grouped.push(task.clone());
+            placed.insert(task.id.clone());
+            // If this is an epic, insert its subtasks right after.
+            if !task.subtask_ids.is_empty() {
+                // Maintain order among subtasks.
+                let mut subs: Vec<&Task> = project.tasks.iter()
+                    .filter(|t| t.parent_id == task.id && !placed.contains(&t.id))
+                    .collect();
+                subs.sort_by_key(|t| t.order);
+                for sub in subs {
+                    grouped.push(sub.clone());
+                    placed.insert(sub.id.clone());
+                }
+            }
+        }
+        // Append any remaining tasks (orphaned subtasks whose parent wasn't found).
+        for task in &project.tasks {
+            if !placed.contains(&task.id) {
+                grouped.push(task.clone());
+            }
+        }
+        project.tasks = grouped;
+    }
     Ok(Json(project))
 }
 

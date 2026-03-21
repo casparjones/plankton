@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use chrono::{Local, Utc};
-use futures::{stream, Stream};
+use futures::{stream, Stream, StreamExt as _};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -38,6 +38,7 @@ fn all_tools() -> Vec<ToolDef> {
         ToolDef { name: "list_subtasks", description: "List subtasks of an epic with completion status", roles: None },
         ToolDef { name: "add_relation", description: "Add a relation (blocks or subtask) between two tasks", roles: Some(&["developer", "manager", "admin"]) },
         ToolDef { name: "remove_relation", description: "Remove a relation between two tasks", roles: Some(&["developer", "manager", "admin"]) },
+        ToolDef { name: "reorder_tasks", description: "Reorder tasks within a column by providing task IDs in desired order", roles: Some(&["manager", "admin"]) },
     ]
 }
 
@@ -53,10 +54,11 @@ fn tools_for_role(role: &str) -> Vec<ToolDef> {
 }
 
 /// Caller-Identität aus Headers auflösen (JWT oder Agent-Token).
-async fn resolve_caller(headers: &axum::http::HeaderMap, state: &AppState) -> (String, String) {
+/// Gibt Err(Unauthorized) zurück wenn kein gültiger Token gefunden wird.
+async fn resolve_caller(headers: &axum::http::HeaderMap, state: &AppState) -> Result<(String, String), ApiError> {
     if let Some(t) = extract_token_from_headers(headers) {
         if let Ok(claims) = validate_jwt(&t, &state.jwt_secret) {
-            return (claims.display_name, claims.role);
+            return Ok((claims.display_name, claims.role));
         }
     }
     if let Some(bearer) = headers
@@ -65,10 +67,10 @@ async fn resolve_caller(headers: &axum::http::HeaderMap, state: &AppState) -> (S
         .and_then(|s| s.strip_prefix("Bearer "))
     {
         if let Ok(agent_token) = state.store.get_token_by_value(bearer).await {
-            return (agent_token.name, agent_token.role);
+            return Ok((agent_token.name, agent_token.role));
         }
     }
-    ("anonymous".to_string(), String::new())
+    Err(ApiError::Unauthorized("Invalid or missing token".into()))
 }
 
 /// GET /mcp/tools – Verfügbare Tools auflisten.
@@ -76,11 +78,9 @@ pub async fn list_tools(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
 ) -> Json<Vec<ToolDef>> {
-    let (_, role) = resolve_caller(&headers, &state).await;
-    if role.is_empty() {
-        Json(all_tools())
-    } else {
-        Json(tools_for_role(&role))
+    match resolve_caller(&headers, &state).await {
+        Ok((_, role)) if !role.is_empty() => Json(tools_for_role(&role)),
+        _ => Json(all_tools()),
     }
 }
 
@@ -90,86 +90,57 @@ pub async fn call_tool(
     headers: axum::http::HeaderMap,
     Json(call): Json<McpCall>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let (caller, _) = resolve_caller(&headers, &state).await;
+    let (caller, _) = resolve_caller(&headers, &state).await?;
     let out = execute_tool(&state, &call.tool, &call.arguments, &caller).await?;
     Ok(Json(out))
 }
 
-/// POST /mcp – JSON-RPC 2.0 MCP-Endpunkt mit Streamable HTTP Transport.
-/// Erstellt bei "initialize" eine Session und gibt Mcp-Session-Id Header zurück.
-pub async fn mcp_jsonrpc(
-    State(state): State<AppState>,
-    headers: axum::http::HeaderMap,
-    body: axum::body::Bytes,
-) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    use axum::http::{header, StatusCode};
-
-    let (caller, caller_role) = resolve_caller(&headers, &state).await;
-    let rpc: JsonRpcRequest = match serde_json::from_slice(&body) {
-        Ok(r) => r,
-        Err(e) => {
-            let resp = JsonRpcResponse {
-                jsonrpc: "2.0".into(),
-                result: None,
-                error: Some(JsonRpcError { code: -32700, message: format!("Parse error: {e}") }),
-                id: serde_json::Value::Null,
-            };
-            return Json(resp).into_response();
-        }
-    };
-    let id = rpc.id.clone().unwrap_or(serde_json::Value::Null);
-
-    // Session-ID aus Header lesen oder bei initialize neu erstellen
-    let session_id = headers
-        .get("mcp-session-id")
+/// Prüft ob der Client SSE-Streaming akzeptiert (Accept: text/event-stream).
+fn wants_sse(headers: &axum::http::HeaderMap) -> bool {
+    headers
+        .get("accept")
         .and_then(|v| v.to_str().ok())
-        .map(String::from);
+        .map(|s| s.contains("text/event-stream"))
+        .unwrap_or(false)
+}
 
-    // Validate session if header provided (except for initialize)
-    if let Some(ref sid) = session_id {
-        if rpc.method != "initialize" {
-            let sessions = state.mcp_sessions.lock().await;
-            if !sessions.contains_key(sid) {
-                let resp = JsonRpcResponse {
-                    jsonrpc: "2.0".into(),
-                    result: None,
-                    error: Some(JsonRpcError { code: -32001, message: "Invalid session".into() }),
-                    id,
-                };
-                return (StatusCode::NOT_FOUND, Json(resp)).into_response();
-            }
-        }
-    }
+/// Verarbeitet eine einzelne JSON-RPC-Anfrage und gibt die Antwort zurück.
+async fn handle_single_rpc(
+    state: &AppState,
+    rpc: &JsonRpcRequest,
+    caller: &str,
+    caller_role: &str,
+    session_id: &Option<String>,
+) -> Option<JsonRpcResponse> {
+    let id = rpc.id.clone().unwrap_or(serde_json::Value::Null);
+    // Notifications (kein id-Feld) erhalten keine Antwort
+    let is_notification = rpc.id.is_none();
 
     let response = match rpc.method.as_str() {
         "initialize" => {
-            let new_session_id = Uuid::new_v4().to_string();
-            let (tx, _) = broadcast::channel::<String>(100);
-            let session = McpSession {
-                caller: caller.clone(),
-                role: caller_role.clone(),
-                created_at: Utc::now(),
-                tx,
-            };
-            state.mcp_sessions.lock().await.insert(new_session_id.clone(), session);
-
-            let resp = JsonRpcResponse {
+            // initialize wird separat behandelt (neue Session)
+            // Dieser Pfad sollte nicht erreicht werden, da mcp_jsonrpc es vorher abfängt.
+            JsonRpcResponse {
                 jsonrpc: "2.0".into(),
-                result: Some(serde_json::json!({
-                    "protocolVersion": "2025-03-26",
-                    "capabilities": { "tools": {} },
-                    "serverInfo": { "name": "plankton-mcp", "version": "0.2.0" }
-                })),
+                result: Some(serde_json::json!({"error": "initialize handled separately"})),
                 error: None,
                 id,
-            };
-            return (
-                [(header::HeaderName::from_static("mcp-session-id"), new_session_id)],
-                Json(resp),
-            ).into_response();
+            }
         }
-        "initialized" | "notifications/initialized" => JsonRpcResponse {
+        "initialized" | "notifications/initialized" => {
+            if is_notification { return None; }
+            JsonRpcResponse {
+                jsonrpc: "2.0".into(),
+                result: Some(serde_json::json!({})),
+                error: None,
+                id,
+            }
+        }
+        "notifications/cancelled" => {
+            // Client hat eine Anfrage abgebrochen – acknowledged.
+            return None;
+        }
+        "ping" => JsonRpcResponse {
             jsonrpc: "2.0".into(),
             result: Some(serde_json::json!({})),
             error: None,
@@ -179,7 +150,7 @@ pub async fn mcp_jsonrpc(
             let tools = if caller_role.is_empty() {
                 all_tools()
             } else {
-                tools_for_role(&caller_role)
+                tools_for_role(caller_role)
             };
             let tool_list: Vec<_> = tools
                 .iter()
@@ -205,7 +176,7 @@ pub async fn mcp_jsonrpc(
             let arguments = rpc.params.get("arguments")
                 .cloned()
                 .unwrap_or(serde_json::json!({}));
-            match execute_tool(&state, tool_name, &arguments, &caller).await {
+            match execute_tool(state, tool_name, &arguments, caller).await {
                 Ok(result) => JsonRpcResponse {
                     jsonrpc: "2.0".into(),
                     result: Some(serde_json::json!({
@@ -225,6 +196,18 @@ pub async fn mcp_jsonrpc(
                 },
             }
         }
+        "resources/list" => JsonRpcResponse {
+            jsonrpc: "2.0".into(),
+            result: Some(serde_json::json!({ "resources": [] })),
+            error: None,
+            id,
+        },
+        "prompts/list" => JsonRpcResponse {
+            jsonrpc: "2.0".into(),
+            result: Some(serde_json::json!({ "prompts": [] })),
+            error: None,
+            id,
+        },
         _ => JsonRpcResponse {
             jsonrpc: "2.0".into(),
             result: None,
@@ -236,14 +219,245 @@ pub async fn mcp_jsonrpc(
         },
     };
 
-    // Antwort mit Session-ID Header falls vorhanden
-    if let Some(sid) = session_id {
+    if is_notification { None } else { Some(response) }
+}
+
+/// POST /mcp – JSON-RPC 2.0 MCP-Endpunkt mit Streamable HTTP Transport.
+/// Unterstützt sowohl JSON- als auch SSE-Antworten (je nach Accept-Header).
+/// Erstellt bei "initialize" eine Session und gibt Mcp-Session-Id Header zurück.
+pub async fn mcp_jsonrpc(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    use axum::http::{header, StatusCode};
+
+    let use_sse = wants_sse(&headers);
+    let auth_result = resolve_caller(&headers, &state).await;
+
+    // Session-ID aus Header
+    let session_id = headers
+        .get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    // Versuche als einzelne Anfrage oder Batch zu parsen
+    let raw: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            let resp = JsonRpcResponse {
+                jsonrpc: "2.0".into(),
+                result: None,
+                error: Some(JsonRpcError { code: -32700, message: format!("Parse error: {e}") }),
+                id: serde_json::Value::Null,
+            };
+            return Json(resp).into_response();
+        }
+    };
+
+    // Batch oder einzeln?
+    let requests: Vec<JsonRpcRequest> = if raw.is_array() {
+        match serde_json::from_value(raw) {
+            Ok(batch) => batch,
+            Err(e) => {
+                let resp = JsonRpcResponse {
+                    jsonrpc: "2.0".into(),
+                    result: None,
+                    error: Some(JsonRpcError { code: -32600, message: format!("Invalid batch: {e}") }),
+                    id: serde_json::Value::Null,
+                };
+                return Json(resp).into_response();
+            }
+        }
+    } else {
+        match serde_json::from_value(raw) {
+            Ok(single) => vec![single],
+            Err(e) => {
+                let resp = JsonRpcResponse {
+                    jsonrpc: "2.0".into(),
+                    result: None,
+                    error: Some(JsonRpcError { code: -32600, message: format!("Invalid request: {e}") }),
+                    id: serde_json::Value::Null,
+                };
+                return Json(resp).into_response();
+            }
+        }
+    };
+
+    if requests.is_empty() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    // Session-Validierung (außer für initialize)
+    let has_init = requests.iter().any(|r| r.method == "initialize");
+    if !has_init {
+        match &session_id {
+            Some(sid) => {
+                let sessions = state.mcp_sessions.lock().await;
+                if !sessions.contains_key(sid) {
+                    let resp = JsonRpcResponse {
+                        jsonrpc: "2.0".into(),
+                        result: None,
+                        error: Some(JsonRpcError { code: -32001, message: "Invalid or expired session".into() }),
+                        id: serde_json::Value::Null,
+                    };
+                    return (StatusCode::NOT_FOUND, Json(resp)).into_response();
+                }
+            }
+            None => {
+                // Kein Session-Header und kein initialize → Session erforderlich
+                let resp = JsonRpcResponse {
+                    jsonrpc: "2.0".into(),
+                    result: None,
+                    error: Some(JsonRpcError { code: -32002, message: "Mcp-Session-Id header required".into() }),
+                    id: serde_json::Value::Null,
+                };
+                return (StatusCode::BAD_REQUEST, Json(resp)).into_response();
+            }
+        }
+    }
+
+    // Initialize separat behandeln (darf ohne Auth funktionieren)
+    if has_init {
+        let init_rpc = requests.iter().find(|r| r.method == "initialize").unwrap();
+        let id = init_rpc.id.clone().unwrap_or(serde_json::Value::Null);
+        let new_session_id = Uuid::new_v4().to_string();
+        let (tx, _) = broadcast::channel::<String>(100);
+        let (caller, caller_role) = auth_result.unwrap_or_else(|_| ("anonymous".into(), String::new()));
+        let session = McpSession {
+            caller,
+            role: caller_role,
+            created_at: Utc::now(),
+            tx,
+        };
+        state.mcp_sessions.lock().await.insert(new_session_id.clone(), session);
+
+        let resp = JsonRpcResponse {
+            jsonrpc: "2.0".into(),
+            result: Some(serde_json::json!({
+                "protocolVersion": "2025-03-26",
+                "capabilities": {
+                    "tools": { "listChanged": true },
+                    "resources": {},
+                    "prompts": {}
+                },
+                "serverInfo": { "name": "plankton-mcp", "version": "0.3.0" }
+            })),
+            error: None,
+            id,
+        };
+
+        return (
+            [
+                (header::HeaderName::from_static("mcp-session-id"), new_session_id),
+            ],
+            Json(resp),
+        ).into_response();
+    }
+
+    // Auth erforderlich für alle nicht-initialize Requests
+    let (caller, caller_role) = match auth_result {
+        Ok(pair) => pair,
+        Err(_) => {
+            let resp = JsonRpcResponse {
+                jsonrpc: "2.0".into(),
+                result: None,
+                error: Some(JsonRpcError { code: -32000, message: "Unauthorized: invalid or missing token".into() }),
+                id: serde_json::Value::Null,
+            };
+            return (StatusCode::UNAUTHORIZED, Json(resp)).into_response();
+        }
+    };
+
+    // Alle Requests verarbeiten
+    let mut responses: Vec<JsonRpcResponse> = Vec::new();
+    for rpc in &requests {
+        if let Some(resp) = handle_single_rpc(&state, rpc, &caller, &caller_role, &session_id).await {
+            responses.push(resp);
+        }
+    }
+
+    // SSE-Modus: Antworten als SSE-Events streamen
+    if use_sse {
+        let sid = session_id.clone().unwrap_or_default();
+        // Sende alle Antworten als einzelne SSE-Events, dann hole den broadcast-Rx
+        // für server-initiierte Nachrichten
+        let rx = {
+            let sessions = state.mcp_sessions.lock().await;
+            sessions.get(&sid).map(|s| s.tx.subscribe())
+        };
+
+        let initial_events: Vec<Result<Event, std::convert::Infallible>> = responses
+            .into_iter()
+            .filter_map(|r| {
+                serde_json::to_string(&r).ok().map(|json| {
+                    Ok(Event::default().event("message").data(json))
+                })
+            })
+            .collect();
+
+        let initial_stream = futures::stream::iter(initial_events);
+
+        if let Some(rx) = rx {
+            // Nach den initialen Antworten auf server-initiierte Nachrichten warten
+            let notification_stream = stream::unfold(rx, |mut rx| async move {
+                match rx.recv().await {
+                    Ok(msg) => Some((
+                        Ok::<_, std::convert::Infallible>(Event::default().event("message").data(msg)),
+                        rx,
+                    )),
+                    Err(broadcast::error::RecvError::Lagged(_)) => Some((
+                        Ok(Event::default().event("message").data(
+                            serde_json::json!({"jsonrpc":"2.0","method":"notifications/message","params":{"level":"warning","data":"lagged"}}).to_string()
+                        )),
+                        rx,
+                    )),
+                    Err(broadcast::error::RecvError::Closed) => None,
+                }
+            });
+
+            let combined = initial_stream.chain(notification_stream);
+
+            let mut resp = Sse::new(combined).into_response();
+            if let Some(sid) = session_id {
+                resp.headers_mut().insert(
+                    header::HeaderName::from_static("mcp-session-id"),
+                    sid.parse().unwrap_or_else(|_| "invalid".parse().unwrap()),
+                );
+            }
+            return resp;
+        } else {
+            // Kein rx, nur initiale Events
+            let mut resp = Sse::new(initial_stream).into_response();
+            if let Some(sid) = session_id {
+                resp.headers_mut().insert(
+                    header::HeaderName::from_static("mcp-session-id"),
+                    sid.parse().unwrap_or_else(|_| "invalid".parse().unwrap()),
+                );
+            }
+            return resp;
+        }
+    }
+
+    // JSON-Modus: Einzelne Antwort oder Batch
+    let sid_header = session_id.unwrap_or_default();
+    if responses.len() == 1 {
         (
-            [(header::HeaderName::from_static("mcp-session-id"), sid)],
-            Json(response),
+            [(header::HeaderName::from_static("mcp-session-id"), sid_header)],
+            Json(responses.into_iter().next().unwrap()),
+        ).into_response()
+    } else if responses.is_empty() {
+        // Nur Notifications – kein Body, 202 Accepted
+        (
+            StatusCode::ACCEPTED,
+            [(header::HeaderName::from_static("mcp-session-id"), sid_header)],
         ).into_response()
     } else {
-        Json(response).into_response()
+        (
+            [(header::HeaderName::from_static("mcp-session-id"), sid_header)],
+            Json(responses),
+        ).into_response()
     }
 }
 
@@ -432,6 +646,9 @@ async fn execute_tool(
                 let new_name = col_name(column_id);
                 task.previous_row = task.column_id.clone();
                 task.column_id = column_id.to_string();
+                if let Some(order) = args["order"].as_i64() {
+                    task.order = order as i32;
+                }
                 task.updated_at = Utc::now().to_rfc3339();
                 task.logs.push(log_entry(&caller, &format!("→ {}", new_name)));
             }
@@ -778,6 +995,31 @@ async fn execute_tool(
             publish_update(state, project_id).await;
             Ok(serde_json::json!({"ok": true}))
         }
+        "reorder_tasks" => {
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let column_id = args["column_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("column_id missing".into()))?;
+            let task_ids = args["task_ids"]
+                .as_array()
+                .ok_or_else(|| ApiError::BadRequest("task_ids missing (array of task IDs in desired order)".into()))?;
+            let mut project = state.store.get_project(project_id).await?;
+            let mut reordered = 0;
+            for (i, tid_val) in task_ids.iter().enumerate() {
+                if let Some(tid) = tid_val.as_str() {
+                    if let Some(task) = project.tasks.iter_mut().find(|t| t.id == tid && t.column_id == column_id) {
+                        task.order = i as i32;
+                        task.updated_at = Utc::now().to_rfc3339();
+                        reordered += 1;
+                    }
+                }
+            }
+            state.store.put_project(project).await?;
+            publish_update(state, project_id).await;
+            Ok(serde_json::json!({"ok": true, "reordered": reordered}))
+        }
         _ => Err(ApiError::BadRequest(format!("unknown tool: {tool}"))),
     }
 }
@@ -882,6 +1124,7 @@ Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Para
 
 **get_project** – Ein Projekt mit allen Tasks laden
 - Parameter: `id` (string, required) – Projekt-ID
+- REST-API unterstützt zusätzliche Query-Parameter: `sort` ("order"|"title"|"created"|"updated"|"points"), `group_epics` (true/false)
 - Beispiel: `{{"name":"get_project","arguments":{{"id":"PROJEKT_ID"}}}}`
 
 **summarize_board** – Board-Übersicht mit Spalten und Task-Anzahl
@@ -910,7 +1153,10 @@ Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Para
 - Beispiel: `{{"name":"create_task","arguments":{{"project_id":"ID","title":"Feature X","task_type":"epic","labels":["feature"],"points":5}}}}`
 
 **move_task** – Task in andere Spalte verschieben
-- Parameter: `project_id`, `task_id`, `column_id` (alle string, required)
+- Parameter: `project_id`, `task_id`, `column_id` (alle string, required), `order` (number, optional)
+
+**reorder_tasks** – Tasks innerhalb einer Spalte umsortieren
+- Parameter: `project_id`, `column_id` (string, required), `task_ids` (string[], required – IDs in gewünschter Reihenfolge)
 
 **assign_task** – Worker einem Task zuweisen
 - Parameter: `project_id`, `task_id`, `worker` (alle string, required)
@@ -935,24 +1181,26 @@ Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Para
   - `task_type` (string, optional – "task"|"epic"|"job")
   - `parent_id` (string, optional – Parent-Epic-ID)
 
-**add_log** – Log-Eintrag zu einem Task hinzufügen
+**add_log** – Log-Eintrag zu einem Task hinzufügen (nur für Status-Änderungen und Fortschritt, NICHT für Tester-Feedback)
 - Parameter: `project_id`, `task_id`, `message` (alle string, required)
 
-**submit_for_review** – Task zur Review einreichen (setzt Label "review")
+**submit_for_review** – Task zur Review einreichen (verschiebt nach Testing-Spalte)
 - Parameter: `project_id`, `task_id` (beide string, required)
 
 ### Tester Tools
 
+**Wichtig:** Tester schreiben Feedback und Testergebnisse immer als **Kommentar** (`add_comment`), niemals als Log (`add_log`). Logs sind für automatische Status-Änderungen reserviert.
+
 **get_review_queue** – Tasks mit Label "review" auflisten
 - Parameter: `project_id` (string, required)
 
-**add_comment** – Kommentar zu einem Task hinzufügen
+**add_comment** – Kommentar zu einem Task hinzufügen (für Tester-Feedback, Fehlerberichte, Testergebnisse)
 - Parameter: `project_id`, `task_id`, `text` (alle string, required)
 
 **approve_task** – Task abnehmen (verschiebt nach "Done", entfernt "review"-Label)
 - Parameter: `project_id`, `task_id` (beide string, required)
 
-**reject_task** – Task zurückweisen (verschiebt zurück, entfernt "review"-Label)
+**reject_task** – Task zurückweisen (verschiebt zurück nach "In Progress", entfernt "review"-Label)
 - Parameter: `project_id`, `task_id` (beide string, required), `comment` (string, optional)
 
 ### Relation Tools

@@ -8,11 +8,17 @@ pub struct DeleteQuery {
     pub rev: String,
 }
 
-/// Query-Parameter für GET /projects/:id – optionales Archiv-Flag.
+/// Query-Parameter für GET /projects/:id – optionales Archiv-Flag und Sortierung.
 #[derive(Debug, Deserialize)]
 pub struct GetProjectQuery {
     #[serde(default)]
     pub include_archived: bool,
+    /// Sortierung: "order" (default), "title", "created", "updated", "points".
+    #[serde(default)]
+    pub sort: Option<String>,
+    /// Gruppierung: wenn true, werden Epics mit ihren Subtasks gruppiert.
+    #[serde(default)]
+    pub group_epics: bool,
 }
 
 /// Body für POST /projects/:id/tasks/:task_id/move
@@ -53,6 +59,14 @@ pub struct UpdateTaskRequest {
     pub blocked_by: Option<Vec<String>>,
     pub parent_id: Option<String>,
     pub subtask_ids: Option<Vec<String>>,
+}
+
+/// Body für POST /projects/:id/tasks/reorder – Tasks in einer Spalte umsortieren.
+#[derive(Debug, Deserialize)]
+pub struct ReorderRequest {
+    pub column_id: String,
+    /// Task-IDs in gewünschter Reihenfolge.
+    pub task_ids: Vec<String>,
 }
 
 /// Body für POST /mcp/call

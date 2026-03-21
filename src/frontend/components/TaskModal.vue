@@ -73,7 +73,7 @@ function openNew(columnId: string): void {
     previous_row: '',
     assignee_ids: [],
     labels: [],
-    order: (state.project?.tasks || []).filter((t: Task) => t.column_id === columnId).length,
+    order: 0,
     points: 0,
     worker: '',
     creator: '',

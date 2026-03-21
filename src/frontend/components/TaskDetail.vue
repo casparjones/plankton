@@ -262,6 +262,12 @@ defineExpose({ open, close })
           </div>
         </div>
         <div class="detail-col-side">
+          <div class="detail-side-actions">
+            <button class="btn-mcp" @click="copyMcpLink" :title="mcpLinkCopied ? 'Kopiert!' : 'MCP-Link für Claude Code kopieren'">
+              {{ mcpLinkCopied ? '✓ Kopiert' : 'MCP Link' }}
+            </button>
+            <button class="btn-primary" @click="editTask">Bearbeiten</button>
+          </div>
           <div class="detail-section">
             <span class="detail-section-title">Details</span>
             <div class="detail-info-grid">
@@ -304,12 +310,6 @@ defineExpose({ open, close })
             </div>
           </div>
         </div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-mcp" @click="copyMcpLink" :title="mcpLinkCopied ? 'Kopiert!' : 'MCP-Link für Claude Code kopieren'">
-          {{ mcpLinkCopied ? '✓ Kopiert' : 'MCP Link' }}
-        </button>
-        <button class="btn-primary" @click="editTask">Bearbeiten</button>
       </div>
     </div>
   </div>
