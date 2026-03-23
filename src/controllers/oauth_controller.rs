@@ -352,7 +352,27 @@ pub async fn oauth_token(
     }
 }
 
-/// GET /oauth/metadata – OAuth 2.0 Server Metadata (RFC 8414).
+/// GET /.well-known/oauth-protected-resource – Protected Resource Metadata (RFC 9728).
+pub async fn oauth_protected_resource(
+    axum::extract::Host(host): axum::extract::Host,
+    headers: axum::http::HeaderMap,
+) -> Json<serde_json::Value> {
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("http");
+    let resource = format!("{scheme}://{host}");
+
+    Json(serde_json::json!({
+        "resource": resource,
+        "authorization_servers": [resource],
+        "scopes_supported": ["default"],
+        "bearer_methods_supported": ["header"],
+        "resource_name": "Plankton MCP",
+    }))
+}
+
+/// GET /.well-known/oauth-authorization-server – OAuth 2.0 Server Metadata (RFC 8414).
 pub async fn oauth_metadata(
     axum::extract::Host(host): axum::extract::Host,
     headers: axum::http::HeaderMap,

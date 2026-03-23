@@ -139,6 +139,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/token", post(oauth_token))
         .route("/register", post(oauth_register))
         .route("/.well-known/oauth-authorization-server", get(oauth_metadata))
+        .route("/.well-known/oauth-protected-resource", get(oauth_protected_resource))
         // Legacy OAuth paths (redirect to root)
         .route("/oauth/authorize", get(oauth_authorize))
         .route("/oauth/token", post(oauth_token))

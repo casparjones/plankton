@@ -95,6 +95,21 @@ pub async fn call_tool(
     Ok(Json(out))
 }
 
+/// Erzeugt eine 401-Response mit WWW-Authenticate Header (RFC 9728 Protected Resource).
+fn unauthorized_response(host: &str, scheme: &str) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    use axum::http::{StatusCode, header};
+    let resource_url = format!("{scheme}://{host}/.well-known/oauth-protected-resource");
+    let www_auth = format!(
+        "Bearer realm=\"OAuth\", resource_metadata=\"{resource_url}\", error=\"invalid_token\", error_description=\"Missing or invalid access token\""
+    );
+    (
+        StatusCode::UNAUTHORIZED,
+        [(header::WWW_AUTHENTICATE, www_auth)],
+        axum::Json(serde_json::json!({"error": "Unauthorized"})),
+    ).into_response()
+}
+
 /// Prüft ob der Client SSE-Streaming akzeptiert (Accept: text/event-stream).
 fn wants_sse(headers: &axum::http::HeaderMap) -> bool {
     headers
@@ -236,6 +251,10 @@ pub async fn mcp_jsonrpc(
     let use_sse = wants_sse(&headers);
     let auth_result = resolve_caller(&headers, &state).await;
 
+    // Host/Scheme für WWW-Authenticate Header
+    let scheme = headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or("http");
+    let host = headers.get("host").and_then(|v| v.to_str().ok()).unwrap_or("localhost");
+
     // Session-ID aus Header
     let session_id = headers
         .get("mcp-session-id")
@@ -327,13 +346,8 @@ pub async fn mcp_jsonrpc(
         let (caller, caller_role) = match &auth_result {
             Ok(pair) => pair.clone(),
             Err(_) => {
-                // Kein Token → 401 damit OAuth-Clients den Auth-Flow starten
-                return (StatusCode::UNAUTHORIZED, Json(JsonRpcResponse {
-                    jsonrpc: "2.0".into(),
-                    result: None,
-                    error: Some(JsonRpcError { code: -32000, message: "Unauthorized".into() }),
-                    id,
-                })).into_response();
+                // Kein Token → 401 mit WWW-Authenticate damit OAuth-Clients den Auth-Flow starten
+                return unauthorized_response(host, scheme);
             }
         };
         let session = McpSession {
@@ -377,25 +391,13 @@ pub async fn mcp_jsonrpc(
             if !session.caller.is_empty() && !session.role.is_empty() {
                 (session.caller.clone(), session.role.clone())
             } else {
-                return (StatusCode::UNAUTHORIZED, Json(JsonRpcResponse {
-                    jsonrpc: "2.0".into(), result: None,
-                    error: Some(JsonRpcError { code: -32000, message: "Unauthorized".into() }),
-                    id: serde_json::Value::Null,
-                })).into_response();
+                return unauthorized_response(host, scheme);
             }
         } else {
-            return (StatusCode::UNAUTHORIZED, Json(JsonRpcResponse {
-                jsonrpc: "2.0".into(), result: None,
-                error: Some(JsonRpcError { code: -32000, message: "Unauthorized".into() }),
-                id: serde_json::Value::Null,
-            })).into_response();
+            return unauthorized_response(host, scheme);
         }
     } else {
-        return (StatusCode::UNAUTHORIZED, Json(JsonRpcResponse {
-            jsonrpc: "2.0".into(), result: None,
-            error: Some(JsonRpcError { code: -32000, message: "Unauthorized".into() }),
-            id: serde_json::Value::Null,
-        })).into_response();
+        return unauthorized_response(host, scheme);
     };
 
     // Alle Requests verarbeiten
@@ -497,9 +499,11 @@ pub async fn mcp_sse_stream(
     use axum::response::IntoResponse;
     use axum::http::StatusCode;
 
-    // Auth prüfen: 401 wenn kein gültiger Token (triggert OAuth-Flow)
+    // Auth prüfen: 401 mit WWW-Authenticate wenn kein gültiger Token
     if resolve_caller(&headers, &state).await.is_err() {
-        return StatusCode::UNAUTHORIZED.into_response();
+        let scheme = headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or("http");
+        let host = headers.get("host").and_then(|v| v.to_str().ok()).unwrap_or("localhost");
+        return unauthorized_response(host, scheme);
     }
 
     let session_id = match headers
