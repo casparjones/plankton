@@ -374,34 +374,23 @@ onMounted(() => {
         </div>
 
         <h3>Login</h3>
-        <p>Melde dich bei diesem Plankton-Server an (Device Flow im Browser):</p>
-        <pre class="prompt-content" id="cli-login-cmd">plankton login ...</pre>
+        <p>Server hinzuf&uuml;gen und einloggen (wie <code>git remote add</code>):</p>
+        <pre class="prompt-content" id="cli-login-cmd">plankton remote add origin ...</pre>
         <div class="modal-actions">
           <button class="btn-small" data-cli-copy="cli-login-cmd">In Zwischenablage kopieren</button>
         </div>
 
-        <h3>Update</h3>
-        <p>CLI auf die neueste Version aktualisieren:</p>
-        <pre class="prompt-content" id="cli-update-cmd">curl -fsSL .../install | bash</pre>
-
-        <h3>Befehle</h3>
-        <div class="cli-commands-table">
-          <pre class="prompt-content">plankton login &lt;url&gt;          Login via Browser (Device Flow)
-plankton logout               Abmelden
-plankton status               Verbindungsinfo anzeigen
-plankton --info               Version, Server und Auth-Status
-plankton --version             Versionsnummer
-plankton skill install [-g]   Claude Code Skill installieren
-plankton skill update  [-g]   Skill aktualisieren
-plankton init                 Projekt-Struktur anlegen (.vibe/)
-plankton tokens               Agent-Tokens auflisten (Admin)</pre>
+        <h3>Claude Code Skill</h3>
+        <p>Skill installieren (inkl. Login + Secrets-Setup):</p>
+        <pre class="prompt-content" id="cli-skill-cmd">plankton skill install ... --global</pre>
+        <div class="modal-actions">
+          <button class="btn-small" data-cli-copy="cli-skill-cmd">In Zwischenablage kopieren</button>
         </div>
 
-        <h3>Claude Code Skill</h3>
-        <p>Der Skill wird automatisch via CLI installiert:</p>
-        <pre class="prompt-content">plankton skill install           # im Projekt: .claude/skills/plankton/
-plankton skill install --global  # persönlich: ~/.claude/skills/plankton/</pre>
-        <p class="prompt-token-hint">Secrets generierst du unter <strong>Show Prompt → Plankton → Dateien generieren → secrets.md</strong> und speicherst sie als <code>~/.claude/plankton-secrets.md</code></p>
+        <h3>Hilfe</h3>
+        <pre class="prompt-content">plankton help                    # Alle Befehle anzeigen
+plankton remote add origin ...   # Login + Update: gleicher Befehl
+curl -fsSL .../install | bash    # CLI aktualisieren</pre>
       </div>
     </div>
   </div>

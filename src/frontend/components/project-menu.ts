@@ -73,13 +73,12 @@ export function closePromptModal(): void {
 
 export function openCliModal(): void {
   const url = window.location.origin;
-  // Install-Befehl setzen.
   const installCmd = document.getElementById('cli-install-cmd');
   if (installCmd) installCmd.textContent = `curl -fsSL ${url}/install | bash`;
   const loginCmd = document.getElementById('cli-login-cmd');
-  if (loginCmd) loginCmd.textContent = `plankton login ${url}`;
-  const updateCmd = document.getElementById('cli-update-cmd');
-  if (updateCmd) updateCmd.textContent = `curl -fsSL ${url}/install | bash`;
+  if (loginCmd) loginCmd.textContent = `plankton remote add origin ${url}`;
+  const skillCmd = document.getElementById('cli-skill-cmd');
+  if (skillCmd) skillCmd.textContent = `plankton skill install ${url} --global`;
   document.getElementById('cli-modal')!.classList.add('open');
 }
 
