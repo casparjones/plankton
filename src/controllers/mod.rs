@@ -10,6 +10,7 @@ pub mod auth_controller;
 pub mod admin_controller;
 pub mod git_controller;
 pub mod cli_controller;
+pub mod oauth_controller;
 
 pub use project_controller::*;
 pub use task_controller::*;
@@ -21,3 +22,4 @@ pub use auth_controller::*;
 pub use admin_controller::*;
 pub use git_controller::*;
 pub use cli_controller::*;
+pub use oauth_controller::*;

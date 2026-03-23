@@ -3,7 +3,7 @@
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{broadcast, Mutex};
 
-use crate::models::CliSession;
+use crate::models::{CliSession, OAuthAuthCode, OAuthClient, OAuthRefreshToken};
 use crate::store::DataStore;
 
 /// MCP-Session für Streamable HTTP Transport.
@@ -22,4 +22,7 @@ pub struct AppState {
     pub jwt_secret: String,
     pub cli_sessions: Arc<Mutex<HashMap<String, CliSession>>>,
     pub mcp_sessions: Arc<Mutex<HashMap<String, McpSession>>>,
+    pub oauth_clients: Arc<Mutex<Vec<OAuthClient>>>,
+    pub oauth_codes: Arc<Mutex<HashMap<String, OAuthAuthCode>>>,
+    pub oauth_refresh_tokens: Arc<Mutex<HashMap<String, OAuthRefreshToken>>>,
 }

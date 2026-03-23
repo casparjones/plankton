@@ -131,3 +131,85 @@ pub fn generate_agent_token() -> String {
     let hex: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
     format!("plk_{}", hex)
 }
+
+// ─── OAuth 2.0 ──────────────────────────────────────────────
+
+/// Registrierter OAuth 2.0 Client.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OAuthClient {
+    pub client_id: String,
+    pub client_secret: String,
+    pub name: String,
+    pub redirect_uris: Vec<String>,
+    #[serde(default = "default_true")]
+    pub active: bool,
+    pub created_at: String,
+}
+
+/// OAuth 2.0 Authorization Code (kurzlebig, einmalig einlösbar).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OAuthAuthCode {
+    pub code: String,
+    pub client_id: String,
+    pub user_id: String,
+    pub redirect_uri: String,
+    pub scope: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// PKCE code_challenge (S256)
+    #[serde(default)]
+    pub code_challenge: Option<String>,
+}
+
+/// OAuth 2.0 Refresh Token.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OAuthRefreshToken {
+    pub token: String,
+    pub client_id: String,
+    pub user_id: String,
+    pub scope: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    #[serde(default = "default_true")]
+    pub active: bool,
+}
+
+/// OAuth 2.0 Authorization Request (Query-Parameter).
+#[derive(Debug, Deserialize)]
+pub struct OAuthAuthorizeRequest {
+    pub response_type: String,
+    pub client_id: String,
+    pub redirect_uri: String,
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub code_challenge: Option<String>,
+    #[serde(default)]
+    pub code_challenge_method: Option<String>,
+}
+
+/// OAuth 2.0 Token Request (POST body).
+#[derive(Debug, Deserialize)]
+pub struct OAuthTokenRequest {
+    pub grant_type: String,
+    #[serde(default)]
+    pub code: Option<String>,
+    #[serde(default)]
+    pub redirect_uri: Option<String>,
+    #[serde(default)]
+    pub client_id: Option<String>,
+    #[serde(default)]
+    pub client_secret: Option<String>,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
+    #[serde(default)]
+    pub code_verifier: Option<String>,
+}
+
+/// Generiert einen zufälligen OAuth-Code oder Token.
+pub fn generate_oauth_code() -> String {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let bytes: [u8; 32] = rng.gen();
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}

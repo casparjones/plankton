@@ -54,14 +54,22 @@ export function closeProjectDropdown(): void {
 
 export function openPromptModal(): void {
   if (!state.project) return;
+  const url = window.location.origin;
   // Simple-Tab: Prompt generieren.
   const prompt = generateProjectPrompt();
   document.getElementById('prompt-content')!.textContent = prompt;
   // Plankton-Tab: URL vorbelegen.
   const urlInput = document.getElementById('prompt-plankton-url') as HTMLInputElement;
   if (urlInput && !urlInput.value) {
-    urlInput.value = window.location.origin;
+    urlInput.value = url;
   }
+  // claude.ai Tab: URLs setzen.
+  const serverUrl = document.getElementById('claudeai-server-url');
+  if (serverUrl) serverUrl.textContent = `${url}/mcp`;
+  const authUrl = document.getElementById('claudeai-auth-url');
+  if (authUrl) authUrl.textContent = `${url}/oauth/authorize`;
+  const tokenUrl = document.getElementById('claudeai-token-url');
+  if (tokenUrl) tokenUrl.textContent = `${url}/oauth/token`;
   document.getElementById('prompt-modal')!.classList.add('open');
   // Tokens laden wenn Plankton-Tab aktiv ist oder beim ersten Öffnen.
   loadTokensForPrompt();

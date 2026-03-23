@@ -24,3 +24,6 @@ axum-extra = { version = "0.9", features = ["cookie"] }
 git2 = "0.19"
 url = "2"
 dotenvy = "0.15"
+sha2 = "0.10"
+base64 = "0.22"
+urlencoding = "2"
