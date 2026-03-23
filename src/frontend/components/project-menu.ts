@@ -188,7 +188,7 @@ async function loadTokensForPrompt(): Promise<void> {
   loading.style.display = 'none';
 }
 
-/** Rendert die Token-Liste im Plankton-Tab. */
+/** Rendert die Token-Liste im Plankton-Tab (maskiert, keine Secrets). */
 function renderTokenList(container: HTMLElement, tokens: AgentToken[]): void {
   if (tokens.length === 0) {
     container.innerHTML = '<p class="prompt-token-hint">Keine Tokens vorhanden.</p>';
@@ -201,7 +201,11 @@ function renderTokenList(container: HTMLElement, tokens: AgentToken[]): void {
       <code class="prompt-token-value">${escapeHtml(t.token)}</code>
       <span class="prompt-token-status ${t.active ? 'active' : 'inactive'}">${t.active ? 'aktiv' : 'inaktiv'}</span>
     </div>
-  `).join('');
+  `).join('') + `
+    <p class="prompt-token-hint" style="margin-top:8px">
+      Tokens werden aus Sicherheitsgr&uuml;nden maskiert angezeigt.<br>
+      Verwende die CLI f&uuml;r die Einrichtung: <code>plankton skill install ${window.location.origin} --global</code>
+    </p>`;
 }
 
 /** Generiert die drei Markdown-Dateien und zeigt sie an. */

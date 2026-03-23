@@ -129,7 +129,7 @@ pub async fn admin_reset_password(
 
 // ---- Token-Verwaltung ----
 
-/// GET /api/admin/tokens – Alle Agent-Tokens auflisten.
+/// GET /api/admin/tokens – Alle Agent-Tokens auflisten (Token-Werte maskiert).
 pub async fn admin_list_tokens(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
@@ -138,10 +138,16 @@ pub async fn admin_list_tokens(
         tokens
             .iter()
             .map(|t| {
+                // Token-Wert maskieren: nur Prefix "plk_" + erste 4 Zeichen + "..."
+                let masked = if t.token.len() > 8 {
+                    format!("{}...{}", &t.token[..8], &t.token[t.token.len()-4..])
+                } else {
+                    "plk_****".to_string()
+                };
                 serde_json::json!({
                     "id": t.id,
                     "name": t.name,
-                    "token": t.token,
+                    "token": masked,
                     "role": t.role,
                     "active": t.active,
                     "created_at": t.created_at,

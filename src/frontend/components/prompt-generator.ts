@@ -8,40 +8,39 @@ export interface TokenEntry {
 }
 
 /**
- * Erzeugt secrets.md mit allen MCP-Token-Paaren.
+ * Erzeugt secrets.md – verweist auf CLI statt Tokens anzuzeigen.
  */
 export function generateSecretsMd(tokens: TokenEntry[], planktonUrl: string): string {
-  const tokenLines = tokens.map(t =>
-    `| ${t.name} | ${t.role} | \`${t.token}\` |`
+  const tokenSummary = tokens.map(t =>
+    `| ${t.name} | ${t.role} | ${t.token} |`
   ).join('\n')
 
   return `# Plankton Secrets
 
-> **ACHTUNG:** Diese Datei enthält sensible Tokens und darf **niemals** ins Git-Repository eingecheckt werden.
-> Füge \`secrets.md\` zur \`.gitignore\` hinzu!
+> Token-Secrets werden aus Sicherheitsgründen **nicht** in dieser Datei angezeigt.
+> Verwende die Plankton CLI zur Einrichtung.
 
-## Plankton-Server
+## Setup via CLI
 
-- **URL:** ${planktonUrl}
+\`\`\`bash
+# CLI installieren
+curl -fsSL ${planktonUrl}/install | bash
 
-## MCP Agent-Tokens
+# Skill installieren (Login + Secrets werden automatisch eingerichtet)
+plankton skill install ${planktonUrl} --global
+\`\`\`
+
+## Vorhandene Tokens
 
 | Name | Rolle | Token |
 |------|-------|-------|
-${tokenLines}
+${tokenSummary}
 
-## Verwendung
+## Token-Verwaltung
 
-Tokens werden als Bearer-Token im Authorization-Header verwendet:
-
-\`\`\`
-Authorization: Bearer plk_xxxxx...
-\`\`\`
-
-### Token-Verwaltung
-
-Tokens können in der Plankton-Oberfläche unter **Admin (Zahnrad-Icon) → Tokens** verwaltet werden.
-Dort können neue Tokens erstellt, bestehende deaktiviert oder gelöscht werden.
+- **Neue Tokens erstellen:** Admin → Tokens → Token erstellen (wird einmalig angezeigt)
+- **Secrets einrichten:** \`plankton skill install ${planktonUrl} --global\`
+- **Tokens verwalten:** Admin (Zahnrad-Icon) → Tokens
 `
 }
 

@@ -96,7 +96,7 @@ export async function createToken(): Promise<void> {
     if (!r.ok) return;
     const data = await r.json();
     const resultEl = document.getElementById('admin-token-result')!;
-    resultEl.textContent = data.token;
+    resultEl.innerHTML = `<strong>Token erstellt – jetzt kopieren, wird nicht erneut angezeigt!</strong>\n\n${escapeHtml(data.token)}`;
     resultEl.style.display = '';
     (document.getElementById('admin-token-name') as HTMLInputElement).value = '';
     await loadTokens();
