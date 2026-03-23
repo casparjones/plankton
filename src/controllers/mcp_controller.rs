@@ -187,7 +187,10 @@ fn unauthorized_response(host: &str, scheme: &str) -> axum::response::Response {
     (
         StatusCode::UNAUTHORIZED,
         [(header::WWW_AUTHENTICATE, www_auth)],
-        axum::Json(serde_json::json!({"error": "Unauthorized"})),
+        axum::Json(serde_json::json!({
+            "error": "invalid_token",
+            "error_description": "Missing or invalid access token"
+        })),
     ).into_response()
 }
 
