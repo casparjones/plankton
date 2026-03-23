@@ -188,7 +188,7 @@ document.getElementById('auth-form').addEventListener('submit', async (e) => {{
       throw new Error(err.error || 'Login fehlgeschlagen');
     }}
     // Erneut authorize aufrufen – jetzt mit Cookie
-    window.location.href = '{base_url}/authorize?{query}';
+    window.location.href = '{base_url}/oauth/authorize?{query}';
   }} catch (err) {{
     msg.textContent = err.message;
     msg.style.display = '';
@@ -385,9 +385,9 @@ pub async fn oauth_metadata(
 
     Json(serde_json::json!({
         "issuer": issuer,
-        "authorization_endpoint": format!("{issuer}/authorize"),
-        "token_endpoint": format!("{issuer}/token"),
-        "registration_endpoint": format!("{issuer}/register"),
+        "authorization_endpoint": format!("{issuer}/oauth/authorize"),
+        "token_endpoint": format!("{issuer}/oauth/token"),
+        "registration_endpoint": format!("{issuer}/oauth/register"),
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],

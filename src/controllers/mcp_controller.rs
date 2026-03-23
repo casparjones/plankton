@@ -440,16 +440,18 @@ pub async fn mcp_jsonrpc(
         };
         state.mcp_sessions.lock().await.insert(new_session_id.clone(), session);
 
+        // protocolVersion vom Client übernehmen (Kompatibilität mit 2024-11-05 und 2025-03-26)
+        let client_version = init_rpc.params.get("protocolVersion")
+            .and_then(|v| v.as_str())
+            .unwrap_or("2024-11-05");
         let resp = JsonRpcResponse {
             jsonrpc: "2.0".into(),
             result: Some(serde_json::json!({
-                "protocolVersion": "2025-03-26",
+                "protocolVersion": client_version,
                 "capabilities": {
-                    "tools": { "listChanged": true },
-                    "resources": {},
-                    "prompts": {}
+                    "tools": {}
                 },
-                "serverInfo": { "name": "plankton-mcp", "version": "0.3.0" }
+                "serverInfo": { "name": "plankton", "version": "1.0.0" }
             })),
             error: None,
             id,

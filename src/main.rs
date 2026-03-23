@@ -140,9 +140,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/register", post(oauth_register))
         .route("/.well-known/oauth-authorization-server", get(oauth_metadata))
         .route("/.well-known/oauth-protected-resource", get(oauth_protected_resource))
-        // Legacy OAuth paths (redirect to root)
+        // OAuth paths with /oauth/ prefix (what claude.ai expects)
         .route("/oauth/authorize", get(oauth_authorize))
         .route("/oauth/token", post(oauth_token))
+        .route("/oauth/register", post(oauth_register))
         // CLI Device Auth
         .route("/auth/cli-init", post(cli_init))
         .route("/auth/cli-poll/:session_id", get(cli_poll))
