@@ -134,10 +134,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/auth/logout", post(auth_logout))
         .route("/auth/me", get(auth_me))
         .route("/auth/change-password", post(auth_change_password))
-        // OAuth 2.0
+        // OAuth 2.0 (MCP spec: endpoints at authorization base URL root)
+        .route("/authorize", get(oauth_authorize))
+        .route("/token", post(oauth_token))
+        .route("/register", post(oauth_register))
+        .route("/.well-known/oauth-authorization-server", get(oauth_metadata))
+        // Legacy OAuth paths (redirect to root)
         .route("/oauth/authorize", get(oauth_authorize))
         .route("/oauth/token", post(oauth_token))
-        .route("/.well-known/oauth-authorization-server", get(oauth_metadata))
         // CLI Device Auth
         .route("/auth/cli-init", post(cli_init))
         .route("/auth/cli-poll/:session_id", get(cli_poll))

@@ -318,13 +318,24 @@ pub async fn mcp_jsonrpc(
         }
     }
 
-    // Initialize separat behandeln (darf ohne Auth funktionieren)
+    // Initialize: Auth erforderlich (401 triggert OAuth-Flow in claude.ai)
     if has_init {
         let init_rpc = requests.iter().find(|r| r.method == "initialize").unwrap();
         let id = init_rpc.id.clone().unwrap_or(serde_json::Value::Null);
         let new_session_id = Uuid::new_v4().to_string();
         let (tx, _) = broadcast::channel::<String>(100);
-        let (caller, caller_role) = auth_result.unwrap_or_else(|_| ("anonymous".into(), String::new()));
+        let (caller, caller_role) = match &auth_result {
+            Ok(pair) => pair.clone(),
+            Err(_) => {
+                // Kein Token → 401 damit OAuth-Clients den Auth-Flow starten
+                return (StatusCode::UNAUTHORIZED, Json(JsonRpcResponse {
+                    jsonrpc: "2.0".into(),
+                    result: None,
+                    error: Some(JsonRpcError { code: -32000, message: "Unauthorized".into() }),
+                    id,
+                })).into_response();
+            }
+        };
         let session = McpSession {
             caller,
             role: caller_role,
@@ -356,30 +367,35 @@ pub async fn mcp_jsonrpc(
         ).into_response();
     }
 
-    // Auth: Token aus Header ODER Caller aus bestehender Session
+    // Auth: Token aus Header ODER Caller aus bestehender Session (Fallback)
     let (caller, caller_role) = if let Ok(pair) = auth_result {
         pair
     } else if let Some(ref sid) = session_id {
+        // Fallback: Caller aus Session (für Clients die Token nur beim Init senden)
         let sessions = state.mcp_sessions.lock().await;
         if let Some(session) = sessions.get(sid) {
-            (session.caller.clone(), session.role.clone())
+            if !session.caller.is_empty() && !session.role.is_empty() {
+                (session.caller.clone(), session.role.clone())
+            } else {
+                return (StatusCode::UNAUTHORIZED, Json(JsonRpcResponse {
+                    jsonrpc: "2.0".into(), result: None,
+                    error: Some(JsonRpcError { code: -32000, message: "Unauthorized".into() }),
+                    id: serde_json::Value::Null,
+                })).into_response();
+            }
         } else {
-            let resp = JsonRpcResponse {
-                jsonrpc: "2.0".into(),
-                result: None,
-                error: Some(JsonRpcError { code: -32000, message: "Unauthorized: invalid or missing token".into() }),
+            return (StatusCode::UNAUTHORIZED, Json(JsonRpcResponse {
+                jsonrpc: "2.0".into(), result: None,
+                error: Some(JsonRpcError { code: -32000, message: "Unauthorized".into() }),
                 id: serde_json::Value::Null,
-            };
-            return (StatusCode::UNAUTHORIZED, Json(resp)).into_response();
+            })).into_response();
         }
     } else {
-        let resp = JsonRpcResponse {
-            jsonrpc: "2.0".into(),
-            result: None,
-            error: Some(JsonRpcError { code: -32000, message: "Unauthorized: invalid or missing token".into() }),
+        return (StatusCode::UNAUTHORIZED, Json(JsonRpcResponse {
+            jsonrpc: "2.0".into(), result: None,
+            error: Some(JsonRpcError { code: -32000, message: "Unauthorized".into() }),
             id: serde_json::Value::Null,
-        };
-        return (StatusCode::UNAUTHORIZED, Json(resp)).into_response();
+        })).into_response();
     };
 
     // Alle Requests verarbeiten

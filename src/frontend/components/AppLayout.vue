@@ -321,28 +321,16 @@ onMounted(() => {
           <h3>Plankton als Connector in claude.ai</h3>
           <p>Plankton l&auml;sst sich als benutzerdefinierter MCP-Connector in claude.ai einbinden. Damit kann Claude direkt auf das Kanban-Board zugreifen.</p>
 
-          <h3>1. OAuth Client erstellen</h3>
-          <p>Erstelle einen OAuth Client unter <strong>Admin &#9881; &rarr; Tokens</strong> oder per API:</p>
-          <pre class="prompt-content" id="claudeai-create-client">POST /api/admin/oauth-clients
-{
-  "name": "claude.ai",
-  "redirect_uris": ["https://claude.ai/oauth/callback"]
-}</pre>
-          <p class="prompt-token-hint">Notiere <code>client_id</code> und <code>client_secret</code> &ndash; sie werden nur einmalig angezeigt.</p>
-
-          <h3>2. Connector in claude.ai hinzuf&uuml;gen</h3>
-          <p>In claude.ai unter <strong>Settings &rarr; Integrations &rarr; Add MCP Connector</strong>:</p>
+          <h3>1. Connector in claude.ai hinzuf&uuml;gen</h3>
+          <p>In claude.ai unter <strong>Settings &rarr; Connectors &rarr; Add custom connector</strong>:</p>
           <div class="claudeai-config">
             <div class="config-row"><span class="config-label">Server URL</span><code id="claudeai-server-url" class="config-value">...</code></div>
-            <div class="config-row"><span class="config-label">Authorization URL</span><code id="claudeai-auth-url" class="config-value">...</code></div>
-            <div class="config-row"><span class="config-label">Token URL</span><code id="claudeai-token-url" class="config-value">...</code></div>
-            <div class="config-row"><span class="config-label">Client ID</span><code class="config-value">(aus Schritt 1)</code></div>
-            <div class="config-row"><span class="config-label">Client Secret</span><code class="config-value">(aus Schritt 1)</code></div>
           </div>
+          <p class="prompt-token-hint">Claude erkennt automatisch die OAuth-Endpoints via <code>/.well-known/oauth-authorization-server</code> und registriert sich per Dynamic Client Registration.</p>
 
-          <h3>3. Autorisieren</h3>
+          <h3>2. Autorisieren</h3>
           <p>Beim ersten Zugriff &ouml;ffnet claude.ai ein Login-Fenster. Melde dich mit deinem Plankton-Account an &ndash; fertig.</p>
-          <p class="prompt-token-hint">OAuth 2.0 Authorization Code Flow mit PKCE und Refresh Token Rotation.</p>
+          <p class="prompt-token-hint">OAuth 2.0 Authorization Code Flow mit PKCE und Refresh Token Rotation. Callback URL: <code>https://claude.ai/api/mcp/auth_callback</code></p>
         </div>
       </div>
       <!-- Tab: Plankton (Agenten-Workflow-Generator) -->

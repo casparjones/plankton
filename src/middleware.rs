@@ -132,10 +132,16 @@ pub async fn auth_guard(
 ) -> Response {
     let path = req.uri().path().to_string();
 
-    // Öffentliche Pfade: /auth/*, /docs und statische Dateien.
+    // Öffentliche Pfade: /auth/*, /docs, OAuth-Endpoints und statische Dateien.
     if path.starts_with("/auth/")
         || path == "/docs"
-        || (!path.starts_with("/api/") && !path.starts_with("/mcp/"))
+        || path == "/authorize"
+        || path == "/token"
+        || path == "/register"
+        || path.starts_with("/oauth/")
+        || path.starts_with("/.well-known/")
+        || (!path.starts_with("/api/") && !path.starts_with("/mcp"))
+        || path == "/mcp"
     {
         return next.run(req).await;
     }

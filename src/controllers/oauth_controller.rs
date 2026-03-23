@@ -352,13 +352,58 @@ pub async fn oauth_metadata(
 
     Json(serde_json::json!({
         "issuer": issuer,
-        "authorization_endpoint": format!("{issuer}/oauth/authorize"),
-        "token_endpoint": format!("{issuer}/oauth/token"),
+        "authorization_endpoint": format!("{issuer}/authorize"),
+        "token_endpoint": format!("{issuer}/token"),
+        "registration_endpoint": format!("{issuer}/register"),
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["client_secret_post", "none"],
     }))
+}
+
+/// POST /register – Dynamic Client Registration (RFC 7591).
+pub async fn oauth_register(
+    State(state): State<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ApiError> {
+    let client_name = payload["client_name"]
+        .as_str()
+        .unwrap_or("Unknown Client")
+        .to_string();
+    let redirect_uris: Vec<String> = payload["redirect_uris"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    if redirect_uris.is_empty() {
+        return Err(ApiError::BadRequest("redirect_uris required".into()));
+    }
+
+    let client_id = generate_oauth_code();
+    let client_secret = generate_oauth_code();
+
+    let client = OAuthClient {
+        client_id: client_id.clone(),
+        client_secret: client_secret.clone(),
+        name: client_name.clone(),
+        redirect_uris: redirect_uris.clone(),
+        active: true,
+        created_at: Utc::now().to_rfc3339(),
+    };
+
+    state.oauth_clients.lock().await.push(client);
+
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "client_name": client_name,
+            "redirect_uris": redirect_uris,
+            "token_endpoint_auth_method": "client_secret_post",
+        })),
+    ))
 }
 
 /// GET /api/admin/oauth-clients – OAuth Clients auflisten.
