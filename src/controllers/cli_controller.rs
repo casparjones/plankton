@@ -400,7 +400,7 @@ update_secrets_md() {{
             if [[ -n "$current_section" && -n "$current_url" && -n "$current_token" ]]; then
                 local host
                 host=$(echo "$current_url" | sed 's|https\?://||;s|/$||')
-                content+=$'\n'"[$host]"$'\n'"PLANKTON_TOKEN=$current_token"$'\n'
+                content+=$'\n'"[$host]"$'\n'"URL=$current_url"$'\n'"PLANKTON_TOKEN=$current_token"$'\n'
             fi
             current_section="${{BASH_REMATCH[1]}}"
             current_url=""
@@ -417,7 +417,7 @@ update_secrets_md() {{
     if [[ -n "$current_section" && -n "$current_url" && -n "$current_token" ]]; then
         local host
         host=$(echo "$current_url" | sed 's|https\?://||;s|/$||')
-        content+=$'\n'"[$host]"$'\n'"PLANKTON_TOKEN=$current_token"$'\n'
+        content+=$'\n'"[$host]"$'\n'"URL=$current_url"$'\n'"PLANKTON_TOKEN=$current_token"$'\n'
     fi
 
     echo "$content" > "$secrets_file"
@@ -515,13 +515,15 @@ cmd_login() {{
 # ─── Skill Install / Update ─────────────────────────────────
 
 cmd_skill_install() {{
-    need_auth
+    load_config
     local global=false
     local target_dir=".claude/skills/plankton"
+    local server_url=""
 
     for arg in "$@"; do
         case "$arg" in
             --global|-g) global=true ;;
+            https://*|http://*) server_url="${{arg%/}}" ;;
         esac
     done
 
@@ -529,29 +531,87 @@ cmd_skill_install() {{
         target_dir="${{HOME}}/.claude/skills/plankton"
     fi
 
+    # Server-URL bestimmen: Argument > aktiver Remote > Frage
+    if [[ -z "$server_url" ]]; then
+        if [[ -n "$PLANKTON_SERVER" ]]; then
+            server_url="$PLANKTON_SERVER"
+        else
+            echo ""
+            echo "  🪼 Plankton Skill Setup"
+            echo "  ━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "  No server configured. Please provide the server URL."
+            echo "  Example: plankton skill install https://plankton.tiny-dev.de"
+            echo ""
+            exit 1
+        fi
+    fi
+
+    # Remote anlegen falls noch nicht vorhanden
+    local remote_exists=false
+    for r in $(list_remotes); do
+        # Check ob dieser Remote die gleiche URL hat
+        local r_url=""
+        local in_section=false
+        while IFS= read -r line; do
+            if [[ "$line" == "[$r]" ]]; then in_section=true; continue; fi
+            if [[ "$line" =~ ^\[ ]]; then $in_section && break; continue; fi
+            if $in_section && [[ "$line" == URL=* ]]; then r_url="${{line#URL=}}"; fi
+        done < "$CONFIG_FILE" 2>/dev/null
+        if [[ "$r_url" == "$server_url" ]]; then
+            remote_exists=true
+            CURRENT_REMOTE="$r"
+            break
+        fi
+    done
+
+    if ! $remote_exists; then
+        # Remote-Name aus URL ableiten (hostname ohne Punkte → Kurzform)
+        local remote_name
+        remote_name=$(echo "$server_url" | sed 's|https\?://||;s|/$||;s|\..*||')
+        [[ -z "$remote_name" ]] && remote_name="default"
+        CURRENT_REMOTE="$remote_name"
+        save_config_remote "$remote_name" "$server_url" ""
+        echo ""
+        echo "  ✓ Remote '$remote_name' added: $server_url"
+    fi
+
+    # Login falls noch kein Token vorhanden
+    load_config
+    if [[ -z "$PLANKTON_TOKEN" ]]; then
+        echo ""
+        echo "  🪼 Plankton Skill Setup"
+        echo "  ━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "  Logging in to $server_url ..."
+        cmd_login "$server_url"
+        load_config
+        if [[ -z "$PLANKTON_TOKEN" ]]; then
+            echo "  ✗ Login failed. Skill installed without authentication."
+            echo "  Run: plankton login $server_url"
+            echo ""
+        fi
+    fi
+
+    # SKILL.md herunterladen
     mkdir -p "$target_dir"
 
     echo ""
-    echo "  ↓ Downloading SKILL.md from $PLANKTON_SERVER ..."
-    curl -fsSL "${{PLANKTON_SERVER}}/skill.md" -o "${{target_dir}}/SKILL.md"
+    echo "  ↓ Downloading SKILL.md from $server_url ..."
+    curl -fsSL "${{server_url}}/skill.md" -o "${{target_dir}}/SKILL.md"
     echo "  ✓ Installed to ${{target_dir}}/SKILL.md"
+
+    # Secrets generieren
+    update_secrets_md
+    local secrets_file="${{HOME}}/.claude/plankton_secrets.md"
+    if [[ -f "$secrets_file" ]]; then
+        echo "  ✓ Secrets written to $secrets_file"
+    fi
     echo ""
 
-    # Secrets-Datei prüfen.
-    local secrets_found=false
-    if [[ -f "${{HOME}}/.claude/plankton-secrets.md" ]]; then
-        secrets_found=true
-    elif [[ -f ".claude/plankton-secrets.md" ]]; then
-        secrets_found=true
-    fi
-
-    if ! $secrets_found; then
-        echo "  ⚠ No plankton-secrets.md found."
-        echo "  Create one at ~/.claude/plankton-secrets.md"
-        echo "  You can generate it in the Plankton UI:"
-        echo "  Project Menu → Prompts → Claude Code Skill → Secrets"
-        echo ""
-    fi
+    echo "  Done! The /plankton skill is now available in Claude Code."
+    echo "  Ticket URLs determine which server to use automatically."
+    echo ""
 }}
 
 cmd_skill_update() {{

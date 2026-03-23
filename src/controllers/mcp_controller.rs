@@ -1054,56 +1054,88 @@ user-invocable: true
 Plankton ist ein Kanban-Board mit REST-API und JSON-RPC-Schnittstelle.
 Du interagierst damit ausschließlich über **curl-Aufrufe** an den JSON-RPC-Endpunkt.
 
-- **Server:** {plankton_url}
 - **Dokumentation:** {plankton_url}/docs
 
-## Secrets laden
+## Multi-Server Secrets
 
-Lies zuerst die Datei `plankton-secrets.md` aus einem der folgenden Orte (erster Treffer gewinnt):
+Plankton unterstützt mehrere Server gleichzeitig. Die Secrets-Datei enthält pro Server einen Abschnitt.
 
-1. `~/.claude/plankton-secrets.md` (persönlich, empfohlen)
-2. `.claude/plankton-secrets.md` (projektlokal)
+Lies die Secrets-Datei aus einem der folgenden Orte (erster Treffer gewinnt):
 
-Die Secrets-Datei enthält Agent-Tokens und die Server-URL.
-Generiere sie in der Plankton-Oberfläche unter **Projekt-Menü → Prompts → Claude Code Skill**.
+1. `~/.claude/plankton_secrets.md` (persönlich, empfohlen)
+2. `.claude/plankton_secrets.md` (projektlokal)
+3. `~/.claude/plankton-secrets.md` (Legacy-Format, Fallback)
+
+### Secrets-Format
+
+```ini
+# Plankton Server Tokens
+
+[plankton.tiny-dev.de]
+URL=https://plankton.tiny-dev.de
+PLANKTON_TOKEN=eyJ...
+
+[plankton.local:3000]
+URL=http://plankton.local:3000
+PLANKTON_TOKEN=eyJ...
+```
+
+### Server-Erkennung aus Ticket-URLs
+
+Wenn der User eine Ticket-URL angibt (z.B. `https://plankton.tiny-dev.de/p/project/t/task-slug`),
+extrahiere den Hostnamen (`plankton.tiny-dev.de`) und finde den passenden Abschnitt in der Secrets-Datei.
+Verwende die `URL` aus diesem Abschnitt als Server-Basis und den `PLANKTON_TOKEN` als Bearer-Token.
+
+Falls kein passender Server gefunden wird, informiere den User:
+> Kein Token für Server `<hostname>` gefunden. Bitte `plankton skill install <url>` ausführen.
+
+### Installation
+
+```bash
+# CLI installieren
+curl -fsSL {plankton_url}/install | bash
+
+# Skill installieren (inkl. Login + Secrets-Setup)
+plankton skill install {plankton_url} --global
+```
 
 ## API-Aufrufe
 
 Plankton unterstützt **MCP Streamable HTTP Transport** (Protocol Version `2025-03-26`).
-Alle Tool-Aufrufe gehen an `POST {plankton_url}/mcp` als JSON-RPC 2.0.
-Verwende den Token aus der Secrets-Datei als Bearer-Token.
+Alle Tool-Aufrufe gehen an `POST $PLANKTON_URL/mcp` als JSON-RPC 2.0.
+Verwende `$PLANKTON_URL` (die URL aus dem passenden Secrets-Abschnitt) und `$PLANKTON_TOKEN` (den Token dazu).
 
 ### Streamable HTTP Transport (empfohlen)
 
 ```bash
 # 1. Session initialisieren → Mcp-Session-Id aus Response-Header lesen
-curl -s -D- -X POST {plankton_url}/mcp \
+curl -s -D- -X POST $PLANKTON_URL/mcp \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $PLANKTON_TOKEN" \
   -d '{{"jsonrpc":"2.0","method":"initialize","id":0}}'
 # → Header: Mcp-Session-Id: <session-id>
 
 # 2. Tool aufrufen (mit Session-ID)
-curl -s -X POST {plankton_url}/mcp \
+curl -s -X POST $PLANKTON_URL/mcp \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $PLANKTON_TOKEN" \
   -H "Mcp-Session-Id: <session-id>" \
   -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"TOOL_NAME","arguments":{{ARGS}}}},"id":1}}'
 
 # 3. SSE-Stream für Server-Notifications (optional)
-curl -s -N {plankton_url}/mcp \
+curl -s -N $PLANKTON_URL/mcp \
   -H "Authorization: Bearer $PLANKTON_TOKEN" \
   -H "Mcp-Session-Id: <session-id>"
 
 # 4. Session beenden
-curl -s -X DELETE {plankton_url}/mcp \
+curl -s -X DELETE $PLANKTON_URL/mcp \
   -H "Mcp-Session-Id: <session-id>"
 ```
 
 ### Legacy-Aufruf (ohne Session)
 
 ```bash
-curl -s -X POST {plankton_url}/mcp \
+curl -s -X POST $PLANKTON_URL/mcp \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $PLANKTON_TOKEN" \
   -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"TOOL_NAME","arguments":{{ARGS}}}},"id":1}}'
@@ -1243,39 +1275,38 @@ Jedes Tool wird per `tools/call` aufgerufen. Hier sind alle Tools mit ihren Para
 ## Vollständiges Beispiel (Streamable HTTP)
 
 ```bash
-# Token aus secrets.md laden
-TOKEN="plk_xxx..."
+# PLANKTON_URL und PLANKTON_TOKEN aus Secrets laden (passend zum Ticket-Server)
 
 # 1. Session initialisieren
-SESSION=$(curl -s -D- -X POST {plankton_url}/mcp \
+SESSION=$(curl -s -D- -X POST $PLANKTON_URL/mcp \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $PLANKTON_TOKEN" \
   -d '{{"jsonrpc":"2.0","method":"initialize","id":0}}' \
   | grep -i mcp-session-id | tr -d '\\r' | awk '{{print $2}}')
 
 # 2. Projekte auflisten
-curl -s -X POST {plankton_url}/mcp \
+curl -s -X POST $PLANKTON_URL/mcp \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $PLANKTON_TOKEN" \
   -H "Mcp-Session-Id: $SESSION" \
   -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"list_projects","arguments":{{}}}},"id":1}}'
 
 # 3. Epic erstellen mit Subtask
-curl -s -X POST {plankton_url}/mcp \
+curl -s -X POST $PLANKTON_URL/mcp \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $PLANKTON_TOKEN" \
   -H "Mcp-Session-Id: $SESSION" \
   -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"create_task","arguments":{{"project_id":"PROJ_ID","title":"Auth System","task_type":"epic","labels":["feature"],"points":13}}}},"id":2}}'
 
 # 4. Subtask-Relation anlegen
-curl -s -X POST {plankton_url}/mcp \
+curl -s -X POST $PLANKTON_URL/mcp \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $PLANKTON_TOKEN" \
   -H "Mcp-Session-Id: $SESSION" \
   -d '{{"jsonrpc":"2.0","method":"tools/call","params":{{"name":"add_relation","arguments":{{"project_id":"PROJ_ID","from_task_id":"EPIC_ID","to_task_id":"SUBTASK_ID","relation":"subtask"}}}},"id":3}}'
 
 # 5. Session beenden
-curl -s -X DELETE {plankton_url}/mcp -H "Mcp-Session-Id: $SESSION"
+curl -s -X DELETE $PLANKTON_URL/mcp -H "Mcp-Session-Id: $SESSION"
 ```
 
 ## Regeln
