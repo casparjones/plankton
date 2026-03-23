@@ -138,13 +138,19 @@ pub fn generate_agent_token() -> String {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OAuthClient {
     pub client_id: String,
+    #[serde(default)]
     pub client_secret: String,
     pub name: String,
     pub redirect_uris: Vec<String>,
+    /// "none" (PKCE public client) oder "client_secret_post"
+    #[serde(default = "default_auth_method")]
+    pub auth_method: String,
     #[serde(default = "default_true")]
     pub active: bool,
     pub created_at: String,
 }
+
+fn default_auth_method() -> String { "client_secret_post".to_string() }
 
 /// OAuth 2.0 Authorization Code (kurzlebig, einmalig einlösbar).
 #[derive(Debug, Serialize, Deserialize, Clone)]

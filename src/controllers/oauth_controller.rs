@@ -260,7 +260,7 @@ pub async fn oauth_token(
                 }
             }
 
-            // PKCE Verification
+            // PKCE Verification (Pflicht für public clients mit auth_method "none")
             if let Some(ref challenge) = auth_code.code_challenge {
                 let verifier = params
                     .code_verifier
@@ -269,6 +269,16 @@ pub async fn oauth_token(
                 let computed = base64url_sha256(verifier);
                 if &computed != challenge {
                     return Err(ApiError::BadRequest("Invalid code_verifier".into()));
+                }
+            } else {
+                // Prüfe ob der Client PKCE erfordert (auth_method "none")
+                let clients = state.oauth_clients.lock().await;
+                let is_public = clients.iter()
+                    .find(|c| c.client_id == auth_code.client_id)
+                    .map(|c| c.auth_method == "none")
+                    .unwrap_or(false);
+                if is_public {
+                    return Err(ApiError::BadRequest("PKCE required for public clients".into()));
                 }
             }
 
@@ -413,30 +423,44 @@ pub async fn oauth_register(
         return Err(ApiError::BadRequest("redirect_uris required".into()));
     }
 
+    // token_endpoint_auth_method aus dem Request lesen (default: "client_secret_post")
+    let auth_method = payload["token_endpoint_auth_method"]
+        .as_str()
+        .unwrap_or("client_secret_post")
+        .to_string();
+
     let client_id = generate_oauth_code();
-    let client_secret = generate_oauth_code();
+    // Nur bei "client_secret_post" ein Secret generieren
+    let client_secret = if auth_method == "none" {
+        String::new()
+    } else {
+        generate_oauth_code()
+    };
 
     let client = OAuthClient {
         client_id: client_id.clone(),
         client_secret: client_secret.clone(),
         name: client_name.clone(),
         redirect_uris: redirect_uris.clone(),
+        auth_method: auth_method.clone(),
         active: true,
         created_at: Utc::now().to_rfc3339(),
     };
 
     state.oauth_clients.lock().await.push(client);
 
-    Ok((
-        axum::http::StatusCode::CREATED,
-        Json(serde_json::json!({
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "client_name": client_name,
-            "redirect_uris": redirect_uris,
-            "token_endpoint_auth_method": "client_secret_post",
-        })),
-    ))
+    // Response: kein client_secret bei auth_method "none"
+    let mut resp = serde_json::json!({
+        "client_id": client_id,
+        "client_name": client_name,
+        "redirect_uris": redirect_uris,
+        "token_endpoint_auth_method": auth_method,
+    });
+    if auth_method != "none" {
+        resp["client_secret"] = serde_json::Value::String(client_secret);
+    }
+
+    Ok((axum::http::StatusCode::CREATED, Json(resp)))
 }
 
 /// GET /api/admin/oauth-clients – OAuth Clients auflisten.
@@ -482,6 +506,7 @@ pub async fn admin_create_oauth_client(
         client_secret: client_secret.clone(),
         name,
         redirect_uris,
+        auth_method: "client_secret_post".to_string(),
         active: true,
         created_at: Utc::now().to_rfc3339(),
     };
