@@ -226,22 +226,28 @@ function generateFiles(): void {
 
 function generateProjectPrompt(): string {
   const p = state.project!;
-  const columns = (p.columns || []).filter(c => !c.hidden).sort((a, b) => a.order - b.order);
-  const colList = columns.map(c => `  - id: "${c.id}", title: "${c.title}"`).join('\n');
 
   return `Du bist ein Projektmanagement-Assistent. Generiere Tasks als JSON für das Kanban-Board "${p.title}".
 
-## Spalten
-
-${colList}
-
 ## Task-Format
 
-Antworte mit einem JSON-Array:
+Antworte mit einem JSON-Array. Tasks werden automatisch in "Todo" angelegt.
+
 [
-  { "title": "Task-Titel", "description": "Beschreibung mit Akzeptanzkriterien", "column_id": "${columns[0]?.id || 'SPALTEN_ID'}" },
-  ...
+  {
+    "id": "eindeutige-id",
+    "title": "Task-Titel",
+    "description": "Beschreibung mit Akzeptanzkriterien",
+    "task_type": "task",
+    "blocks": [],
+    "blocked_by": [],
+    "subtask_ids": []
+  }
 ]
+
+- **task_type**: "task" (Standard), "epic" (mit Subtasks) oder "job" (automatisiert)
+- **blocks** / **blocked_by**: IDs anderer Tasks für Abhängigkeiten
+- **subtask_ids**: IDs von Subtasks (nur bei Epics)
 
 Generiere jetzt Tasks basierend auf der folgenden Anforderung:
 `;
