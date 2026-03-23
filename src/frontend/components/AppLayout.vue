@@ -299,7 +299,7 @@ onMounted(() => {
   <div id="prompt-modal" class="modal-overlay">
     <div class="modal modal-wide">
       <div class="modal-header">
-        <span class="modal-heading">KI-Prompt</span>
+        <span class="modal-heading">AI Agents</span>
         <button class="modal-close" id="prompt-modal-close">&#10005;</button>
       </div>
       <!-- Tab-Leiste -->

@@ -2,7 +2,7 @@
 
 import api from '../api';
 import { state } from '../state';
-import { escapeHtml, columnName } from '../utils';
+import { escapeHtml } from '../utils';
 import { renderBoard } from './board';
 import { renderJsonTree, toggleJsonView } from './json-view';
 import { loadProjects, renameProject } from '../services/project-service';
@@ -25,7 +25,7 @@ export function openProjectDropdown(): void {
   const dropdown = document.getElementById('project-dropdown')!;
   dropdown.innerHTML = `
     <button class="proj-dropdown-item" data-action="edit">&#9998; Projekt editieren</button>
-    <button class="proj-dropdown-item" data-action="prompt">&#9733; Show Prompt</button>
+    <button class="proj-dropdown-item" data-action="prompt">&#9733; AI Agents</button>
     <button class="proj-dropdown-item" data-action="cli">&#9881; Install CLI</button>
   `;
   dropdown.classList.add('open');
@@ -228,58 +228,20 @@ function generateProjectPrompt(): string {
   const p = state.project!;
   const columns = (p.columns || []).filter(c => !c.hidden).sort((a, b) => a.order - b.order);
   const colList = columns.map(c => `  - id: "${c.id}", title: "${c.title}"`).join('\n');
-  const existingTasks = (p.tasks || []).slice(0, 3);
-  const taskExample = existingTasks.length > 0
-    ? JSON.stringify(existingTasks[0], null, 2)
-    : JSON.stringify({
-        id: '',
-        title: 'Beispiel-Task',
-        description: 'Beschreibung des Tasks',
-        column_id: columns[0]?.id || '',
-        labels: ['feature'],
-        order: 0,
-        points: 5,
-        worker: '',
-        creator: '',
-        comments: [],
-        logs: [],
-      }, null, 2);
 
   return `Du bist ein Projektmanagement-Assistent. Generiere Tasks als JSON für das Kanban-Board "${p.title}".
 
-## Projekt-Struktur
+## Spalten
 
-Das Projekt hat folgende Spalten:
 ${colList}
 
 ## Task-Format
 
-Jeder Task ist ein JSON-Objekt mit dieser Struktur:
-${taskExample}
-
-### Feld-Beschreibung:
-- id: Leer lassen ("") – wird vom Server generiert
-- title: Kurzer, prägnanter Titel des Tasks
-- description: Ausführliche Beschreibung, Akzeptanzkriterien, Details
-- column_id: ID der Spalte, in der der Task erscheinen soll (siehe Spalten oben)
-- labels: Array von Strings, z.B. ["feature"], ["bug"], ["refactor"], ["docs"]
-- order: Position innerhalb der Spalte (0 = oben)
-- points: Story Points / Aufwand (0–100), z.B. 1=trivial, 3=klein, 5=mittel, 8=groß, 13=sehr groß
-- worker: Name der zugewiesenen Person (leer lassen wenn unklar)
-- creator: Name des Erstellers (leer lassen)
-- comments: Array von Strings für Kommentare
-- logs: Array von Strings für Logs (leer lassen)
-
-## Antwort-Format
-
-Antworte mit einem JSON-Array von Tasks:
+Antworte mit einem JSON-Array:
 [
-  { "id": "", "title": "...", "description": "...", "column_id": "${columns[0]?.id || 'SPALTEN_ID'}", "labels": [...], "order": 0, "points": 5, "worker": "", "creator": "", "comments": [], "logs": [] },
+  { "title": "Task-Titel", "description": "Beschreibung mit Akzeptanzkriterien", "column_id": "${columns[0]?.id || 'SPALTEN_ID'}" },
   ...
 ]
-
-## Aktuelle Tasks im Projekt (${(p.tasks || []).length} Stück):
-${(p.tasks || []).length > 0 ? (p.tasks || []).map(t => `- [${columnName(t.column_id)}] ${t.title}`).join('\n') : '(keine)'}
 
 Generiere jetzt Tasks basierend auf der folgenden Anforderung:
 `;
