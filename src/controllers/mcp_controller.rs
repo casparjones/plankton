@@ -356,10 +356,14 @@ pub async fn mcp_jsonrpc(
         ).into_response();
     }
 
-    // Auth erforderlich für alle nicht-initialize Requests
-    let (caller, caller_role) = match auth_result {
-        Ok(pair) => pair,
-        Err(_) => {
+    // Auth: Token aus Header ODER Caller aus bestehender Session
+    let (caller, caller_role) = if let Ok(pair) = auth_result {
+        pair
+    } else if let Some(ref sid) = session_id {
+        let sessions = state.mcp_sessions.lock().await;
+        if let Some(session) = sessions.get(sid) {
+            (session.caller.clone(), session.role.clone())
+        } else {
             let resp = JsonRpcResponse {
                 jsonrpc: "2.0".into(),
                 result: None,
@@ -368,6 +372,14 @@ pub async fn mcp_jsonrpc(
             };
             return (StatusCode::UNAUTHORIZED, Json(resp)).into_response();
         }
+    } else {
+        let resp = JsonRpcResponse {
+            jsonrpc: "2.0".into(),
+            result: None,
+            error: Some(JsonRpcError { code: -32000, message: "Unauthorized: invalid or missing token".into() }),
+            id: serde_json::Value::Null,
+        };
+        return (StatusCode::UNAUTHORIZED, Json(resp)).into_response();
     };
 
     // Alle Requests verarbeiten
