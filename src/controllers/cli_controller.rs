@@ -186,7 +186,7 @@ fi
 
 echo "  Get started:"
 echo ""
-echo "    plankton login ${{PLANKTON_URL}}"
+echo "    plankton remote add origin ${{PLANKTON_URL}}"
 echo ""
 "##,
         base_url = base_url,
@@ -1053,18 +1053,15 @@ cmd_remote() {{
                 exit 1
             fi
             url="${{url%/}}"
-            if [[ -z "$CURRENT_REMOTE" ]]; then
-                CURRENT_REMOTE="$name"
-            fi
+            CURRENT_REMOTE="$name"
             save_config_remote "$name" "$url" ""
-            update_secrets_md
             echo ""
             echo "  ✓ Remote '$name' added: $url"
-            if [[ "$CURRENT_REMOTE" == "$name" ]]; then
-                echo "  (set as active remote)"
-            fi
-            echo "  Run: plankton login $url"
+            echo "  (set as active remote)"
             echo ""
+
+            # Automatisch einloggen
+            cmd_login "$url"
             ;;
         remove|rm)
             local name="$1"
@@ -1072,11 +1069,12 @@ cmd_remote() {{
                 echo "Usage: plankton remote remove <name>"
                 exit 1
             fi
+            # Token löschen (Logout) und Remote entfernen
             remove_config_remote "$name"
             load_config
             update_secrets_md
             echo ""
-            echo "  ✓ Remote '$name' removed."
+            echo "  ✓ Remote '$name' removed (logged out)."
             echo ""
             ;;
         switch)
@@ -1160,14 +1158,13 @@ cmd_help() {{
     echo "  Usage: plankton <command> [options]"
     echo ""
     echo "  Commands:"
-    echo "    login [url]          Login to current (or given) server"
-    echo "    logout               Clear credentials for current remote"
-    echo "    status               Show connection info"
     echo "    remote               List configured remotes"
-    echo "    remote add <n> <url> Add a remote server"
-    echo "    remote remove <n>    Remove a remote"
+    echo "    remote add <n> <url> Add remote + login (like git remote)"
+    echo "    remote remove <n>    Remove remote + logout"
     echo "    remote switch <n>    Switch active remote"
     echo "    use <name>           Shortcut for remote switch"
+    echo "    login [url]          Re-login to current remote"
+    echo "    status               Show connection info"
     echo "    projects [--md]      List all projects (--md for Markdown output)"
     echo "    view <slug> [--md]   View project with columns and tasks"
     echo "    tasks <slug> [--md]  List tasks in a project"
