@@ -82,11 +82,23 @@
     .search-select { max-width: 120px; font-size: 11px; }
 
     /* Modals fullscreen */
-    .modal { max-width: 100vw; width: 100%; margin: 0; border-radius: 0; max-height: 100vh; }
+    .modal { max-width: 100vw; width: 100%; margin: 0; border-radius: 0; max-height: 100vh; overflow-y: auto; }
     .modal-overlay { padding: 0; }
     .modal-detail { max-width: 100vw; }
     .detail-grid { grid-template-columns: 1fr; }
     .modal-grid { grid-template-columns: 1fr; }
+
+    /* Sticky save/delete buttons at bottom on mobile */
+    .modal-actions {
+        position: sticky;
+        bottom: 0;
+        background: var(--surface);
+        padding: 12px 0 4px;
+        margin: 0 -24px -24px;
+        padding: 12px 24px 16px;
+        border-top: 1px solid var(--border);
+        z-index: 10;
+    }
 
     /* Task cards */
     .task-inner { font-size: 13px; }
