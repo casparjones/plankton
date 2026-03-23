@@ -10,13 +10,13 @@ import { updateProjectTitle } from './sidebar';
 import { subscribeSSE } from '../services/sse-service';
 import { toastConfirm } from '../toast';
 import { openGitModal } from './git-settings';
-import { generateSecretsMd, generateRulesMd, generateWorkflowMd } from './prompt-generator';
+import { generateRulesMd, generateWorkflowMd } from './prompt-generator';
 import type { ProjectDoc, AgentToken } from '../types';
 
 // Zwischenspeicher für geladene Tokens.
 let cachedTokens: AgentToken[] = [];
 // Aktuell sichtbarer Output-Tab.
-let activeOutputTab = 'secrets';
+let activeOutputTab = 'setup';
 
 export function openProjectDropdown(): void {
   closeProjectDropdown();
@@ -137,7 +137,7 @@ export function initPromptTabs(): void {
   // Output-Tabs (secrets / rules / workflow).
   document.querySelectorAll('.prompt-output-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      activeOutputTab = (tab as HTMLElement).dataset.outputTab || 'secrets';
+      activeOutputTab = (tab as HTMLElement).dataset.outputTab || 'setup';
       document.querySelectorAll('.prompt-output-tab').forEach(t => t.classList.remove('prompt-output-tab-active'));
       tab.classList.add('prompt-output-tab-active');
       document.querySelectorAll('.prompt-output-content').forEach(c => c.classList.remove('prompt-tab-visible'));
@@ -208,19 +208,17 @@ function renderTokenList(container: HTMLElement, tokens: AgentToken[]): void {
     </p>`;
 }
 
-/** Generiert die drei Markdown-Dateien und zeigt sie an. */
+/** Generiert die Konfigurations-Dateien und zeigt sie an. */
 function generateFiles(): void {
   const url = (document.getElementById('prompt-plankton-url') as HTMLInputElement).value.trim() || window.location.origin;
   const projectName = state.project?.title || 'Plankton';
 
-  const activeTokens = cachedTokens.filter(t => t.active);
-  const tokenEntries = activeTokens.map(t => ({ name: t.name, token: t.token, role: t.role }));
-
-  const secrets = generateSecretsMd(tokenEntries, url);
   const rules = generateRulesMd(url, projectName);
   const workflow = generateWorkflowMd();
 
-  document.getElementById('prompt-out-secrets-pre')!.textContent = secrets;
+  // CLI-Setup statt secrets.md
+  const setupText = `# CLI installieren\ncurl -fsSL ${url}/install | bash\n\n# Skill installieren (Login + Secrets automatisch)\nplankton skill install ${url} --global`;
+  document.getElementById('prompt-out-setup-pre')!.textContent = setupText;
   document.getElementById('prompt-out-rules-pre')!.textContent = rules;
   document.getElementById('prompt-out-workflow-pre')!.textContent = workflow;
 

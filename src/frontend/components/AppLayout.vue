@@ -332,12 +332,16 @@ onMounted(() => {
         </div>
         <div id="prompt-output" class="prompt-output" style="display:none">
           <div class="prompt-output-tabs">
-            <button class="prompt-output-tab prompt-output-tab-active" data-output-tab="secrets">secrets.md</button>
+            <button class="prompt-output-tab prompt-output-tab-active" data-output-tab="setup">Claude Code Setup</button>
             <button class="prompt-output-tab" data-output-tab="rules">rules.md</button>
             <button class="prompt-output-tab" data-output-tab="workflow">workflow.md</button>
           </div>
-          <div id="prompt-out-secrets" class="prompt-output-content prompt-tab-visible">
-            <pre class="prompt-content" id="prompt-out-secrets-pre"></pre>
+          <div id="prompt-out-setup" class="prompt-output-content prompt-tab-visible">
+            <div class="prompt-cli-setup">
+              <p>Installiere den Plankton Skill f&uuml;r Claude Code mit der CLI:</p>
+              <pre class="prompt-content" id="prompt-out-setup-pre"></pre>
+              <p class="prompt-token-hint">Die CLI f&uuml;hrt automatisch den Login durch und richtet die Secrets ein.</p>
+            </div>
           </div>
           <div id="prompt-out-rules" class="prompt-output-content">
             <pre class="prompt-content" id="prompt-out-rules-pre"></pre>
