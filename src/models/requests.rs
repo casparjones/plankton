@@ -83,6 +83,9 @@ pub struct ToolDef {
     pub description: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub roles: Option<&'static [&'static str]>,
+    /// JSON Schema für die Tool-Parameter (inputSchema)
+    #[serde(skip)]
+    pub schema: Option<fn() -> serde_json::Value>,
 }
 
 /// JSON-RPC 2.0 Request

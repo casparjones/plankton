@@ -18,32 +18,113 @@ use crate::state::{AppState, McpSession};
 /// Alle verfügbaren MCP-Tools mit optionaler Rollen-Einschränkung.
 fn all_tools() -> Vec<ToolDef> {
     vec![
-        ToolDef { name: "list_projects", description: "List all projects", roles: None },
-        ToolDef { name: "get_project", description: "Get one project by id", roles: None },
-        ToolDef { name: "summarize_board", description: "Summarize board column counts", roles: None },
-        ToolDef { name: "create_project", description: "Create a new project", roles: Some(&["manager", "admin"]) },
-        ToolDef { name: "list_epics", description: "List columns as epics with task counts", roles: Some(&["manager", "admin"]) },
-        ToolDef { name: "create_task", description: "Create a task in a project", roles: Some(&["manager", "admin"]) },
-        ToolDef { name: "assign_task", description: "Assign a worker to a task", roles: Some(&["manager", "admin"]) },
-        ToolDef { name: "get_assigned_tasks", description: "Get tasks assigned to the caller", roles: Some(&["developer"]) },
-        ToolDef { name: "update_task", description: "Update task title/description/labels", roles: Some(&["developer", "manager", "admin"]) },
-        ToolDef { name: "add_log", description: "Append a log entry to a task", roles: Some(&["developer", "tester", "manager", "admin"]) },
-        ToolDef { name: "submit_for_review", description: "Mark task as ready for review", roles: Some(&["developer"]) },
-        ToolDef { name: "get_review_queue", description: "Get tasks waiting for review", roles: Some(&["tester"]) },
-        ToolDef { name: "add_comment", description: "Add a comment to a task", roles: Some(&["tester", "developer", "manager", "admin"]) },
-        ToolDef { name: "approve_task", description: "Approve and move task to Done", roles: Some(&["tester", "manager", "admin"]) },
-        ToolDef { name: "reject_task", description: "Reject task and move back with comment", roles: Some(&["tester", "manager", "admin"]) },
-        ToolDef { name: "move_task", description: "Move a task between columns", roles: Some(&["manager", "admin"]) },
-        ToolDef { name: "delete_task", description: "Delete a task", roles: Some(&["manager", "admin"]) },
-        ToolDef { name: "list_subtasks", description: "List subtasks of an epic with completion status", roles: None },
-        ToolDef { name: "add_relation", description: "Add a relation (blocks or subtask) between two tasks", roles: Some(&["developer", "manager", "admin"]) },
-        ToolDef { name: "remove_relation", description: "Remove a relation between two tasks", roles: Some(&["developer", "manager", "admin"]) },
-        ToolDef { name: "reorder_tasks", description: "Reorder tasks within a column by providing task IDs in desired order", roles: Some(&["manager", "admin"]) },
+        ToolDef { name: "list_projects", description: "List all projects", roles: None, schema: None },
+        ToolDef { name: "get_project", description: "Get one project by id", roles: None, schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["id"],
+            "properties": { "id": { "type": "string", "description": "Project ID" } }
+        })) },
+        ToolDef { name: "summarize_board", description: "Summarize board column counts", roles: None, schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id"],
+            "properties": { "project_id": { "type": "string", "description": "Project ID" } }
+        })) },
+        ToolDef { name: "create_project", description: "Create a new project", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object",
+            "properties": { "title": { "type": "string", "description": "Project title" } }
+        })) },
+        ToolDef { name: "list_epics", description: "List columns as epics with task counts", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id"],
+            "properties": { "project_id": { "type": "string" } }
+        })) },
+        ToolDef { name: "create_task", description: "Create a task in a project", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id"],
+            "properties": {
+                "project_id": { "type": "string" },
+                "title": { "type": "string" },
+                "description": { "type": "string" },
+                "column_id": { "type": "string", "description": "Column ID (default: first column)" },
+                "labels": { "type": "array", "items": { "type": "string" } },
+                "worker": { "type": "string" },
+                "points": { "type": "number" },
+                "task_type": { "type": "string", "enum": ["task", "epic", "job"] },
+                "parent_id": { "type": "string", "description": "Parent epic ID for subtasks" }
+            }
+        })) },
+        ToolDef { name: "assign_task", description: "Assign a worker to a task", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id", "worker"],
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "worker": { "type": "string" } }
+        })) },
+        ToolDef { name: "get_assigned_tasks", description: "Get tasks assigned to the caller", roles: Some(&["developer"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id"],
+            "properties": { "project_id": { "type": "string" } }
+        })) },
+        ToolDef { name: "update_task", description: "Update task title/description/labels", roles: Some(&["developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id"],
+            "properties": {
+                "project_id": { "type": "string" }, "task_id": { "type": "string" },
+                "title": { "type": "string" }, "description": { "type": "string" },
+                "labels": { "type": "array", "items": { "type": "string" } },
+                "worker": { "type": "string" }, "points": { "type": "number" },
+                "task_type": { "type": "string", "enum": ["task", "epic", "job"] },
+                "parent_id": { "type": "string" }
+            }
+        })) },
+        ToolDef { name: "add_log", description: "Append a log entry to a task", roles: Some(&["developer", "tester", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id", "message"],
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "message": { "type": "string" } }
+        })) },
+        ToolDef { name: "submit_for_review", description: "Mark task as ready for review", roles: Some(&["developer"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id"],
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" } }
+        })) },
+        ToolDef { name: "get_review_queue", description: "Get tasks waiting for review", roles: Some(&["tester"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id"],
+            "properties": { "project_id": { "type": "string" } }
+        })) },
+        ToolDef { name: "add_comment", description: "Add a comment to a task", roles: Some(&["tester", "developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id", "text"],
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "text": { "type": "string" } }
+        })) },
+        ToolDef { name: "approve_task", description: "Approve and move task to Done", roles: Some(&["tester", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id"],
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" } }
+        })) },
+        ToolDef { name: "reject_task", description: "Reject task and move back with comment", roles: Some(&["tester", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id"],
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "comment": { "type": "string" } }
+        })) },
+        ToolDef { name: "move_task", description: "Move a task between columns", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id", "column_id"],
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "column_id": { "type": "string" }, "order": { "type": "number" } }
+        })) },
+        ToolDef { name: "delete_task", description: "Delete a task", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id"],
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" } }
+        })) },
+        ToolDef { name: "list_subtasks", description: "List subtasks of an epic with completion status", roles: None, schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "parent_id"],
+            "properties": { "project_id": { "type": "string" }, "parent_id": { "type": "string" } }
+        })) },
+        ToolDef { name: "add_relation", description: "Add a relation (blocks or subtask) between two tasks", roles: Some(&["developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "from_task_id", "to_task_id", "relation"],
+            "properties": { "project_id": { "type": "string" }, "from_task_id": { "type": "string" }, "to_task_id": { "type": "string" }, "relation": { "type": "string", "enum": ["blocks", "subtask"] } }
+        })) },
+        ToolDef { name: "remove_relation", description: "Remove a relation between two tasks", roles: Some(&["developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "from_task_id", "to_task_id", "relation"],
+            "properties": { "project_id": { "type": "string" }, "from_task_id": { "type": "string" }, "to_task_id": { "type": "string" }, "relation": { "type": "string", "enum": ["blocks", "subtask"] } }
+        })) },
+        ToolDef { name: "reorder_tasks", description: "Reorder tasks within a column by providing task IDs in desired order", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "column_id", "task_ids"],
+            "properties": { "project_id": { "type": "string" }, "column_id": { "type": "string" }, "task_ids": { "type": "array", "items": { "type": "string" } } }
+        })) },
     ]
 }
 
-/// Tools nach Rolle filtern.
+/// Tools nach Rolle filtern. Admin und User sehen alle Tools.
 fn tools_for_role(role: &str) -> Vec<ToolDef> {
+    // Admin und User (OAuth-Login) sehen alle Tools
+    if role == "admin" || role == "user" {
+        return all_tools();
+    }
     all_tools()
         .into_iter()
         .filter(|t| match t.roles {
@@ -170,10 +251,11 @@ async fn handle_single_rpc(
             let tool_list: Vec<_> = tools
                 .iter()
                 .map(|t| {
+                    let schema = t.schema.map(|f| f()).unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}}));
                     serde_json::json!({
                         "name": t.name,
                         "description": t.description,
-                        "inputSchema": { "type": "object" }
+                        "inputSchema": schema
                     })
                 })
                 .collect();
