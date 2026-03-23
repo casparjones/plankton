@@ -28,27 +28,37 @@ pub async fn oauth_authorize(
         .into_response());
     }
 
-    // Client prüfen
+    // Client prüfen: registrierte Clients ODER Public Clients mit PKCE
     let clients = state.oauth_clients.lock().await;
-    let client = clients
+    let registered_client = clients
         .iter()
-        .find(|c| c.client_id == params.client_id && c.active);
-    let client = match client {
-        Some(c) => c.clone(),
-        None => {
-            return Ok(Redirect::to(&format!(
-                "{}?error=invalid_client&state={}",
-                params.redirect_uri, params.state
-            ))
-            .into_response())
-        }
-    };
+        .find(|c| c.client_id == params.client_id && c.active)
+        .cloned();
     drop(clients);
 
-    // Redirect-URI validieren
-    if !client.redirect_uris.iter().any(|u| u == &params.redirect_uri) {
-        return Err(ApiError::BadRequest("Invalid redirect_uri".into()));
-    }
+    let client_name = if let Some(ref c) = registered_client {
+        // Registrierter Client: Redirect-URI muss übereinstimmen
+        if !c.redirect_uris.iter().any(|u| u == &params.redirect_uri) {
+            return Err(ApiError::BadRequest("Invalid redirect_uri".into()));
+        }
+        c.name.clone()
+    } else {
+        // Public Client (unregistriert): PKCE ist Pflicht
+        if params.code_challenge.is_none() {
+            return Ok(Redirect::to(&format!(
+                "{}?error=invalid_request&error_description=PKCE+required+for+public+clients&state={}",
+                params.redirect_uri, params.state
+            ))
+            .into_response());
+        }
+        // Client-Name aus der Redirect-URI ableiten
+        params.redirect_uri
+            .split("//")
+            .nth(1)
+            .and_then(|s| s.split('/').next())
+            .unwrap_or(&params.client_id)
+            .to_string()
+    };
 
     // Prüfe ob User schon eingeloggt (Cookie)
     if let Some(t) = extract_token_from_headers(&headers) {
@@ -187,7 +197,7 @@ document.getElementById('auth-form').addEventListener('submit', async (e) => {{
 }});
 </script>
 </body></html>"##,
-        client_name = html_escape(&client.name),
+        client_name = html_escape(&client_name),
         base_url = base_url,
         query = build_authorize_query(&params),
     );
