@@ -188,7 +188,7 @@ document.getElementById('auth-form').addEventListener('submit', async (e) => {{
       throw new Error(err.error || 'Login fehlgeschlagen');
     }}
     // Erneut authorize aufrufen – jetzt mit Cookie
-    window.location.href = '{base_url}/oauth/authorize?{query}';
+    window.location.href = '{base_url}/authorize?{query}';
   }} catch (err) {{
     msg.textContent = err.message;
     msg.style.display = '';
@@ -205,11 +205,24 @@ document.getElementById('auth-form').addEventListener('submit', async (e) => {{
     Ok(Html(html).into_response())
 }
 
-/// POST /oauth/token – Token Endpoint.
+/// POST /token – Token Endpoint (akzeptiert form-urlencoded und JSON).
 pub async fn oauth_token(
     State(state): State<AppState>,
-    axum::extract::Form(params): axum::extract::Form<OAuthTokenRequest>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let content_type = headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    let params: OAuthTokenRequest = if content_type.contains("json") {
+        serde_json::from_slice(&body)
+            .map_err(|e| ApiError::BadRequest(format!("Invalid JSON: {e}")))?
+    } else {
+        serde_urlencoded::from_bytes(&body)
+            .map_err(|e| ApiError::BadRequest(format!("Invalid form data: {e}")))?
+    };
     match params.grant_type.as_str() {
         "authorization_code" => {
             let code_str = params
