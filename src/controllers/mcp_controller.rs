@@ -497,6 +497,11 @@ pub async fn mcp_sse_stream(
     use axum::response::IntoResponse;
     use axum::http::StatusCode;
 
+    // Auth prüfen: 401 wenn kein gültiger Token (triggert OAuth-Flow)
+    if resolve_caller(&headers, &state).await.is_err() {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+
     let session_id = match headers
         .get("mcp-session-id")
         .and_then(|v| v.to_str().ok())
