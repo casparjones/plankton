@@ -346,6 +346,19 @@ pub async fn mcp_jsonrpc(
         .and_then(|v| v.to_str().ok())
         .map(String::from);
 
+    // Auth-Check VOR Body-Parsing: Kein Token UND keine gültige Session → 401
+    if auth_result.is_err() {
+        let has_valid_session = if let Some(ref sid) = session_id {
+            let sessions = state.mcp_sessions.lock().await;
+            sessions.get(sid).map(|s| !s.caller.is_empty() && !s.role.is_empty()).unwrap_or(false)
+        } else {
+            false
+        };
+        if !has_valid_session {
+            return unauthorized_response(host, scheme);
+        }
+    }
+
     // Versuche als einzelne Anfrage oder Batch zu parsen
     let raw: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
