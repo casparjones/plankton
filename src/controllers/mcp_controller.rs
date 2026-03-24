@@ -517,16 +517,9 @@ pub async fn mcp_jsonrpc(
         ).into_response();
     }
 
-    // SSE-Modus: Antworten als SSE-Events streamen
+    // SSE-Modus: Antworten als SSE-Events streamen (nur initiale Events, kein long-lived Stream)
+    // Long-lived SSE-Streams gehören zu GET /mcp, nicht zu POST Request-Response-Calls
     if use_sse {
-        let sid = session_id.clone().unwrap_or_default();
-        // Sende alle Antworten als einzelne SSE-Events, dann hole den broadcast-Rx
-        // für server-initiierte Nachrichten
-        let rx = {
-            let sessions = state.mcp_sessions.lock().await;
-            sessions.get(&sid).map(|s| s.tx.subscribe())
-        };
-
         let initial_events: Vec<Result<Event, std::convert::Infallible>> = responses
             .into_iter()
             .filter_map(|r| {
@@ -537,46 +530,14 @@ pub async fn mcp_jsonrpc(
             .collect();
 
         let initial_stream = futures::stream::iter(initial_events);
-
-        if let Some(rx) = rx {
-            // Nach den initialen Antworten auf server-initiierte Nachrichten warten
-            let notification_stream = stream::unfold(rx, |mut rx| async move {
-                match rx.recv().await {
-                    Ok(msg) => Some((
-                        Ok::<_, std::convert::Infallible>(Event::default().event("message").data(msg)),
-                        rx,
-                    )),
-                    Err(broadcast::error::RecvError::Lagged(_)) => Some((
-                        Ok(Event::default().event("message").data(
-                            serde_json::json!({"jsonrpc":"2.0","method":"notifications/message","params":{"level":"warning","data":"lagged"}}).to_string()
-                        )),
-                        rx,
-                    )),
-                    Err(broadcast::error::RecvError::Closed) => None,
-                }
-            });
-
-            let combined = initial_stream.chain(notification_stream);
-
-            let mut resp = Sse::new(combined).into_response();
-            if let Some(sid) = session_id {
-                resp.headers_mut().insert(
-                    header::HeaderName::from_static("mcp-session-id"),
-                    sid.parse().unwrap_or_else(|_| "invalid".parse().unwrap()),
-                );
-            }
-            return resp;
-        } else {
-            // Kein rx, nur initiale Events
-            let mut resp = Sse::new(initial_stream).into_response();
-            if let Some(sid) = session_id {
-                resp.headers_mut().insert(
-                    header::HeaderName::from_static("mcp-session-id"),
-                    sid.parse().unwrap_or_else(|_| "invalid".parse().unwrap()),
-                );
-            }
-            return resp;
+        let mut resp = Sse::new(initial_stream).into_response();
+        if let Some(sid) = session_id {
+            resp.headers_mut().insert(
+                header::HeaderName::from_static("mcp-session-id"),
+                sid.parse().unwrap_or_else(|_| "invalid".parse().unwrap()),
+            );
         }
+        return resp;
     }
 
     // JSON-Modus: Einzelne Antwort oder Batch
