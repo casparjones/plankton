@@ -18,12 +18,16 @@ use crate::state::{AppState, McpSession};
 /// Alle verfügbaren MCP-Tools mit optionaler Rollen-Einschränkung.
 fn all_tools() -> Vec<ToolDef> {
     vec![
-        ToolDef { name: "list_projects", description: "List all projects", roles: None, schema: None },
-        ToolDef { name: "get_project", description: "Get one project by id", roles: None, schema: Some(|| serde_json::json!({
+        ToolDef { name: "list_projects", description: "List all projects with id, title, slug, task_count. Use this first to find project IDs.", roles: None, schema: None },
+        ToolDef { name: "get_project", description: "Get project with columns and tasks (compact: no logs/comments). Use get_task for full task details.", roles: None, schema: Some(|| serde_json::json!({
             "type": "object", "required": ["id"],
             "properties": { "id": { "type": "string", "description": "Project ID" } }
         })) },
-        ToolDef { name: "summarize_board", description: "Summarize board column counts", roles: None, schema: Some(|| serde_json::json!({
+        ToolDef { name: "get_task", description: "Get full task details including description, comments, logs. Use after get_project to see a specific task.", roles: None, schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id"],
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" } }
+        })) },
+        ToolDef { name: "summarize_board", description: "Quick overview: column names with task counts per column", roles: None, schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id"],
             "properties": { "project_id": { "type": "string", "description": "Project ID" } }
         })) },
@@ -35,7 +39,7 @@ fn all_tools() -> Vec<ToolDef> {
             "type": "object", "required": ["project_id"],
             "properties": { "project_id": { "type": "string" } }
         })) },
-        ToolDef { name: "create_task", description: "Create a task in a project", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+        ToolDef { name: "create_task", description: "Create a new task. Returns the created task object. Tasks land in the first column (Todo) by default.", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id"],
             "properties": {
                 "project_id": { "type": "string" },
@@ -643,12 +647,54 @@ async fn execute_tool(
     caller: &str,
 ) -> Result<serde_json::Value, ApiError> {
     match tool {
-        "list_projects" => Ok(serde_json::to_value(state.store.list_projects().await?)?),
+        "list_projects" => {
+            // Nur Metadaten: id, title, slug, task_count, column_count
+            let projects = state.store.list_projects().await?;
+            let summary: Vec<serde_json::Value> = projects.iter().map(|p| {
+                serde_json::json!({
+                    "id": p.id,
+                    "title": p.title,
+                    "slug": p.slug,
+                    "task_count": p.tasks.len(),
+                    "column_count": p.columns.len(),
+                })
+            }).collect();
+            Ok(serde_json::to_value(summary)?)
+        }
         "get_project" => {
             let id = args["id"]
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("id missing".into()))?;
-            Ok(serde_json::to_value(state.store.get_project(id).await?)?)
+            let project = state.store.get_project(id).await?;
+            // Kompakt: Spalten + Tasks ohne Logs/Comments
+            let columns: Vec<serde_json::Value> = project.columns.iter()
+                .filter(|c| !c.hidden)
+                .map(|c| serde_json::json!({"id": c.id, "title": c.title, "order": c.order}))
+                .collect();
+            let tasks: Vec<serde_json::Value> = project.tasks.iter().map(|t| {
+                serde_json::json!({
+                    "id": t.id, "title": t.title, "description": t.description,
+                    "column_id": t.column_id, "labels": t.labels, "worker": t.worker,
+                    "points": t.points, "task_type": t.task_type, "parent_id": t.parent_id,
+                    "order": t.order,
+                })
+            }).collect();
+            Ok(serde_json::json!({
+                "id": project.id, "title": project.title, "slug": project.slug,
+                "columns": columns, "tasks": tasks,
+            }))
+        }
+        "get_task" => {
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let task_id = args["task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
+            let project = state.store.get_project(project_id).await?;
+            let task = project.tasks.iter().find(|t| t.id == task_id)
+                .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
+            Ok(serde_json::to_value(task)?)
         }
         "create_project" => {
             let title = args["title"]
@@ -692,9 +738,9 @@ async fn execute_tool(
                 ..Task::default()
             };
             project.tasks.push(task.clone());
-            let updated = state.store.put_project(project).await?;
+            state.store.put_project(project).await?;
             publish_event(state, project_id, "task_created", serde_json::to_value(&task)?).await;
-            Ok(serde_json::to_value(updated)?)
+            Ok(serde_json::to_value(&task)?)
         }
         "update_task" => {
             let project_id = args["project_id"]
@@ -732,11 +778,11 @@ async fn execute_tool(
                 task.updated_at = Utc::now().to_rfc3339();
             }
             let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
-            let _updated = state.store.put_project(project).await?;
-            if let Some(t) = task_data {
-                publish_event(state, project_id, "task_updated", serde_json::to_value(&t)?).await;
+            state.store.put_project(project).await?;
+            if let Some(ref t) = task_data {
+                publish_event(state, project_id, "task_updated", serde_json::to_value(t)?).await;
             }
-            Ok(serde_json::to_value(_updated)?)
+            Ok(serde_json::to_value(&task_data)?)
         }
         "move_task" => {
             let project_id = args["project_id"]
@@ -769,11 +815,11 @@ async fn execute_tool(
                 task.logs.push(log_entry(&caller, &format!("→ {}", new_name)));
             }
             let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
-            let updated = state.store.put_project(project).await?;
-            if let Some(t) = task_data {
-                publish_event(state, project_id, "task_moved", serde_json::to_value(&t)?).await;
+            state.store.put_project(project).await?;
+            if let Some(ref t) = task_data {
+                publish_event(state, project_id, "task_moved", serde_json::to_value(t)?).await;
             }
-            Ok(serde_json::to_value(updated)?)
+            Ok(serde_json::to_value(&task_data)?)
         }
         "delete_task" => {
             let project_id = args["project_id"]
@@ -791,9 +837,9 @@ async fn execute_tool(
                 if task.parent_id == task_id { task.parent_id.clear(); }
             }
             project.tasks.retain(|t| t.id != task_id);
-            let updated = state.store.put_project(project).await?;
+            state.store.put_project(project).await?;
             publish_event(state, project_id, "task_deleted", serde_json::json!({ "task_id": task_id })).await;
-            Ok(serde_json::to_value(updated)?)
+            Ok(serde_json::json!({"deleted": task_id}))
         }
         "summarize_board" => {
             let project_id = args["project_id"]
