@@ -74,6 +74,15 @@ const relatedTickets = computed(() => {
 
 const hasRelations = computed(() => relatedTickets.value.length > 0)
 
+/** Subtasks als eigene aufklappbare Sektion. */
+const subtasks = computed(() => {
+  if (!task.value) return []
+  return (task.value.subtask_ids || []).map(findTask).filter(Boolean) as RelatedTask[]
+})
+const subtasksDone = computed(() => subtasks.value.filter(s => s.done).length)
+const hasSubtasks = computed(() => subtasks.value.length > 0)
+const subtasksOpen = ref(false)
+
 /** Öffnet ein verknüpftes Ticket im Detail-View. */
 function openRelated(id: string): void {
   const t = (state.project?.tasks || []).find((t: Task) => t.id === id)
@@ -218,6 +227,28 @@ defineExpose({ open, close })
               <span v-else>–</span>
             </div>
           </div>
+          <!-- Subtasks (aufklappbar) -->
+          <div v-if="hasSubtasks" class="detail-section">
+            <div class="subtasks-header" @click="subtasksOpen = !subtasksOpen">
+              <span class="subtasks-toggle">{{ subtasksOpen ? '▾' : '▸' }}</span>
+              <span class="detail-section-title" style="cursor:pointer">Subtasks</span>
+              <span class="subtasks-count">
+                <span class="subtasks-done-count">{{ subtasksDone }}</span> / {{ subtasks.length }} done
+                <span v-if="subtasksDone === subtasks.length" class="subtasks-all-done">&#10003;</span>
+              </span>
+              <div class="subtasks-bar">
+                <div class="subtasks-bar-fill" :style="{ width: (subtasks.length ? (subtasksDone / subtasks.length * 100) : 0) + '%' }"></div>
+              </div>
+            </div>
+            <div v-if="subtasksOpen" class="subtasks-list">
+              <div v-for="sub in subtasks" :key="sub.id" class="related-item" @click="openRelated(sub.id)">
+                <span :class="['subtask-check', { done: sub.done }]">{{ sub.done ? '✓' : '○' }}</span>
+                <span class="related-title">{{ sub.title }}</span>
+                <span class="related-col">{{ sub.colName }}</span>
+              </div>
+            </div>
+          </div>
+
           <div v-if="hasRelations" class="detail-section">
             <span class="detail-section-title">Verknüpfte Tickets</span>
             <div class="related-tickets">

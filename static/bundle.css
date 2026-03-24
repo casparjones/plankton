@@ -1580,6 +1580,75 @@ body {
     flex-shrink: 0;
 }
 
+/* Subtasks (aufklappbar) */
+.subtasks-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 6px 0;
+}
+
+.subtasks-toggle {
+    font-size: 12px;
+    color: var(--text-dim);
+    width: 14px;
+}
+
+.subtasks-count {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: auto;
+}
+
+.subtasks-done-count {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.subtasks-all-done {
+    color: #4caf50;
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+.subtasks-bar {
+    width: 60px;
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-left: 8px;
+}
+
+.subtasks-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.subtasks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 4px;
+}
+
+.subtask-check {
+    font-size: 13px;
+    width: 18px;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--text-dim);
+}
+
+.subtask-check.done {
+    color: #4caf50;
+    font-weight: 700;
+}
+
 @media (max-width: 900px) {
     .detail-grid {
         grid-template-columns: 1fr;
