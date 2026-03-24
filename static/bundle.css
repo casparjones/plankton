@@ -626,6 +626,8 @@ body {
     margin-bottom: 8px !important;
     cursor: grab !important;
     transition: border-color 0.15s, box-shadow 0.15s !important;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .kanban-item:hover {
