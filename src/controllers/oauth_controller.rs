@@ -61,34 +61,9 @@ pub async fn oauth_authorize(
     };
 
     // Prüfe ob User schon eingeloggt (Cookie)
-    if let Some(t) = extract_token_from_headers(&headers) {
-        if let Ok(claims) = validate_jwt(&t, &state.jwt_secret) {
-            // User ist eingeloggt → Code generieren und zurückleiten
-            let code = generate_oauth_code();
-            let auth_code = OAuthAuthCode {
-                code: code.clone(),
-                client_id: params.client_id.clone(),
-                user_id: claims.sub.clone(),
-                redirect_uri: params.redirect_uri.clone(),
-                scope: params.scope.clone(),
-                created_at: Utc::now(),
-                code_challenge: params.code_challenge.clone(),
-            };
-            state
-                .oauth_codes
-                .lock()
-                .await
-                .insert(code.clone(), auth_code);
+    let logged_in_user = extract_token_from_headers(&headers)
+        .and_then(|t| validate_jwt(&t, &state.jwt_secret).ok());
 
-            let redirect = format!(
-                "{}?code={}&state={}",
-                params.redirect_uri, code, params.state
-            );
-            return Ok(Redirect::to(&redirect).into_response());
-        }
-    }
-
-    // Nicht eingeloggt → Login-Seite mit Consent anzeigen
     let scheme = headers
         .get("x-forwarded-proto")
         .and_then(|v| v.to_str().ok())
@@ -98,6 +73,43 @@ pub async fn oauth_authorize(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("localhost");
     let base_url = format!("{scheme}://{host}");
+
+    // Consent wurde bestätigt (POST von der Consent-Seite)
+    // → wird via query param "consent=granted" signalisiert
+    if let Some(ref user) = logged_in_user {
+        if params.state.ends_with("_consent") {
+            let real_state = params.state.trim_end_matches("_consent");
+            let code = generate_oauth_code();
+            let auth_code = OAuthAuthCode {
+                code: code.clone(),
+                client_id: params.client_id.clone(),
+                user_id: user.sub.clone(),
+                redirect_uri: params.redirect_uri.clone(),
+                scope: params.scope.clone(),
+                created_at: Utc::now(),
+                code_challenge: params.code_challenge.clone(),
+            };
+            state.oauth_codes.lock().await.insert(code.clone(), auth_code);
+            let redirect = format!("{}?code={}&state={}", params.redirect_uri, code, real_state);
+            return Ok(Redirect::to(&redirect).into_response());
+        }
+    }
+
+    // Consent-Screen anzeigen (eingeloggt oder nicht)
+    let show_login = logged_in_user.is_none();
+    let user_display = logged_in_user
+        .as_ref()
+        .map(|u| format!("{} ({})", u.display_name, u.role))
+        .unwrap_or_default();
+
+    let original_state = params.state.clone();
+    let redirect_uri_raw = params.redirect_uri.clone();
+    let consent_state = format!("{}_consent", params.state);
+    let consent_query = {
+        let mut p = params;
+        p.state = consent_state;
+        build_authorize_query(&p)
+    };
 
     let html = format!(
         r##"<!DOCTYPE html>
@@ -111,7 +123,7 @@ pub async fn oauth_authorize(
     --bg: #1a1a2e; --surface: #16213e; --input-bg: #0f3460;
     --text: #e0e0e0; --text-dim: #aaa; --border: #333;
     --accent: #64ffda; --accent-text: #1a1a2e;
-    --shadow: rgba(0,0,0,0.3);
+    --shadow: rgba(0,0,0,0.3); --danger: #ff5252;
     color-scheme: dark;
   }}
   @media (prefers-color-scheme: light) {{
@@ -119,7 +131,7 @@ pub async fn oauth_authorize(
       --bg: #f5f5f7; --surface: #ffffff; --input-bg: #eeeef2;
       --text: #1a1a2e; --text-dim: #6e6e82; --border: #d0d0d8;
       --accent: #6b5ce7; --accent-text: #ffffff;
-      --shadow: rgba(0,0,0,0.08);
+      --shadow: rgba(0,0,0,0.08); --danger: #d94452;
       color-scheme: light;
     }}
   }}
@@ -135,71 +147,140 @@ pub async fn oauth_authorize(
     max-width: 420px; width: 100%; box-shadow: 0 8px 32px var(--shadow);
   }}
   h1 {{ font-size: 24px; margin-bottom: 8px; }}
-  .subtitle {{ color: var(--text-dim); margin-bottom: 24px; }}
+  .subtitle {{ color: var(--text-dim); margin-bottom: 20px; }}
   .client-name {{ color: var(--accent); font-weight: 600; }}
+  .user-info {{ background: var(--input-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }}
+  .user-label {{ color: var(--text-dim); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.05em; margin-bottom: 2px; }}
+  .permissions {{ margin: 16px 0; font-size: 13px; color: var(--text-dim); }}
+  .permissions li {{ margin: 4px 0; padding-left: 4px; }}
   label {{ display: block; margin-bottom: 4px; font-size: 14px; color: var(--text-dim); }}
   input {{ width: 100%; padding: 10px 12px; border: 1px solid var(--border);
     border-radius: 6px; background: var(--input-bg); color: var(--text);
     font-size: 14px; margin-bottom: 12px; outline: none; }}
   input:focus {{ border-color: var(--accent); }}
+  .btn-row {{ display: flex; gap: 10px; }}
+  .btn-row button {{ flex: 1; }}
   button {{
-    width: 100%; padding: 12px; border: none; border-radius: 6px;
-    background: var(--accent); color: var(--accent-text); font-size: 16px;
-    font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+    padding: 12px; border: none; border-radius: 6px;
+    font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
   }}
+  .btn-allow {{ background: var(--accent); color: var(--accent-text); }}
+  .btn-deny {{ background: var(--input-bg); color: var(--text-dim); border: 1px solid var(--border); }}
   button:hover {{ opacity: 0.9; }}
   button:disabled {{ opacity: 0.5; cursor: default; }}
   .msg {{ text-align: center; padding: 12px; border-radius: 6px;
-    margin-top: 16px; font-size: 14px; background: rgba(255,82,82,0.1); color: #ff5252; }}
+    margin-top: 16px; font-size: 14px; background: rgba(255,82,82,0.1); color: var(--danger); }}
+  .hidden {{ display: none; }}
 </style>
 </head>
 <body>
 <div class="card">
   <h1><img src="/icons/favicon-32.png" alt="" style="vertical-align:middle;margin-right:8px" />Autorisierung</h1>
-  <p class="subtitle"><span class="client-name">{client_name}</span> m&ouml;chte auf Plankton zugreifen.</p>
-  <form id="auth-form">
-    <label for="username">Username</label>
-    <input id="username" type="text" autocomplete="username" required autofocus>
-    <label for="password">Passwort</label>
-    <input id="password" type="password" autocomplete="current-password" required>
-    <button type="submit">Anmelden &amp; Autorisieren</button>
-  </form>
-  <div id="error-msg" style="display:none" class="msg"></div>
+  <p class="subtitle"><span class="client-name">{client_name}</span> m&ouml;chte auf dein Plankton-Konto zugreifen.</p>
+
+  <!-- Login-Formular (nur wenn nicht eingeloggt) -->
+  <div id="step-login" class="{login_class}">
+    <form id="login-form">
+      <label for="username">Username</label>
+      <input id="username" type="text" autocomplete="username" required autofocus>
+      <label for="password">Passwort</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button type="submit" class="btn-allow" style="width:100%">Anmelden</button>
+    </form>
+    <div id="login-msg"></div>
+  </div>
+
+  <!-- Consent-Screen -->
+  <div id="step-consent" class="{consent_class}">
+    <div class="user-info">
+      <div class="user-label">Eingeloggt als</div>
+      <div id="user-display">{user_display}</div>
+    </div>
+    <ul class="permissions">
+      <li>Projekte und Tasks lesen</li>
+      <li>Tasks erstellen, bearbeiten und verschieben</li>
+      <li>Kommentare und Logs schreiben</li>
+    </ul>
+    <div class="btn-row">
+      <button class="btn-deny" id="deny-btn">Ablehnen</button>
+      <button class="btn-allow" id="allow-btn">Zugriff erlauben</button>
+    </div>
+  </div>
+
+  <!-- Abgelehnt -->
+  <div id="step-denied" class="hidden">
+    <div class="msg">Zugriff verweigert. Du kannst dieses Fenster schlie&szlig;en.</div>
+  </div>
 </div>
 <script>
-document.getElementById('auth-form').addEventListener('submit', async (e) => {{
-  e.preventDefault();
-  const btn = e.target.querySelector('button');
-  btn.disabled = true;
-  const msg = document.getElementById('error-msg');
-  msg.style.display = 'none';
-  try {{
-    const r = await fetch('{base_url}/auth/login', {{
-      method: 'POST',
-      headers: {{ 'Content-Type': 'application/json' }},
-      credentials: 'include',
-      body: JSON.stringify({{
-        username: document.getElementById('username').value,
-        password: document.getElementById('password').value,
-      }}),
+(function() {{
+  const consentUrl = '{base_url}/oauth/authorize?{consent_query}';
+  const redirectUri = '{redirect_uri}';
+  const state = '{original_state}';
+
+  // Login-Formular
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) {{
+    loginForm.addEventListener('submit', async (e) => {{
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      const msg = document.getElementById('login-msg');
+      msg.innerHTML = '';
+      try {{
+        const r = await fetch('{base_url}/auth/login', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          credentials: 'include',
+          body: JSON.stringify({{
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value,
+          }}),
+        }});
+        if (!r.ok) {{
+          const err = await r.json().catch(() => ({{}}));
+          throw new Error(err.error || 'Login fehlgeschlagen');
+        }}
+        const data = await r.json();
+        // Login OK → Consent anzeigen
+        document.getElementById('step-login').classList.add('hidden');
+        document.getElementById('step-consent').classList.remove('hidden');
+        document.getElementById('user-display').textContent =
+          (data.display_name || data.username) + ' (' + (data.role || 'user') + ')';
+      }} catch (err) {{
+        msg.innerHTML = '<div class="msg">' + err.message + '</div>';
+        btn.disabled = false;
+      }}
     }});
-    if (!r.ok) {{
-      const err = await r.json().catch(() => ({{}}));
-      throw new Error(err.error || 'Login fehlgeschlagen');
-    }}
-    // Erneut authorize aufrufen – jetzt mit Cookie
-    window.location.href = '{base_url}/oauth/authorize?{query}';
-  }} catch (err) {{
-    msg.textContent = err.message;
-    msg.style.display = '';
-    btn.disabled = false;
   }}
-}});
+
+  // Consent: Erlauben
+  document.getElementById('allow-btn').addEventListener('click', () => {{
+    window.location.href = consentUrl;
+  }});
+
+  // Consent: Ablehnen
+  document.getElementById('deny-btn').addEventListener('click', () => {{
+    document.getElementById('step-consent').classList.add('hidden');
+    document.getElementById('step-denied').classList.remove('hidden');
+    // Redirect mit error=access_denied
+    setTimeout(() => {{
+      window.location.href = redirectUri + '?error=access_denied&state=' + state;
+    }}, 1500);
+  }});
+}})();
 </script>
 </body></html>"##,
         client_name = html_escape(&client_name),
         base_url = base_url,
-        query = build_authorize_query(&params),
+        consent_query = consent_query,
+        redirect_uri = html_escape(&redirect_uri_raw),
+        original_state = html_escape(&original_state),
+        login_class = if show_login { "" } else { "hidden" },
+        consent_class = if show_login { "hidden" } else { "" },
+        user_display = html_escape(&user_display),
     );
 
     Ok(Html(html).into_response())
