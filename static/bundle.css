@@ -3443,7 +3443,7 @@ body {
 }
 
 
-.board-columns[data-v-fc9b35c8] {
+.board-columns[data-v-5bc3095b] {
   display: flex;
   gap: 12px;
   overflow-x: auto;
@@ -3451,7 +3451,7 @@ body {
   min-height: 200px;
   align-items: flex-start;
 }
-.kanban-column[data-v-fc9b35c8] {
+.kanban-column[data-v-5bc3095b] {
   min-width: 280px;
   max-width: 320px;
   flex: 0 0 300px;
@@ -3461,7 +3461,7 @@ body {
   flex-direction: column;
   max-height: calc(100vh - 140px);
 }
-.kanban-board-header[data-v-fc9b35c8] {
+.kanban-board-header[data-v-5bc3095b] {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3470,30 +3470,30 @@ body {
   flex-shrink: 0;
   cursor: grab;
 }
-.kanban-board-header[data-v-fc9b35c8]:active {
+.kanban-board-header[data-v-5bc3095b]:active {
   cursor: grabbing;
 }
-.col-done .kanban-board-header[data-v-fc9b35c8] {
+.col-done .kanban-board-header[data-v-5bc3095b] {
   cursor: default;
 }
-.column-dragging[data-v-fc9b35c8] {
+.column-dragging[data-v-5bc3095b] {
   opacity: 0.4;
 }
-.kanban-drag[data-v-fc9b35c8] {
+.kanban-drag[data-v-5bc3095b] {
   min-height: 40px;
   padding: 4px 8px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
-.kanban-item[data-v-fc9b35c8] {
+.kanban-item[data-v-5bc3095b] {
   cursor: grab;
   margin-bottom: 6px;
 }
-.kanban-item[data-v-fc9b35c8]:active {
+.kanban-item[data-v-5bc3095b]:active {
   cursor: grabbing;
 }
-.kanban-empty[data-v-fc9b35c8] {
+.kanban-empty[data-v-5bc3095b] {
   padding: 16px;
   text-align: center;
   opacity: 0.5;
