@@ -408,29 +408,38 @@ pub async fn mcp_jsonrpc(
 
     // Session-Validierung (außer für initialize)
     let has_init = requests.iter().any(|r| r.method == "initialize");
+    let mut session_id = session_id;
     if !has_init {
         match &session_id {
             Some(sid) => {
                 let sessions = state.mcp_sessions.lock().await;
                 if !sessions.contains_key(sid) {
-                    let resp = JsonRpcResponse {
-                        jsonrpc: "2.0".into(),
-                        result: None,
-                        error: Some(JsonRpcError { code: -32001, message: "Invalid or expired session".into() }),
-                        id: serde_json::Value::Null,
-                    };
-                    return (StatusCode::NOT_FOUND, Json(resp)).into_response();
+                    // Ungültige Session aber gültiger Token → neue Session erstellen
+                    if let Ok((caller, role)) = &auth_result {
+                        drop(sessions);
+                        let new_sid = Uuid::new_v4().to_string();
+                        let (tx, _) = broadcast::channel::<String>(100);
+                        state.mcp_sessions.lock().await.insert(new_sid.clone(), McpSession {
+                            caller: caller.clone(), role: role.clone(), created_at: Utc::now(), tx,
+                        });
+                        session_id = Some(new_sid);
+                    } else {
+                        return unauthorized_response(host, scheme);
+                    }
                 }
             }
             None => {
-                // Kein Session-Header und kein initialize → Session erforderlich
-                let resp = JsonRpcResponse {
-                    jsonrpc: "2.0".into(),
-                    result: None,
-                    error: Some(JsonRpcError { code: -32002, message: "Mcp-Session-Id header required".into() }),
-                    id: serde_json::Value::Null,
-                };
-                return (StatusCode::BAD_REQUEST, Json(resp)).into_response();
+                // Kein Session-Header: Mit gültigem Token → automatisch Session erstellen
+                if let Ok((caller, role)) = &auth_result {
+                    let new_sid = Uuid::new_v4().to_string();
+                    let (tx, _) = broadcast::channel::<String>(100);
+                    state.mcp_sessions.lock().await.insert(new_sid.clone(), McpSession {
+                        caller: caller.clone(), role: role.clone(), created_at: Utc::now(), tx,
+                    });
+                    session_id = Some(new_sid);
+                } else {
+                    return unauthorized_response(host, scheme);
+                }
             }
         }
     }
