@@ -89,6 +89,8 @@ pub async fn oauth_authorize(
                 created_at: Utc::now(),
                 code_challenge: params.code_challenge.clone(),
             };
+            tracing::info!("OAuth consent: code={} client={} redirect_uri={} challenge={:?}",
+                &code[..16], auth_code.client_id[..16].to_string(), &auth_code.redirect_uri, &auth_code.code_challenge);
             state.oauth_codes.lock().await.insert(code.clone(), auth_code);
             let redirect = format!("{}?code={}&state={}", params.redirect_uri, code, real_state);
             return Ok(Redirect::to(&redirect).into_response());
@@ -312,6 +314,10 @@ pub async fn oauth_token(
                 .ok_or(ApiError::BadRequest("Missing code".into()))?;
 
             // Code einlösen (einmalig)
+            let codes = state.oauth_codes.lock().await;
+            let stored_keys: Vec<String> = codes.keys().cloned().collect();
+            tracing::info!("OAuth token exchange: looking for code={} in {} stored codes", &code_str[..16.min(code_str.len())], stored_keys.len());
+            drop(codes);
             let auth_code = state
                 .oauth_codes
                 .lock()
