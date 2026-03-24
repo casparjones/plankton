@@ -183,6 +183,9 @@ export function renderProjectList(): void {
     const sortable = Sortable.create(projectsUl, {
       group: 'sidebar-projects',
       animation: 150,
+      delay: 400,
+      delayOnTouchOnly: true,
+      touchStartThreshold: 5,
       draggable: '.project-item',
       ghostClass: 'sidebar-drag-ghost',
       onAdd(evt) {
