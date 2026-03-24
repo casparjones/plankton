@@ -508,6 +508,15 @@ pub async fn mcp_jsonrpc(
         }
     }
 
+    // Nur Notifications (keine Responses) → sofort 202 Accepted, egal ob SSE oder nicht
+    if responses.is_empty() {
+        let sid_header = session_id.unwrap_or_default();
+        return (
+            StatusCode::ACCEPTED,
+            [(header::HeaderName::from_static("mcp-session-id"), sid_header)],
+        ).into_response();
+    }
+
     // SSE-Modus: Antworten als SSE-Events streamen
     if use_sse {
         let sid = session_id.clone().unwrap_or_default();
