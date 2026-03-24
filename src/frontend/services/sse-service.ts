@@ -62,7 +62,14 @@ export function subscribeSSE(projectId: string): void {
     }
 
     switch (payload.event) {
-      case 'task_created':
+      case 'task_created': {
+        const task = payload.data as unknown as Task;
+        patchTask(task);
+        // Glow für via SSE empfangene neue Tasks (von anderen Clients/Agenten)
+        (window as any).__newTaskGlowId = task.id;
+        renderBoard();
+        break;
+      }
       case 'task_updated':
       case 'task_moved':
         patchTask(payload.data as unknown as Task);

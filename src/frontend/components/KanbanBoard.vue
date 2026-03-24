@@ -178,17 +178,24 @@ function refreshColumnTasks(): void {
   }
   columnTasks.value = result
   console.log('[KanbanBoard] columnTasks updated:', Object.keys(result).length, 'columns')
-  // Apply glow animation to newly created task.
+  // Apply glow animation to newly created/imported tasks.
   const glowId = (window as any).__newTaskGlowId
-  if (glowId) {
-    delete (window as any).__newTaskGlowId
+  const glowIds: string[] = (window as any).__newTaskGlowIds || []
+  if (glowId) glowIds.push(glowId)
+  delete (window as any).__newTaskGlowId
+  delete (window as any).__newTaskGlowIds
+  if (glowIds.length > 0) {
     nextTick(() => {
-      const el = document.querySelector(`.task-inner[data-task-id="${glowId}"]`)?.closest('.kanban-item') as HTMLElement | null
-      if (el) {
-        el.classList.add('task-new-glow')
-        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-        setTimeout(() => el.classList.remove('task-new-glow'), 2500)
+      let firstEl: HTMLElement | null = null
+      for (const id of glowIds) {
+        const el = document.querySelector(`.task-inner[data-task-id="${id}"]`)?.closest('.kanban-item') as HTMLElement | null
+        if (el) {
+          el.classList.add('task-new-glow')
+          setTimeout(() => el.classList.remove('task-new-glow'), 2500)
+          if (!firstEl) firstEl = el
+        }
       }
+      if (firstEl) firstEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     })
   }
 }

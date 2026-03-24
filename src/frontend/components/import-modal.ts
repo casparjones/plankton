@@ -154,7 +154,14 @@ export async function executeImport(): Promise<void> {
     resultEl.style.display = '';
 
     if (result.imported > 0) {
+      // Alte Task-IDs merken um neue zu erkennen
+      const oldIds = new Set((state.project?.tasks || []).map(t => t.id));
       state.project = await api.get<ProjectDoc>(`/api/projects/${state.project!._id}`);
+      // Neue Task-IDs für Glow sammeln
+      const newIds = (state.project?.tasks || []).filter(t => !oldIds.has(t.id)).map(t => t.id);
+      if (newIds.length > 0) {
+        (window as any).__newTaskGlowIds = newIds;
+      }
       renderBoard();
     }
   } catch (err: any) {
