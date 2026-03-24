@@ -74,10 +74,17 @@ const relatedTickets = computed(() => {
 
 const hasRelations = computed(() => relatedTickets.value.length > 0)
 
-/** Subtasks als eigene aufklappbare Sektion. */
+/** Subtasks als eigene aufklappbare Sektion (aus subtask_ids ODER parent_id). */
 const subtasks = computed(() => {
   if (!task.value) return []
-  return (task.value.subtask_ids || []).map(findTask).filter(Boolean) as RelatedTask[]
+  // Subtasks aus subtask_ids
+  const fromIds = (task.value.subtask_ids || []).map(findTask).filter(Boolean) as RelatedTask[]
+  // Subtasks die via parent_id auf dieses Epic zeigen (Fallback)
+  const fromParent = (state.project?.tasks || [])
+    .filter((t: Task) => t.parent_id === task.value!.id && !fromIds.some(s => s.id === t.id))
+    .map((t: Task) => findTask(t.id))
+    .filter(Boolean) as RelatedTask[]
+  return [...fromIds, ...fromParent]
 })
 const subtasksDone = computed(() => subtasks.value.filter(s => s.done).length)
 const hasSubtasks = computed(() => subtasks.value.length > 0)
