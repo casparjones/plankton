@@ -91,7 +91,9 @@ pub async fn oauth_authorize(
             };
             tracing::info!("OAuth consent: code={} client={} redirect_uri={} challenge={:?}",
                 &code[..16], auth_code.client_id[..16].to_string(), &auth_code.redirect_uri, &auth_code.code_challenge);
-            state.oauth_codes.lock().await.insert(code.clone(), auth_code);
+            if let Err(e) = state.store.save_oauth_code(&auth_code).await {
+                tracing::error!("Failed to save OAuth code: {e:?}");
+            }
             let redirect = format!("{}?code={}&state={}", params.redirect_uri, code, real_state);
             return Ok(Redirect::to(&redirect).into_response());
         }
@@ -313,17 +315,9 @@ pub async fn oauth_token(
                 .as_deref()
                 .ok_or(ApiError::BadRequest("Missing code".into()))?;
 
-            // Code einlösen (einmalig)
-            let codes = state.oauth_codes.lock().await;
-            let stored_keys: Vec<String> = codes.keys().cloned().collect();
-            tracing::info!("OAuth token exchange: looking for code={} in {} stored codes", &code_str[..16.min(code_str.len())], stored_keys.len());
-            drop(codes);
-            let auth_code = state
-                .oauth_codes
-                .lock()
-                .await
-                .remove(code_str)
-                .ok_or(ApiError::BadRequest("Invalid or expired code".into()))?;
+            // Code einlösen (einmalig, aus Dateisystem)
+            tracing::info!("OAuth token exchange: looking for code={}", &code_str[..16.min(code_str.len())]);
+            let auth_code = state.store.take_oauth_code(code_str).await?;
 
             // Code ist max 5 Minuten gültig
             let age = Utc::now() - auth_code.created_at;
@@ -374,7 +368,7 @@ pub async fn oauth_token(
             let access_token =
                 create_jwt_with_duration(&user, &state.jwt_secret, false, chrono::Duration::hours(1))?;
 
-            // Refresh Token generieren
+            // Refresh Token generieren und persistent speichern
             let refresh_token_str = generate_oauth_code();
             let refresh = OAuthRefreshToken {
                 token: refresh_token_str.clone(),
@@ -384,11 +378,7 @@ pub async fn oauth_token(
                 created_at: Utc::now(),
                 active: true,
             };
-            state
-                .oauth_refresh_tokens
-                .lock()
-                .await
-                .insert(refresh_token_str.clone(), refresh);
+            let _ = state.store.save_refresh_token(&refresh).await;
 
             Ok(Json(serde_json::json!({
                 "access_token": access_token,
@@ -404,13 +394,8 @@ pub async fn oauth_token(
                 .as_deref()
                 .ok_or(ApiError::BadRequest("Missing refresh_token".into()))?;
 
-            // Alten Refresh Token einlösen + rotieren
-            let old_refresh = state
-                .oauth_refresh_tokens
-                .lock()
-                .await
-                .remove(refresh_str)
-                .ok_or(ApiError::BadRequest("Invalid refresh token".into()))?;
+            // Alten Refresh Token einlösen + rotieren (aus Dateisystem)
+            let old_refresh = state.store.take_refresh_token(refresh_str).await?;
 
             if !old_refresh.active {
                 return Err(ApiError::BadRequest("Refresh token revoked".into()));
@@ -431,11 +416,7 @@ pub async fn oauth_token(
                 created_at: Utc::now(),
                 active: true,
             };
-            state
-                .oauth_refresh_tokens
-                .lock()
-                .await
-                .insert(new_refresh_str.clone(), new_refresh);
+            let _ = state.store.save_refresh_token(&new_refresh).await;
 
             Ok(Json(serde_json::json!({
                 "access_token": access_token,
@@ -534,7 +515,7 @@ pub async fn oauth_register(
         created_at: Utc::now().to_rfc3339(),
     };
 
-    state.oauth_clients.lock().await.push(client);
+    let _ = state.store.save_oauth_client(&client).await;
 
     // Response: kein client_secret bei auth_method "none"
     let mut resp = serde_json::json!({
@@ -554,7 +535,7 @@ pub async fn oauth_register(
 pub async fn admin_list_oauth_clients(
     State(state): State<AppState>,
 ) -> Json<Vec<serde_json::Value>> {
-    let clients = state.oauth_clients.lock().await;
+    let clients = state.store.list_oauth_clients().await.unwrap_or_default();
     Json(
         clients
             .iter()
@@ -598,7 +579,7 @@ pub async fn admin_create_oauth_client(
         created_at: Utc::now().to_rfc3339(),
     };
 
-    state.oauth_clients.lock().await.push(client.clone());
+    let _ = state.store.save_oauth_client(&client).await;
 
     // Secret nur einmalig anzeigen
     Ok(Json(serde_json::json!({

@@ -235,4 +235,86 @@ impl DataStore {
             .map_err(|_| ApiError::NotFound("Token not found".into()))?;
         Ok(())
     }
+
+    // ------------------------------------------------------------------
+    // OAuth-Persistence (Codes, Clients, Refresh Tokens)
+    // ------------------------------------------------------------------
+
+    fn oauth_root(&self) -> PathBuf { PathBuf::from("data/oauth") }
+    fn oauth_codes_root(&self) -> PathBuf { self.oauth_root().join("codes") }
+    fn oauth_clients_root(&self) -> PathBuf { self.oauth_root().join("clients") }
+    fn oauth_refresh_root(&self) -> PathBuf { self.oauth_root().join("refresh") }
+
+    pub async fn ensure_oauth_dirs(&self) -> Result<(), ApiError> {
+        tokio::fs::create_dir_all(self.oauth_codes_root()).await?;
+        tokio::fs::create_dir_all(self.oauth_clients_root()).await?;
+        tokio::fs::create_dir_all(self.oauth_refresh_root()).await?;
+        Ok(())
+    }
+
+    // OAuth Codes
+    pub async fn save_oauth_code(&self, code: &OAuthAuthCode) -> Result<(), ApiError> {
+        self.ensure_oauth_dirs().await?;
+        let path = self.oauth_codes_root().join(format!("{}.json", code.code));
+        tokio::fs::write(path, serde_json::to_string_pretty(code)?).await?;
+        Ok(())
+    }
+
+    pub async fn take_oauth_code(&self, code: &str) -> Result<OAuthAuthCode, ApiError> {
+        let path = self.oauth_codes_root().join(format!("{code}.json"));
+        let data = tokio::fs::read_to_string(&path).await
+            .map_err(|_| ApiError::BadRequest("Invalid or expired code".into()))?;
+        let auth_code: OAuthAuthCode = serde_json::from_str(&data)?;
+        // Einmalig: Datei löschen
+        let _ = tokio::fs::remove_file(path).await;
+        Ok(auth_code)
+    }
+
+    // OAuth Clients
+    pub async fn save_oauth_client(&self, client: &OAuthClient) -> Result<(), ApiError> {
+        self.ensure_oauth_dirs().await?;
+        let path = self.oauth_clients_root().join(format!("{}.json", client.client_id));
+        tokio::fs::write(path, serde_json::to_string_pretty(client)?).await?;
+        Ok(())
+    }
+
+    pub async fn get_oauth_client(&self, client_id: &str) -> Result<OAuthClient, ApiError> {
+        let path = self.oauth_clients_root().join(format!("{client_id}.json"));
+        let data = tokio::fs::read_to_string(path).await
+            .map_err(|_| ApiError::NotFound("OAuth client not found".into()))?;
+        Ok(serde_json::from_str(&data)?)
+    }
+
+    pub async fn list_oauth_clients(&self) -> Result<Vec<OAuthClient>, ApiError> {
+        self.ensure_oauth_dirs().await?;
+        let mut clients = Vec::new();
+        let mut dir = tokio::fs::read_dir(self.oauth_clients_root()).await?;
+        while let Some(entry) = dir.next_entry().await? {
+            if entry.path().extension().map(|e| e == "json").unwrap_or(false) {
+                if let Ok(data) = tokio::fs::read_to_string(entry.path()).await {
+                    if let Ok(client) = serde_json::from_str(&data) {
+                        clients.push(client);
+                    }
+                }
+            }
+        }
+        Ok(clients)
+    }
+
+    // OAuth Refresh Tokens
+    pub async fn save_refresh_token(&self, token: &OAuthRefreshToken) -> Result<(), ApiError> {
+        self.ensure_oauth_dirs().await?;
+        let path = self.oauth_refresh_root().join(format!("{}.json", token.token));
+        tokio::fs::write(path, serde_json::to_string_pretty(token)?).await?;
+        Ok(())
+    }
+
+    pub async fn take_refresh_token(&self, token: &str) -> Result<OAuthRefreshToken, ApiError> {
+        let path = self.oauth_refresh_root().join(format!("{token}.json"));
+        let data = tokio::fs::read_to_string(&path).await
+            .map_err(|_| ApiError::BadRequest("Invalid refresh token".into()))?;
+        let refresh: OAuthRefreshToken = serde_json::from_str(&data)?;
+        let _ = tokio::fs::remove_file(path).await;
+        Ok(refresh)
+    }
 }
