@@ -189,7 +189,7 @@ function refreshColumnTasks(): void {
     nextTick(() => {
       let firstEl: HTMLElement | null = null
       for (const id of glowIds) {
-        const el = document.querySelector(`.task-inner[data-task-id="${id}"]`)?.closest('.kanban-item') as HTMLElement | null
+        const el = document.querySelector(`.kanban-item[data-task-id="${id}"]`) as HTMLElement | null
         if (el) {
           el.classList.add('task-new-glow')
           setTimeout(() => el.classList.remove('task-new-glow'), 2500)
@@ -232,7 +232,8 @@ function persistMoves(moves: { task_id: string; column_id: string; order: number
   if (!moves.length) return
   // Snapshot für Rollback bei Fehler
   const snapshot: { task_id: string; column_id: string; order: number }[] = []
-  // Lokalen State sofort aktualisieren (column_id + order)
+  // Lokalen State sofort aktualisieren (column_id + order) – optimistic update
+  const movedTasks: { title: string; colTitle: string }[] = []
   for (const m of moves) {
     const task = state.project?.tasks.find((t: Task) => t.id === m.task_id)
     if (task) {
@@ -242,19 +243,24 @@ function persistMoves(moves: { task_id: string; column_id: string; order: number
       task.order = m.order
       if (isColumnChange) {
         const col = state.project?.columns.find((c: Column) => c.id === m.column_id)
-        if (col) toast.success(`"${task.title}" → ${col.title}`)
+        if (col) movedTasks.push({ title: task.title, colTitle: col.title })
       }
     }
   }
   api.post(`/api/projects/${state.project!._id}/tasks/batch-move`, { moves })
     .then(async () => {
+      // Success toast only after server confirms
+      for (const mt of movedTasks) {
+        toast.success(`"${mt.title}" → ${mt.colTitle}`)
+      }
       // Server-State nachladen um Logs und andere serverseitige Änderungen zu erhalten
       const p = await api.get<ProjectDoc>(`/api/projects/${state.project!._id}`)
       state.project = p
     })
     .catch(err => {
       console.error('[DnD] ❌ batch-move failed:', err)
-      toast.error(t('drag.moveFailed'))
+      const errMsg = err?.response?.data?.error || err?.message || ''
+      toast.error(errMsg ? `${t('drag.moveFailed')}: ${errMsg}` : t('drag.moveFailed'))
       // Rollback: optimistic update rückgängig machen
       for (const s of snapshot) {
         const task = state.project?.tasks.find((t: Task) => t.id === s.task_id)
@@ -291,7 +297,7 @@ function onMoveCheck(evt: any): boolean {
   if (!targetColId) return true
   const doneCol = state.project?.columns.find((c: Column) => c.title === 'Done')
   if (!doneCol || targetColId !== doneCol.id) return true
-  const taskId = taskEl?.querySelector('.task-inner')?.dataset?.taskId
+  const taskId = taskEl?.dataset?.taskId
   if (!taskId) return true
   const task = state.project?.tasks.find((t: Task) => t.id === taskId)
   if (!task || !isBlocked(task)) return true
@@ -478,12 +484,12 @@ window.__kanbanToggleSearch = toggleSearch
           v-for="task in (columnTasks[col.id] || [])"
           :key="task.id"
           class="kanban-item cursor-grab active:cursor-grabbing mb-1.5 bg-surface-2 border border-border rounded-md transition-[border-color,box-shadow] duration-150 select-none hover:border-accent-dim hover:shadow-[0_2px_12px_rgba(124,106,247,0.15)]"
+          :data-task-id="task.id"
           @click="handleTaskClick(task, $event)"
         >
           <div
             class="px-3 py-2.5 cursor-pointer"
             :class="{ 'outline-2 outline-accent -outline-offset-2 rounded-md': state.selectedTasks.has(task.id) }"
-            :data-task-id="task.id"
             :style="{ borderLeft: `3px solid ${workerBorderColor(task.worker)}` }"
           >
             <div class="flex items-start justify-between gap-1.5 mb-1">
