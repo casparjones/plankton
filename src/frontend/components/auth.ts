@@ -1,6 +1,7 @@
 // Auth-Funktionen (Login, Logout, Session).
 
 import { state } from '../state';
+import { t } from '../i18n';
 import type { Claims } from '../types';
 
 export async function checkAuth(): Promise<Claims | null> {
@@ -20,8 +21,8 @@ export async function doLogin(username: string, password: string): Promise<Claim
     body: JSON.stringify({ username, password }),
   });
   if (!r.ok) {
-    const err = await r.json().catch(() => ({ error: 'Login fehlgeschlagen' }));
-    throw new Error(err.error || 'Login fehlgeschlagen');
+    const err = await r.json().catch(() => ({ error: t('auth.loginFailed') }));
+    throw new Error(err.error || t('auth.loginFailed'));
   }
   return await r.json() as Claims;
 }
@@ -39,8 +40,8 @@ export async function doChangePassword(oldPassword: string, newPassword: string)
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
   if (!r.ok) {
-    const err = await r.json().catch(() => ({ error: 'Fehler' }));
-    throw new Error(err.error || 'Passwort-Änderung fehlgeschlagen');
+    const err = await r.json().catch(() => ({ error: t('error') }));
+    throw new Error(err.error || t('passwordModal.changeFailed'));
   }
   return await r.json();
 }

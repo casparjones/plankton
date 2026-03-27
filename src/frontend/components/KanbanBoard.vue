@@ -16,6 +16,7 @@ function stripMarkdown(text: string): string {
   return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim()
 }
 
+import { t } from '../i18n'
 import { state } from '../state'
 import api from '../api'
 import { useToast } from 'vue-toastification'
@@ -253,7 +254,7 @@ function persistMoves(moves: { task_id: string; column_id: string; order: number
     })
     .catch(err => {
       console.error('[DnD] ❌ batch-move failed:', err)
-      toast.error('Verschieben fehlgeschlagen')
+      toast.error(t('drag.moveFailed'))
       // Rollback: optimistic update rückgängig machen
       for (const s of snapshot) {
         const task = state.project?.tasks.find((t: Task) => t.id === s.task_id)
@@ -300,7 +301,7 @@ function onMoveCheck(evt: any): boolean {
     .filter(t => t && t.column_id !== doneCol.id)
     .map(t => `"${t!.title}"`)
     .join(', ')
-  toast.error(`Blockiert durch: ${blockerNames}`, { timeout: 5000 })
+  toast.error(t('drag.blockedBy', { blockers: blockerNames }), { timeout: 5000 })
   return false
 }
 
@@ -415,20 +416,20 @@ window.__kanbanToggleSearch = toggleSearch
         ref="searchInputRef"
         v-model="searchQuery"
         type="text"
-        placeholder="Suche in Titel & Beschreibung… (Esc zum Schließen)"
+        :placeholder="t('board.searchPlaceholder')"
         class="flex-1 bg-surface-2 border border-border rounded-md text-text text-[13px] px-2.5 py-1.5 outline-none font-sans focus:border-accent placeholder:text-text-dim"
         @keydown="onSearchKeydown"
       />
       <select v-model="filterLabel" class="bg-surface-2 border border-border rounded-md text-text text-xs px-2 py-1.5 outline-none font-mono max-w-[160px] focus:border-accent">
-        <option value="">Alle Labels</option>
+        <option value="">{{ t('board.allLabels') }}</option>
         <option v-for="l in allLabels" :key="l" :value="l">{{ l }}</option>
       </select>
       <select v-model="filterWorker" class="bg-surface-2 border border-border rounded-md text-text text-xs px-2 py-1.5 outline-none font-mono max-w-[160px] focus:border-accent">
-        <option value="">Alle Worker</option>
+        <option value="">{{ t('board.allWorkers') }}</option>
         <option v-for="w in allWorkers" :key="w" :value="w">{{ w }}</option>
       </select>
-      <button v-if="hasActiveFilter" class="bg-transparent border border-border rounded-md text-text-dim text-[11px] px-2 py-1 cursor-pointer font-mono hover:border-accent hover:text-accent" @click="clearFilters" title="Filter zurücksetzen">&#10005;</button>
-      <button class="bg-transparent border border-border rounded-md text-text-dim text-[11px] px-2 py-1 cursor-pointer font-mono hover:border-accent hover:text-accent" @click="toggleSearch" title="Suche schließen">Esc</button>
+      <button v-if="hasActiveFilter" class="bg-transparent border border-border rounded-md text-text-dim text-[11px] px-2 py-1 cursor-pointer font-mono hover:border-accent hover:text-accent" @click="clearFilters" :title="t('board.resetFilters')">&#10005;</button>
+      <button class="bg-transparent border border-border rounded-md text-text-dim text-[11px] px-2 py-1 cursor-pointer font-mono hover:border-accent hover:text-accent" @click="toggleSearch" :title="t('board.closeSearch')">Esc</button>
     </div>
   </div>
   <div ref="columnsRef" class="flex gap-3 overflow-x-auto py-2 min-h-[200px] items-start">
@@ -444,8 +445,8 @@ window.__kanbanToggleSearch = toggleSearch
         <span class="border-l-[3px] pl-2 text-text font-mono text-xs font-semibold uppercase tracking-wider" :style="{ borderColor: col.color }">{{ col.title }}</span>
         <span class="bg-surface-2 border border-border rounded-[10px] text-text-dim font-mono text-[10px] px-[7px] py-px ml-1.5">{{ (columnTasks[col.id] || []).length }}</span>
         <div class="flex gap-1 ml-auto">
-          <button class="bg-transparent border border-border rounded text-text-dim cursor-pointer text-base h-[22px] leading-none px-1.5 transition-all hover:border-accent hover:text-accent" :data-col-id="col.id" title="Task hinzufügen" @click="addTask(col.id)">+</button>
-          <button class="bg-transparent border border-border rounded text-text-dim cursor-pointer text-xs h-[22px] leading-none px-[5px] transition-all hover:border-accent hover:text-accent" :data-col-id="col.id" title="Spalte verwalten" @click="openColMenu($event, col.id)">&#9776;</button>
+          <button class="bg-transparent border border-border rounded text-text-dim cursor-pointer text-base h-[22px] leading-none px-1.5 transition-all hover:border-accent hover:text-accent" :data-col-id="col.id" :title="t('board.addTask')" @click="addTask(col.id)">+</button>
+          <button class="bg-transparent border border-border rounded text-text-dim cursor-pointer text-xs h-[22px] leading-none px-[5px] transition-all hover:border-accent hover:text-accent" :data-col-id="col.id" :title="t('board.manageColumn')" @click="openColMenu($event, col.id)">&#9776;</button>
         </div>
       </div>
 
@@ -527,7 +528,7 @@ window.__kanbanToggleSearch = toggleSearch
 
       <!-- Leere Spalte Placeholder -->
       <div v-if="!(columnTasks[col.id] || []).length" class="p-4 text-center opacity-50 text-sm">
-        Keine Tasks
+        {{ t('board.noTasks') }}
       </div>
     </div>
   </div>

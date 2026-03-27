@@ -1,6 +1,7 @@
 // Globale Toast-Instanz für Nicht-Component-Code (Services, etc.)
 import { useToast, POSITION } from 'vue-toastification'
 import { h } from 'vue'
+import { t } from './i18n'
 
 export const toast = useToast()
 
@@ -20,11 +21,11 @@ export function toastConfirm(message: string): Promise<boolean> {
               h('button', {
                 class: 'toast-confirm-yes',
                 onClick: () => { resolved = true; toast.dismiss(id); resolve(true) },
-              }, 'Ja'),
+              }, t('yes')),
               h('button', {
                 class: 'toast-confirm-no',
                 onClick: () => { resolved = true; toast.dismiss(id); resolve(false) },
-              }, 'Nein'),
+              }, t('no')),
             ]),
           ])
         },

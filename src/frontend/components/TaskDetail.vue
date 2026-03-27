@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import { marked } from 'marked'
 import type { Task } from '../types'
 
+import { t } from '../i18n'
 import { state } from '../state'
 import { columnName, formatDate, labelColor } from '../utils'
 import { saveTask } from '../services/project-service'
@@ -211,7 +212,7 @@ defineExpose({ open, close })
   <div v-if="isOpen" class="fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] flex items-center justify-center" @click="onOverlayClick">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1440px] max-h-[90vh] overflow-y-auto p-6 w-[90%]">
       <div class="flex items-center justify-between">
-        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ task?.task_type === 'epic' ? 'Epic' : task?.task_type === 'job' ? 'Job' : 'Task' }}</span>
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ t('taskType.' + (task?.task_type || 'task')) }}</span>
         <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text transition-colors" @click="close">&#10005;</button>
       </div>
       <div class="text-[22px] font-bold text-text leading-tight break-words">{{ task?.title }}</div>
@@ -222,11 +223,11 @@ defineExpose({ open, close })
       <div class="grid grid-cols-[1fr_280px] gap-7 min-h-[300px] max-md:grid-cols-1">
         <div class="flex flex-col gap-5 min-w-0">
           <div class="flex flex-col gap-2">
-            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Beschreibung</span>
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">{{ t('taskModal.description') }}</span>
             <div class="text-sm text-text leading-relaxed break-words bg-surface-2 border border-border rounded-md px-4 py-3.5 min-h-[80px] markdown-body" v-html="renderMarkdown(task?.description)"></div>
           </div>
           <div class="flex flex-col gap-2">
-            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Labels</span>
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">{{ t('taskModal.labels') }}</span>
             <div class="flex flex-wrap gap-1.5">
               <template v-if="(task?.labels || []).length">
                 <span v-for="label in task!.labels" :key="label" class="text-xs px-2.5 py-[3px] rounded-xl border font-mono"
@@ -239,9 +240,9 @@ defineExpose({ open, close })
           <div v-if="hasSubtasks" class="flex flex-col gap-2">
             <div class="flex items-center gap-1.5 cursor-pointer py-1.5" @click="subtasksOpen = !subtasksOpen">
               <span class="text-xs text-text-dim w-3.5">{{ subtasksOpen ? '▾' : '▸' }}</span>
-              <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim cursor-pointer">Subtasks</span>
+              <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim cursor-pointer">{{ t('taskDetail.subtasks') }}</span>
               <span class="font-mono text-[11px] text-text-dim ml-auto">
-                <span class="text-text font-semibold">{{ subtasksDone }}</span> / {{ subtasks.length }} done
+                <span class="text-text font-semibold">{{ subtasksDone }}</span> / {{ subtasks.length }} {{ t('taskDetail.done') }}
                 <span v-if="subtasksDone === subtasks.length" class="text-[#4caf50] font-bold ml-1">&#10003;</span>
               </span>
               <div class="w-[60px] h-1 bg-surface-2 rounded-sm overflow-hidden ml-2">
@@ -258,7 +259,7 @@ defineExpose({ open, close })
           </div>
 
           <div v-if="hasRelations" class="flex flex-col gap-2">
-            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Verknüpfte Tickets</span>
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">{{ t('taskDetail.relatedTickets') }}</span>
             <div class="flex flex-col gap-3">
               <div v-for="group in relatedTickets" :key="group.label">
                 <div class="font-mono text-[11px] text-text-dim uppercase tracking-wide mb-1">{{ group.icon }} {{ group.label }}</div>
@@ -272,7 +273,7 @@ defineExpose({ open, close })
             </div>
           </div>
           <div class="flex flex-col gap-2">
-            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Kommentare</span>
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">{{ t('taskModal.comments') }}</span>
             <div class="max-h-[300px] overflow-y-auto flex flex-col gap-1.5">
               <template v-if="comments.length">
                 <div v-for="(c, i) in comments" :key="i" class="flex gap-1.5 items-baseline text-[13px] p-2 px-3 bg-surface-2 rounded-md border border-border leading-snug">
@@ -286,55 +287,55 @@ defineExpose({ open, close })
                   </template>
                 </div>
               </template>
-              <div v-else class="text-xs text-text-dim italic">Keine Kommentare</div>
+              <div v-else class="text-xs text-text-dim italic">{{ t('taskModal.noComments') }}</div>
             </div>
             <div class="flex gap-2 items-end">
               <textarea
                 v-model="newComment"
-                placeholder="Kommentar schreiben…"
+                :placeholder="t('taskModal.commentPlaceholder')"
                 rows="2"
                 class="flex-1 bg-surface-2 border border-border rounded-md text-text font-sans text-[13px] px-2.5 py-2 outline-none resize-y min-h-[36px] transition-colors focus:border-accent placeholder:text-text-dim"
                 @keydown.ctrl.enter="addComment"
                 @keydown.meta.enter="addComment"
               ></textarea>
-              <button class="bg-accent border-none text-white font-semibold rounded-md px-3.5 py-1.5 text-xs cursor-pointer hover:opacity-85 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed" @click="addComment" :disabled="!newComment.trim()">Senden</button>
+              <button class="bg-accent border-none text-white font-semibold rounded-md px-3.5 py-1.5 text-xs cursor-pointer hover:opacity-85 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed" @click="addComment" :disabled="!newComment.trim()">{{ t('send') }}</button>
             </div>
           </div>
         </div>
         <div class="flex flex-col gap-4">
           <div class="flex gap-2 justify-end">
-            <button class="bg-surface-2 border border-border text-text-dim font-mono rounded-md px-3.5 py-1.5 text-xs cursor-pointer transition-all hover:border-accent hover:text-accent" @click="copyMcpLink" :title="mcpLinkCopied ? 'Kopiert!' : 'MCP-Link für Claude Code kopieren'">
-              {{ mcpLinkCopied ? '✓ Kopiert' : 'MCP Link' }}
+            <button class="bg-surface-2 border border-border text-text-dim font-mono rounded-md px-3.5 py-1.5 text-xs cursor-pointer transition-all hover:border-accent hover:text-accent" @click="copyMcpLink" :title="mcpLinkCopied ? t('copied') : t('taskDetail.mcpLinkTitle')">
+              {{ mcpLinkCopied ? '✓ ' + t('taskDetail.mcpLinkCopied') : t('taskDetail.mcpLink') }}
             </button>
-            <button class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity" @click="editTask">Bearbeiten</button>
+            <button class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity" @click="editTask">{{ t('edit') }}</button>
           </div>
           <div class="flex flex-col gap-2">
-            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Details</span>
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">{{ t('taskDetail.details') }}</span>
             <div class="grid grid-cols-2 gap-3">
               <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
-                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Typ</span>
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">{{ t('taskModal.type') }}</span>
                 <span class="text-sm text-text font-medium">{{ task?.task_type || 'task' }}</span>
               </div>
               <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
-                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Points</span>
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">{{ t('taskModal.points') }}</span>
                 <span class="text-sm text-text font-medium">{{ task?.points || '–' }}</span>
               </div>
               <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
-                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Worker</span>
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">{{ t('taskModal.worker') }}</span>
                 <span class="text-sm text-text font-medium">{{ task?.worker || '–' }}</span>
               </div>
               <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
-                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Erstellt</span>
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">{{ t('taskModal.created') }}</span>
                 <span class="text-sm text-text font-medium">{{ formatDate(task?.created_at) }}</span>
               </div>
               <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
-                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Geändert</span>
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">{{ t('taskModal.modified') }}</span>
                 <span class="text-sm text-text font-medium">{{ formatDate(task?.updated_at) }}</span>
               </div>
             </div>
           </div>
           <div class="flex flex-col gap-2">
-            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Logs</span>
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">{{ t('taskModal.logs') }}</span>
             <div class="max-h-[250px] overflow-y-auto flex flex-col gap-1.5">
               <template v-if="logs.length">
                 <div v-for="(l, i) in logs" :key="i" class="text-[11px] text-text-dim p-1 px-2 bg-surface-2 rounded-sm border border-border font-mono flex gap-1.5 items-baseline">
@@ -346,7 +347,7 @@ defineExpose({ open, close })
                   <template v-else>{{ l }}</template>
                 </div>
               </template>
-              <div v-else class="text-xs text-text-dim italic">Keine Logs</div>
+              <div v-else class="text-xs text-text-dim italic">{{ t('taskModal.noLogs') }}</div>
             </div>
           </div>
         </div>

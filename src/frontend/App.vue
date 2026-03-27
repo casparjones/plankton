@@ -4,6 +4,7 @@
 
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useTheme } from './composables/useTheme'
+import { t } from './i18n'
 import AppLayout from './components/AppLayout.vue'
 import ImportPage from './components/ImportPage.vue'
 import type { Claims, Task, ProjectDoc } from './types'
@@ -124,7 +125,7 @@ async function handleLogin(): Promise<void> {
       }
     }
   } catch (err: unknown) {
-    loginError.value = err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen'
+    loginError.value = err instanceof Error ? err.message : t('login.failed')
   }
 }
 
@@ -168,7 +169,7 @@ onMounted(async () => {
       <div v-if="loginError" class="text-[#ff6b6b] text-[13px]">{{ loginError }}</div>
       <form @submit.prevent="handleLogin" class="flex flex-col gap-4">
         <label class="flex flex-col gap-1.5 text-xs text-login-label font-mono uppercase tracking-wide">
-          Username
+          {{ t('login.username') }}
           <input
             v-model="loginUsername"
             type="text"
@@ -178,7 +179,7 @@ onMounted(async () => {
           />
         </label>
         <label class="flex flex-col gap-1.5 text-xs text-login-label font-mono uppercase tracking-wide">
-          Passwort
+          {{ t('login.password') }}
           <input
             v-model="loginPassword"
             type="password"
@@ -188,7 +189,7 @@ onMounted(async () => {
         </label>
         <button type="submit"
           class="mt-1.5 py-3 text-sm bg-login-accent text-login-bg font-semibold border-none rounded-lg cursor-pointer transition-all hover:bg-login-accent-hover active:scale-[0.98]">
-          Anmelden
+          {{ t('login.submit') }}
         </button>
       </form>
     </div>

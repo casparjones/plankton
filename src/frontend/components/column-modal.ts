@@ -4,6 +4,7 @@ import api from '../api';
 import { state, COLUMN_COLORS } from '../state';
 import { renderBoard } from './board';
 import { toastConfirm } from '../toast';
+import { t } from '../i18n';
 import type { Column, ProjectDoc } from '../types';
 
 interface ColumnModalState {
@@ -41,10 +42,11 @@ async function updateColumn(colId: string, title: string, color: string): Promis
 
 async function deleteColumn(colId: string): Promise<void> {
   const col = state.project!.columns.find(c => c.id === colId);
-  const taskCount = (state.project?.tasks || []).filter(t => t.column_id === colId).length;
+  const taskCount = (state.project?.tasks || []).filter(tk => tk.column_id === colId).length;
+  const title = col!.title;
   const msg = taskCount > 0
-      ? `Spalte "${col!.title}" und ${taskCount} Task(s) wirklich löschen?`
-      : `Spalte "${col!.title}" wirklich löschen?`;
+      ? t('column.deleteConfirm', { title, count: taskCount })
+      : t('column.deleteConfirmEmpty', { title });
   if (!await toastConfirm(msg)) return;
   state.project = await api.del(`/api/projects/${state.project!._id}/columns/${colId}`)
       .then(() => api.get<ProjectDoc>(`/api/projects/${state.project!._id}`));
@@ -72,13 +74,13 @@ export function openColumnMenu(anchorEl: HTMLElement, colId: string): void {
   menu.id = 'col-context-menu';
 
   menu.innerHTML = `
-    <button class="col-ctx-item" data-action="edit">&#9998; Spalte bearbeiten</button>
-    <button class="col-ctx-item" data-action="add">&#43; Neue Spalte</button>
+    <button class="col-ctx-item" data-action="edit">&#9998; ${t('column.editColumn')}</button>
+    <button class="col-ctx-item" data-action="add">&#43; ${t('column.newColumn')}</button>
     <div class="col-ctx-separator"></div>
-    <button class="col-ctx-item${canMoveLeft ? '' : ' col-ctx-disabled'}" data-action="move-left" ${canMoveLeft ? '' : 'disabled'}>&#9664; Nach links</button>
-    <button class="col-ctx-item${canMoveRight ? '' : ' col-ctx-disabled'}" data-action="move-right" ${canMoveRight ? '' : 'disabled'}>&#9654; Nach rechts</button>
+    <button class="col-ctx-item${canMoveLeft ? '' : ' col-ctx-disabled'}" data-action="move-left" ${canMoveLeft ? '' : 'disabled'}>&#9664; ${t('column.moveLeft')}</button>
+    <button class="col-ctx-item${canMoveRight ? '' : ' col-ctx-disabled'}" data-action="move-right" ${canMoveRight ? '' : 'disabled'}>&#9654; ${t('column.moveRight')}</button>
     <div class="col-ctx-separator"></div>
-    <button class="col-ctx-item${col.locked ? ' col-ctx-disabled' : ' col-ctx-danger'}" data-action="delete" ${col.locked ? 'disabled title="Diese Spalte kann nicht gelöscht werden"' : ''}>&#10005; Spalte löschen</button>
+    <button class="col-ctx-item${col.locked ? ' col-ctx-disabled' : ' col-ctx-danger'}" data-action="delete" ${col.locked ? `disabled title="${t('column.locked')}"` : ''}>&#10005; ${t('column.deleteColumn')}</button>
   `;
 
   menu.addEventListener('click', (e: MouseEvent) => {
@@ -112,7 +114,7 @@ export function openColumnEditModal(colId: string): void {
   const col = state.project!.columns.find(c => c.id === colId);
   if (!col) return;
   columnModalState = { mode: 'edit', colId, selectedColor: col.color };
-  document.getElementById('col-modal-heading')!.textContent = 'Spalte bearbeiten';
+  document.getElementById('col-modal-heading')!.textContent = t('column.editColumn');
   (document.getElementById('col-modal-title') as HTMLInputElement).value = col.title;
   renderColorPicker(col.color);
   document.getElementById('column-modal')!.classList.add('open');
@@ -123,7 +125,7 @@ export function openColumnAddModal(): void {
   const usedColors = state.project!.columns.map(c => c.color.toUpperCase());
   const suggested = COLUMN_COLORS.find(c => !usedColors.includes(c.toUpperCase())) || COLUMN_COLORS[0];
   columnModalState = { mode: 'add', colId: null, selectedColor: suggested };
-  document.getElementById('col-modal-heading')!.textContent = 'Neue Spalte';
+  document.getElementById('col-modal-heading')!.textContent = t('column.newColumn');
   (document.getElementById('col-modal-title') as HTMLInputElement).value = '';
   renderColorPicker(suggested);
   document.getElementById('column-modal')!.classList.add('open');

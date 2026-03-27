@@ -3,6 +3,7 @@
 import api from '../api';
 import { state } from '../state';
 import { escapeHtml } from '../utils';
+import { t } from '../i18n';
 import { renderBoard } from './board';
 import { renderJsonTree, toggleJsonView } from './json-view';
 import { loadProjects, renameProject } from '../services/project-service';
@@ -24,9 +25,9 @@ export function openProjectDropdown(): void {
 
   const dropdown = document.getElementById('project-dropdown')!;
   dropdown.innerHTML = `
-    <button class="proj-dropdown-item" data-action="edit">&#9998; Projekt editieren</button>
-    <button class="proj-dropdown-item" data-action="prompt">&#9733; AI Agents</button>
-    <button class="proj-dropdown-item" data-action="cli">&#9881; Install CLI</button>
+    <button class="proj-dropdown-item" data-action="edit">&#9998; ${t('project.editProject')}</button>
+    <button class="proj-dropdown-item" data-action="prompt">&#9733; ${t('prompt.aiAgents')}</button>
+    <button class="proj-dropdown-item" data-action="cli">&#9881; ${t('prompt.installCli')}</button>
   `;
   dropdown.classList.add('open');
 

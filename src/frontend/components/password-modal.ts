@@ -1,6 +1,7 @@
 // Passwort-Ändern Modal.
 
 import { state } from '../state';
+import { t } from '../i18n';
 import { checkAuth, doChangePassword } from './auth';
 import type { Claims } from '../types';
 
@@ -29,11 +30,11 @@ export async function savePassword(): Promise<void> {
   errEl.textContent = '';
 
   if (newPw !== confirmPw) {
-    errEl.textContent = 'Passwörter stimmen nicht überein';
+    errEl.textContent = t('passwordModal.mismatch');
     return;
   }
   if (newPw.length < 4) {
-    errEl.textContent = 'Passwort muss mindestens 4 Zeichen haben';
+    errEl.textContent = t('passwordModal.tooShort');
     return;
   }
   try {

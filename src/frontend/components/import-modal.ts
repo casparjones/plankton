@@ -3,6 +3,7 @@
 import api from '../api';
 import { state } from '../state';
 import { escapeHtml } from '../utils';
+import { t } from '../i18n';
 import { renderBoard } from './board';
 import type { Task, Column, ProjectDoc } from '../types';
 
@@ -36,7 +37,7 @@ export function validateImport(): void {
     }
   } catch {
     document.getElementById('import-preview')!.innerHTML =
-      '<div class="import-error">Ungültiges JSON</div>';
+      `<div class="import-error">${t('import.invalidJson')}</div>`;
     document.getElementById('import-preview')!.style.display = '';
     return;
   }
@@ -96,10 +97,10 @@ export function validateImport(): void {
 
   const html = `
     <div class="import-summary">
-      <strong>${validCount}</strong> valide, <strong>${errorCount}</strong> Fehler
+      ${t('import.validSummary', { valid: validCount, errors: errorCount })}
     </div>
     <table class="import-table">
-      <thead><tr><th>#</th><th></th><th>Titel</th><th>Spalte</th><th>Points</th><th>Hinweise</th></tr></thead>
+      <thead><tr><th>#</th><th></th><th>${t('import.tableTitle')}</th><th>${t('import.tableColumn')}</th><th>${t('import.tablePoints')}</th><th>${t('import.tableNotes')}</th></tr></thead>
       <tbody>${rows.join('')}</tbody>
     </table>
   `;
@@ -138,7 +139,7 @@ export async function executeImport(): Promise<void> {
   document.getElementById('import-preview')!.style.display = 'none';
   const startBtn = document.getElementById('import-start-btn') as HTMLButtonElement;
   startBtn.disabled = true;
-  startBtn.textContent = 'Importiere…';
+  startBtn.textContent = t('import.importing');
 
   try {
     const result = await api.post<ImportResult>(`/api/projects/${state.project!._id}/import`, { tasks });
@@ -166,7 +167,7 @@ export async function executeImport(): Promise<void> {
     }
   } catch (err: any) {
     document.getElementById('import-result')!.innerHTML =
-      `<div class="import-error">Fehler: ${escapeHtml(err.message)}</div>`;
+      `<div class="import-error">${t('import.importError', { error: escapeHtml(err.message) })}</div>`;
     document.getElementById('import-result')!.style.display = '';
   }
 

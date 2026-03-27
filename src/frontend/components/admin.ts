@@ -2,6 +2,7 @@
 
 import { escapeHtml } from '../utils';
 import { toastConfirm } from '../toast';
+import { t } from '../i18n';
 import type { AuthUser, AgentToken } from '../types';
 
 interface AdminState {
@@ -33,8 +34,8 @@ export async function openAdminModal(): Promise<void> {
 }
 
 function updateAdminTabs(): void {
-  document.querySelectorAll<HTMLElement>('.admin-tab').forEach(t => {
-    t.classList.toggle('admin-tab-active', t.dataset.tab === adminState.tab);
+  document.querySelectorAll<HTMLElement>('.admin-tab').forEach(el => {
+    el.classList.toggle('admin-tab-active', el.dataset.tab === adminState.tab);
   });
 }
 
@@ -68,15 +69,15 @@ async function loadTokens(): Promise<void> {
 function renderTokenList(): void {
   const el = document.getElementById('admin-token-list')!;
   if (adminState.tokens.length === 0) {
-    el.innerHTML = '<div class="modal-list-empty">Keine Tokens</div>';
+    el.innerHTML = `<div class="modal-list-empty">${t('admin.noTokens')}</div>`;
   } else {
-    el.innerHTML = adminState.tokens.map(t => `
+    el.innerHTML = adminState.tokens.map(tk => `
       <div class="admin-user-row">
-        <span class="admin-user-name">${escapeHtml(t.name)}</span>
-        <span class="admin-user-detail">${t.role} ${t.active === false ? '&middot; inaktiv' : ''}</span>
+        <span class="admin-user-name">${escapeHtml(tk.name)}</span>
+        <span class="admin-user-detail">${tk.role} ${tk.active === false ? '&middot; inaktiv' : ''}</span>
         <div class="admin-user-actions">
-          <button class="btn-small" data-token-action="toggle" data-tid="${t.id}">${t.active ? 'Deaktivieren' : 'Aktivieren'}</button>
-          <button class="btn-small btn-danger-small" data-token-action="delete" data-tid="${t.id}">L&ouml;schen</button>
+          <button class="btn-small" data-token-action="toggle" data-tid="${tk.id}">${tk.active ? t('admin.deactivate') : t('admin.activate')}</button>
+          <button class="btn-small btn-danger-small" data-token-action="delete" data-tid="${tk.id}">${t('delete')}</button>
         </div>
       </div>
     `).join('');
@@ -96,7 +97,7 @@ export async function createToken(): Promise<void> {
     if (!r.ok) return;
     const data = await r.json();
     const resultEl = document.getElementById('admin-token-result')!;
-    resultEl.innerHTML = `<strong>Token erstellt – jetzt kopieren, wird nicht erneut angezeigt!</strong>\n\n${escapeHtml(data.token)}`;
+    resultEl.innerHTML = `<strong>${t('admin.tokenCreated')}</strong>\n\n${escapeHtml(data.token)}`;
     resultEl.style.display = '';
     (document.getElementById('admin-token-name') as HTMLInputElement).value = '';
     await loadTokens();
@@ -112,7 +113,7 @@ export function closeAdminModal(): void {
 function renderAdminUserList(): void {
   const el = document.getElementById('admin-user-list')!;
   if (adminState.users.length === 0) {
-    el.innerHTML = '<div class="modal-list-empty">Keine Nutzer</div>';
+    el.innerHTML = `<div class="modal-list-empty">${t('admin.noUsers')}</div>`;
     return;
   }
   el.innerHTML = adminState.users.map(u => `
@@ -120,9 +121,9 @@ function renderAdminUserList(): void {
       <span class="admin-user-name">${escapeHtml(u.display_name)}</span>
       <span class="admin-user-detail">${escapeHtml(u.username)} &middot; ${u.role}${u.active === false ? ' &middot; inaktiv' : ''}</span>
       <div class="admin-user-actions">
-        <button class="btn-small" data-admin-action="edit" data-uid="${u.id}">Bearbeiten</button>
-        <button class="btn-small" data-admin-action="reset-pw" data-uid="${u.id}">PW Reset</button>
-        <button class="btn-small btn-danger-small" data-admin-action="delete" data-uid="${u.id}">L&ouml;schen</button>
+        <button class="btn-small" data-admin-action="edit" data-uid="${u.id}">${t('edit')}</button>
+        <button class="btn-small" data-admin-action="reset-pw" data-uid="${u.id}">${t('admin.pwReset')}</button>
+        <button class="btn-small btn-danger-small" data-admin-action="delete" data-uid="${u.id}">${t('delete')}</button>
       </div>
     </div>
   `).join('');
@@ -139,7 +140,7 @@ export function showAdminForm(user?: AuthUser | null): void {
   (document.getElementById('admin-displayname') as HTMLInputElement).value = user ? user.display_name : '';
   const pwInput = document.getElementById('admin-password') as HTMLInputElement;
   pwInput.value = '';
-  pwInput.placeholder = user ? '(unverändert)' : 'Passwort';
+  pwInput.placeholder = user ? t('admin.unchanged') : 'Passwort';
   (document.getElementById('admin-role') as HTMLSelectElement).value = user ? user.role : 'user';
   setTimeout(() => (document.getElementById(user ? 'admin-displayname' : 'admin-username') as HTMLInputElement).focus(), 50);
 }
@@ -178,7 +179,7 @@ export async function handleTokenAction(action: string, tid: string): Promise<vo
     await fetch(`/api/admin/tokens/${tid}`, { method: 'DELETE' });
     await loadTokens();
   } else if (action === 'toggle') {
-    const token = adminState.tokens.find(t => t.id === tid);
+    const token = adminState.tokens.find(tk => tk.id === tid);
     if (!token) return;
     await fetch(`/api/admin/tokens/${tid}`, {
       method: 'PUT',
@@ -198,13 +199,13 @@ export async function handleAdminUserAction(action: string, uid: string): Promis
     await fetch(`/api/admin/users/${uid}`, { method: 'DELETE' });
     await openAdminModal();
   } else if (action === 'reset-pw') {
-    const newPw = prompt('Neues Passwort:');
+    const newPw = prompt(t('admin.newPasswordPrompt'));
     if (!newPw) return;
     await fetch(`/api/admin/users/${uid}/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_password: newPw }),
     });
-    alert('Passwort zurückgesetzt');
+    alert(t('admin.passwordReset'));
   }
 }

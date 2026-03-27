@@ -3,6 +3,7 @@
 import api from '../api';
 import { state } from '../state';
 import { formatDate } from '../utils';
+import { t } from '../i18n';
 import type { GitConfig } from '../types';
 
 /// Aktualisiert das Git-Status-Icon im Board-Header.
@@ -17,19 +18,19 @@ export function updateGitStatusIcon(): void {
   icon.style.display = '';
   if (!git.enabled) {
     icon.className = 'git-status-icon git-icon-disabled';
-    icon.title = 'Git-Sync deaktiviert';
+    icon.title = t('git.disabled');
     icon.innerHTML = '&#128268;';
   } else if (git.last_error) {
     icon.className = 'git-status-icon git-icon-error';
-    icon.title = `Git-Fehler: ${git.last_error}`;
+    icon.title = t('git.error', { error: git.last_error });
     icon.innerHTML = '&#128268;';
   } else if (git.last_push) {
     icon.className = 'git-status-icon git-icon-ok';
-    icon.title = `Letzter Git-Push: ${formatDate(git.last_push)}`;
+    icon.title = t('git.lastPush', { date: formatDate(git.last_push) });
     icon.innerHTML = '&#128268;';
   } else {
     icon.className = 'git-status-icon git-icon-disabled';
-    icon.title = 'Git konfiguriert, noch kein Push';
+    icon.title = t('git.configured');
     icon.innerHTML = '&#128268;';
   }
 }
@@ -53,18 +54,18 @@ export function closeGitModal(): void {
 function renderGitStatus(config: GitConfig | null): void {
   const el = document.getElementById('git-status')!;
   if (!config) {
-    el.innerHTML = '<div class="git-status-info">Noch nicht konfiguriert</div>';
+    el.innerHTML = `<div class="git-status-info">${t('git.notConfigured')}</div>`;
     return;
   }
   let html = '';
   if (config.last_push) {
-    html += `<div class="git-status-ok">Letzter Push: ${formatDate(config.last_push)}</div>`;
+    html += `<div class="git-status-ok">${t('git.lastPushStatus', { date: formatDate(config.last_push) })}</div>`;
   }
   if (config.last_error) {
-    html += `<div class="git-status-error">Fehler: ${config.last_error}</div>`;
+    html += `<div class="git-status-error">${t('git.errorStatus', { error: config.last_error })}</div>`;
   }
   if (!config.last_push && !config.last_error) {
-    html += '<div class="git-status-info">Noch kein Sync durchgeführt</div>';
+    html += `<div class="git-status-info">${t('git.noSync')}</div>`;
   }
   el.innerHTML = html;
 }
@@ -78,7 +79,7 @@ export async function saveGitConfig(): Promise<void> {
     enabled: (document.getElementById('git-enabled') as HTMLInputElement).checked,
   };
   if (!config.repo_url) {
-    alert('Repository-URL ist erforderlich');
+    alert(t('git.repoRequired'));
     return;
   }
   await api.put(`/api/projects/${state.project._id}/git`, config);
@@ -88,27 +89,27 @@ export async function saveGitConfig(): Promise<void> {
 export async function triggerGitSync(): Promise<void> {
   if (!state.project) return;
   const btn = document.getElementById('git-sync-btn') as HTMLButtonElement;
-  btn.textContent = 'Synchronisiere…';
+  btn.textContent = t('git.syncing');
   btn.disabled = true;
   try {
     const result = await api.post<{ success: boolean }>(`/api/projects/${state.project._id}/git/sync`, {});
     if (result.success) {
-      btn.textContent = 'Erfolgreich!';
+      btn.textContent = t('git.syncSuccess');
       // Aktualisiere Status
       const config = await api.get<GitConfig>(`/api/projects/${state.project._id}/git`);
       renderGitStatus(config);
     } else {
-      btn.textContent = 'Fehlgeschlagen';
+      btn.textContent = t('git.syncFailed');
       const config = await api.get<GitConfig>(`/api/projects/${state.project._id}/git`);
       renderGitStatus(config);
     }
   } catch (err: any) {
-    btn.textContent = 'Fehler!';
+    btn.textContent = t('git.syncError');
     document.getElementById('git-status')!.innerHTML =
-      `<div class="git-status-error">Fehler: ${err.message}</div>`;
+      `<div class="git-status-error">${t('git.errorStatus', { error: err.message })}</div>`;
   }
   setTimeout(() => {
-    btn.textContent = 'Jetzt synchronisieren';
+    btn.textContent = t('git.syncNow');
     btn.disabled = false;
   }, 2000);
 }
