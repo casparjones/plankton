@@ -1763,7 +1763,22 @@ body[data-theme="light"] {
     opacity: 0.35;
     cursor: not-allowed;
   }
+  .modal-overlay {
+    display: none;
+  }
   .modal-overlay.open {
+    display: flex;
+  }
+  .project-dropdown {
+    display: none;
+  }
+  .project-dropdown.open {
+    display: block;
+  }
+  .bulk-bar {
+    display: none;
+  }
+  .bulk-bar.visible {
     display: flex;
   }
   .project-item {

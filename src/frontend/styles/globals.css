@@ -197,8 +197,13 @@ body[data-theme="light"] {
   .col-ctx-separator { height: 1px; background: var(--color-border); margin: 4px 0; }
   .col-ctx-disabled { opacity: 0.35; cursor: not-allowed; }
 
-  /* Modal open state */
+  /* Modal + dropdown default hidden, shown via .open class from legacy JS */
+  .modal-overlay { display: none; }
   .modal-overlay.open { display: flex; }
+  .project-dropdown { display: none; }
+  .project-dropdown.open { display: block; }
+  .bulk-bar { display: none; }
+  .bulk-bar.visible { display: flex; }
 
   /* Sidebar: project list + owner groups */
   .project-item { padding: 8px 16px; cursor: pointer; font-size: 13px; color: var(--color-text-dim); border-left: 3px solid transparent; transition: all 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; justify-content: space-between; gap: 4px; }

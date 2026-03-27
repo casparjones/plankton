@@ -223,9 +223,9 @@ onMounted(() => {
         <button class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm px-2.5 py-1 transition-all ml-auto hover:border-accent hover:text-accent" :title="t('board.search') + ' (Ctrl+K)'" onclick="window.__kanbanToggleSearch?.()">&#128269;</button>
         <button id="import-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer font-sans text-xs px-2.5 py-1 transition-all hover:border-accent hover:text-accent" :title="t('board.importIssues')">&#8615; {{ t('board.importIssues') }}</button>
         <button id="project-menu-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-base px-2.5 py-1 transition-all ml-auto hover:border-accent hover:text-accent" :title="t('board.projectMenu')">&#9776;</button>
-        <div id="project-dropdown" class="project-dropdown hidden absolute top-full right-6 z-[2000] bg-surface border border-border rounded-md shadow-[0_8px_24px_rgba(0,0,0,0.4)] py-1 min-w-[200px]"></div>
+        <div id="project-dropdown" class="project-dropdown absolute top-full right-6 z-[2000] bg-surface border border-border rounded-md shadow-[0_8px_24px_rgba(0,0,0,0.4)] py-1 min-w-[200px]"></div>
       </header>
-      <div id="bulk-bar" class="bulk-bar hidden items-center gap-3 px-6 py-2 bg-surface border-b border-accent text-[13px] text-text">
+      <div id="bulk-bar" class="bulk-bar items-center gap-3 px-6 py-2 bg-surface border-b border-accent text-[13px] text-text">
         <span v-html="t('bulk.selected', { count: '<strong id=\'bulk-count\'>0</strong>' })"></span>
         <button id="bulk-delete-btn" class="bg-transparent border border-danger text-danger rounded-md cursor-pointer text-xs px-2 py-0.5 hover:bg-danger/10">{{ t('bulk.deleteSelected') }}</button>
         <button id="bulk-cancel-btn" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">{{ t('bulk.deselectAll') }}</button>
@@ -241,7 +241,7 @@ onMounted(() => {
   <TaskDetail ref="taskDetailRef" @edit="onEditFromDetail" />
 
   <!-- Spalten-Modal (Legacy) -->
-  <div id="column-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+  <div id="column-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[480px] p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim" id="col-modal-heading">{{ t('column.column') }}</span>
@@ -262,7 +262,7 @@ onMounted(() => {
   </div>
 
   <!-- Projekt-Modal (Legacy) -->
-  <div id="project-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+  <div id="project-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ t('project.project') }}</span>
@@ -287,7 +287,7 @@ onMounted(() => {
   </div>
 
   <!-- Git-Modal (Legacy) -->
-  <div id="git-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+  <div id="git-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[480px] p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ t('git.settings') }}</span>
@@ -318,7 +318,7 @@ onMounted(() => {
   </div>
 
   <!-- Prompt-Modal (Legacy) -->
-  <div id="prompt-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+  <div id="prompt-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ t('prompt.aiAgents') }}</span>
@@ -402,7 +402,7 @@ onMounted(() => {
   </div>
 
   <!-- CLI-Modal (Install CLI) -->
-  <div id="cli-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+  <div id="cli-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ t('prompt.installCli') }}</span>
@@ -439,7 +439,7 @@ curl -fsSL .../install | bash    # CLI aktualisieren</pre>
   </div>
 
   <!-- Admin-Modal (Legacy) -->
-  <div id="admin-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+  <div id="admin-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ t('admin.administration') }}</span>
@@ -485,7 +485,7 @@ curl -fsSL .../install | bash    # CLI aktualisieren</pre>
   </div>
 
   <!-- Passwort-Modal (Legacy) -->
-  <div id="password-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+  <div id="password-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[480px] p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ t('passwordModal.changePassword') }}</span>
@@ -502,7 +502,7 @@ curl -fsSL .../install | bash    # CLI aktualisieren</pre>
   </div>
 
   <!-- Import-Modal (Legacy) -->
-  <div id="import-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+  <div id="import-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ t('import.importIssues') }}</span>
