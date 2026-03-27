@@ -201,7 +201,7 @@ function addComment(): void {
 }
 
 function onOverlayClick(e: Event): void {
-  if ((e.target as HTMLElement).classList.contains('modal-overlay')) close()
+  if (e.target === e.currentTarget) close()
 }
 
 // Globale Funktionen für Legacy-Kompatibilität (KanbanBoard.vue, AppLayout.vue)
