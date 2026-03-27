@@ -167,53 +167,57 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app">
+  <div class="flex h-screen overflow-hidden">
     <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <span class="logo"><img src="/icons/logo.svg" alt="" class="logo-icon" /> Plankton</span>
-        <button id="theme-toggle" class="theme-toggle" title="Theme wechseln">&#9728;</button>
+    <aside class="sidebar w-[220px] min-w-[220px] bg-surface border-r border-border flex flex-col transition-colors duration-250">
+      <div class="px-4 py-[18px] pb-3.5 border-b border-border flex items-center justify-between">
+        <span class="font-mono text-lg font-semibold tracking-wide text-accent flex items-center gap-2.5">
+          <img src="/icons/logo.svg" alt="" class="w-8 h-8" /> Plankton
+        </span>
+        <button id="theme-toggle" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm px-2 py-0.5 leading-none transition-all hover:border-accent hover:text-accent" title="Theme wechseln">&#9728;</button>
       </div>
-      <div class="sidebar-create">
-        <input id="new-project-input" placeholder="Projektname…" autocomplete="one-time-code" name="project-title-new" />
-        <button id="new-project-btn" @click="handleCreateProject">Erstellen</button>
+      <div class="p-3 flex flex-col gap-1.5 border-b border-border">
+        <input id="new-project-input" placeholder="Projektname…" autocomplete="one-time-code" name="project-title-new"
+          class="bg-surface-2 border border-border rounded-md text-text font-sans text-[13px] px-2.5 py-1.5 outline-none transition-colors focus:border-accent" />
+        <button id="new-project-btn" @click="handleCreateProject"
+          class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer font-sans text-[13px] px-2.5 py-1.5 transition-colors hover:bg-accent">Erstellen</button>
       </div>
-      <ul id="project-list" class="project-list"></ul>
-      <div class="sidebar-user" id="sidebar-user">
-        <div class="user-info">
-          <span class="user-avatar" id="user-avatar"></span>
-          <div class="user-details">
-            <span class="user-name" id="user-name"></span>
-            <span class="user-role" id="user-role"></span>
+      <ul id="project-list" class="list-none flex-1 overflow-y-auto py-2"></ul>
+      <div class="sidebar-user border-t border-border p-3 flex flex-col gap-2 mt-auto" id="sidebar-user">
+        <div class="flex items-center gap-2">
+          <span class="user-avatar bg-accent-dim border border-accent rounded-full text-accent inline-flex items-center justify-center font-mono text-xs font-semibold h-7 w-7 uppercase flex-shrink-0" id="user-avatar"></span>
+          <div class="flex flex-col overflow-hidden">
+            <span class="user-name text-[13px] font-semibold text-text overflow-hidden text-ellipsis whitespace-nowrap" id="user-name"></span>
+            <span class="user-role text-[11px] text-text-dim font-mono uppercase" id="user-role"></span>
           </div>
         </div>
-        <div class="user-actions">
-          <button id="password-btn" class="user-action-btn" title="Passwort ändern">&#128273;</button>
-          <button id="admin-btn" class="user-action-btn" title="Admin" style="display:none">&#9881;</button>
-          <button id="logout-btn" class="user-action-btn" title="Abmelden">&#9211;</button>
+        <div class="flex gap-1">
+          <button id="password-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-xs px-2 py-1 transition-all flex-1 text-center hover:border-accent hover:text-accent" title="Passwort ändern">&#128273;</button>
+          <button id="admin-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-xs px-2 py-1 transition-all flex-1 text-center hover:border-accent hover:text-accent" title="Admin" style="display:none">&#9881;</button>
+          <button id="logout-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-xs px-2 py-1 transition-all flex-1 text-center hover:border-accent hover:text-accent" title="Abmelden">&#9211;</button>
         </div>
       </div>
     </aside>
 
     <!-- Sidebar Overlay (Mobile) -->
-    <div class="sidebar-overlay" onclick="document.querySelector('.sidebar').classList.remove('sidebar-open')"></div>
+    <div class="sidebar-overlay hidden fixed inset-0 z-[999] bg-black/50" onclick="document.querySelector('.sidebar').classList.remove('sidebar-open')"></div>
     <!-- Hauptbereich -->
-    <main class="main">
-      <header class="board-header">
-        <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('sidebar-open')">&#9776;</button>
-        <h1 id="project-title" class="board-title"></h1>
-        <span id="git-status-icon" class="git-status-icon" style="display:none" title="Git"></span>
-        <button class="search-toggle-btn" title="Suche (Ctrl+K)" onclick="window.__kanbanToggleSearch?.()">&#128269;</button>
-        <button id="import-btn" class="import-btn" title="Issues importieren">&#8615; Import</button>
-        <button id="project-menu-btn" class="project-menu-btn" title="Projekt-Menü">&#9776;</button>
-        <div id="project-dropdown" class="project-dropdown"></div>
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <header class="px-6 py-4 pb-3 border-b border-border bg-surface flex items-center gap-3 relative">
+        <button class="sidebar-toggle hidden bg-transparent border border-border rounded-md text-text-dim text-base px-2 py-1 cursor-pointer flex-shrink-0 hover:border-accent hover:text-accent" onclick="document.querySelector('.sidebar').classList.toggle('sidebar-open')">&#9776;</button>
+        <h1 id="project-title" class="font-mono text-base font-semibold tracking-tight flex-1"></h1>
+        <span id="git-status-icon" class="git-status-icon cursor-pointer text-base ml-2 opacity-70 transition-opacity hover:opacity-100" style="display:none" title="Git"></span>
+        <button class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm px-2.5 py-1 transition-all ml-auto hover:border-accent hover:text-accent" title="Suche (Ctrl+K)" onclick="window.__kanbanToggleSearch?.()">&#128269;</button>
+        <button id="import-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer font-sans text-xs px-2.5 py-1 transition-all hover:border-accent hover:text-accent" title="Issues importieren">&#8615; Import</button>
+        <button id="project-menu-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-base px-2.5 py-1 transition-all ml-auto hover:border-accent hover:text-accent" title="Projekt-Menü">&#9776;</button>
+        <div id="project-dropdown" class="project-dropdown hidden absolute top-full right-6 z-[2000] bg-surface border border-border rounded-md shadow-[0_8px_24px_rgba(0,0,0,0.4)] py-1 min-w-[200px]"></div>
       </header>
-      <div id="bulk-bar" class="bulk-bar">
+      <div id="bulk-bar" class="bulk-bar hidden items-center gap-3 px-6 py-2 bg-surface border-b border-accent text-[13px] text-text">
         <span><strong id="bulk-count">0</strong> Task(s) ausgewählt</span>
-        <button id="bulk-delete-btn" class="btn-danger btn-small">Ausgewählte löschen</button>
-        <button id="bulk-cancel-btn" class="btn-small">Auswahl aufheben</button>
+        <button id="bulk-delete-btn" class="bg-transparent border border-danger text-danger rounded-md cursor-pointer text-xs px-2 py-0.5 hover:bg-danger/10">Ausgewählte löschen</button>
+        <button id="bulk-cancel-btn" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">Auswahl aufheben</button>
       </div>
-      <div id="board" class="board">
+      <div id="board" class="flex-1 overflow-x-auto overflow-y-hidden p-5 px-6">
         <KanbanBoard />
       </div>
     </main>
@@ -224,153 +228,160 @@ onMounted(() => {
   <TaskDetail ref="taskDetailRef" @edit="onEditFromDetail" />
 
   <!-- Spalten-Modal (Legacy) -->
-  <div id="column-modal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
-        <span class="modal-heading" id="col-modal-heading">Spalte</span>
-        <button class="modal-close" id="col-modal-close">&#10005;</button>
+  <div id="column-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[480px] p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim" id="col-modal-heading">Spalte</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text" id="col-modal-close">&#10005;</button>
       </div>
-      <label>Titel
-        <input id="col-modal-title" type="text" placeholder="Spaltenname…" />
+      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Titel
+        <input id="col-modal-title" type="text" placeholder="Spaltenname…"
+          class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
       </label>
-      <div class="color-picker-section">
-        <span class="color-picker-label">Farbe</span>
+      <div class="flex flex-col gap-2">
+        <span class="font-mono text-xs text-text-dim uppercase tracking-wide">Farbe</span>
         <div id="col-modal-colors" class="color-grid"></div>
       </div>
-      <div class="modal-actions">
-        <button id="col-modal-save" class="btn-primary">Speichern</button>
+      <div class="flex gap-2 justify-end mt-1">
+        <button id="col-modal-save" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">Speichern</button>
       </div>
     </div>
   </div>
 
   <!-- Projekt-Modal (Legacy) -->
-  <div id="project-modal" class="modal-overlay">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <span class="modal-heading">Projekt</span>
-        <button class="modal-close" id="proj-modal-close">&#10005;</button>
+  <div id="project-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">Projekt</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text" id="proj-modal-close">&#10005;</button>
       </div>
-      <label>Projektname
-        <input id="proj-modal-title" type="text" placeholder="Projektname…" autocomplete="one-time-code" name="project-title-edit" />
+      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Projektname
+        <input id="proj-modal-title" type="text" placeholder="Projektname…" autocomplete="one-time-code" name="project-title-edit"
+          class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
       </label>
-      <div class="proj-json-header">
-        <span class="modal-section-title">JSON</span>
-        <button id="proj-view-toggle" class="btn-small">Raw JSON</button>
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">JSON</span>
+        <button id="proj-view-toggle" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">Raw JSON</button>
       </div>
       <div id="proj-json-tree" class="json-tree"></div>
-      <textarea id="proj-modal-json" class="proj-json-textarea" rows="20" spellcheck="false" style="display:none"></textarea>
-      <div class="modal-actions">
-        <button id="proj-modal-copy" class="btn-small">In Zwischenablage kopieren</button>
-        <button id="proj-modal-save" class="btn-primary">Speichern</button>
-        <button id="proj-modal-import" class="btn-small">Als neues Projekt importieren</button>
+      <textarea id="proj-modal-json" class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-3 resize-y w-full outline-none transition-colors focus:border-accent" rows="20" spellcheck="false" style="display:none"></textarea>
+      <div class="flex gap-2 justify-end mt-1">
+        <button id="proj-modal-copy" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">In Zwischenablage kopieren</button>
+        <button id="proj-modal-save" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">Speichern</button>
+        <button id="proj-modal-import" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">Als neues Projekt importieren</button>
       </div>
     </div>
   </div>
 
   <!-- Git-Modal (Legacy) -->
-  <div id="git-modal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
-        <span class="modal-heading">Git-Einstellungen</span>
-        <button class="modal-close" id="git-modal-close">&#10005;</button>
+  <div id="git-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[480px] p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">Git-Einstellungen</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text" id="git-modal-close">&#10005;</button>
       </div>
-      <label>Repository-URL
-        <input id="git-repo-url" type="text" placeholder="https://token:ghp_xxx@github.com/user/repo.git" />
+      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Repository-URL
+        <input id="git-repo-url" type="text" placeholder="https://token:ghp_xxx@github.com/user/repo.git"
+          class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
       </label>
-      <label>Branch
-        <input id="git-branch" type="text" placeholder="main" />
+      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Branch
+        <input id="git-branch" type="text" placeholder="main"
+          class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
       </label>
-      <label>Pfad im Repository
-        <input id="git-path" type="text" placeholder="plankton.json" />
+      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Pfad im Repository
+        <input id="git-path" type="text" placeholder="plankton.json"
+          class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
       </label>
-      <label class="git-toggle-label">
-        <input id="git-enabled" type="checkbox" />
+      <label class="flex items-center gap-2 cursor-pointer text-[13px] my-2">
+        <input id="git-enabled" type="checkbox" class="w-4 h-4 accent-accent" />
         Auto-Sync aktiviert
       </label>
-      <div id="git-status" class="git-status"></div>
-      <div class="modal-actions">
-        <button id="git-sync-btn" class="btn-small">Jetzt synchronisieren</button>
-        <button id="git-save-btn" class="btn-primary">Speichern</button>
+      <div id="git-status" class="text-xs my-3"></div>
+      <div class="flex gap-2 justify-end mt-1">
+        <button id="git-sync-btn" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">Jetzt synchronisieren</button>
+        <button id="git-save-btn" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">Speichern</button>
       </div>
     </div>
   </div>
 
   <!-- Prompt-Modal (Legacy) -->
-  <div id="prompt-modal" class="modal-overlay">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <span class="modal-heading">AI Agents</span>
-        <button class="modal-close" id="prompt-modal-close">&#10005;</button>
+  <div id="prompt-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">AI Agents</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text" id="prompt-modal-close">&#10005;</button>
       </div>
       <!-- Tab-Leiste -->
-      <div class="prompt-tabs">
-        <button class="prompt-tab prompt-tab-active" data-prompt-tab="simple">Simple</button>
-        <button class="prompt-tab" data-prompt-tab="claudeai">claude.ai</button>
-        <button class="prompt-tab" data-prompt-tab="plankton">Plankton</button>
+      <div class="prompt-tabs flex gap-1 border-b border-border pb-2">
+        <button class="prompt-tab prompt-tab-active bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-prompt-tab="simple">Simple</button>
+        <button class="prompt-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-prompt-tab="claudeai">claude.ai</button>
+        <button class="prompt-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-prompt-tab="plankton">Plankton</button>
       </div>
-      <!-- Tab: Simple (bisheriger Prompt) -->
+      <!-- Tab: Simple -->
       <div id="prompt-tab-simple" class="prompt-tab-content prompt-tab-visible">
-        <pre id="prompt-content" class="prompt-content"></pre>
-        <div class="modal-actions">
-          <button id="prompt-copy-btn" class="btn-primary">In Zwischenablage kopieren</button>
+        <pre id="prompt-content" class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-4 max-h-[500px] overflow-y-auto whitespace-pre-wrap break-words select-all"></pre>
+        <div class="flex gap-2 justify-end mt-1">
+          <button id="prompt-copy-btn" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">In Zwischenablage kopieren</button>
         </div>
       </div>
-      <!-- Tab: claude.ai (Connector Setup) -->
+      <!-- Tab: claude.ai -->
       <div id="prompt-tab-claudeai" class="prompt-tab-content">
-        <div class="prompt-skill-info">
-          <h3>Plankton als Connector in claude.ai</h3>
-          <p>Plankton l&auml;sst sich als benutzerdefinierter MCP-Connector in claude.ai einbinden. Damit kann Claude direkt auf das Kanban-Board zugreifen.</p>
-
-          <h3>1. Connector in claude.ai hinzuf&uuml;gen</h3>
-          <p>In claude.ai unter <strong>Settings &rarr; Connectors &rarr; Add custom connector</strong>:</p>
-          <div class="claudeai-config">
-            <div class="config-row"><span class="config-label">Server URL</span><code id="claudeai-server-url" class="config-value">...</code></div>
+        <div class="flex flex-col gap-2 py-1">
+          <h3 class="m-0 text-base text-text">Plankton als Connector in claude.ai</h3>
+          <p class="m-0 text-[13px] text-text-dim leading-relaxed">Plankton l&auml;sst sich als benutzerdefinierter MCP-Connector in claude.ai einbinden. Damit kann Claude direkt auf das Kanban-Board zugreifen.</p>
+          <h3 class="mt-3 mb-1 text-[13px] text-accent">1. Connector in claude.ai hinzuf&uuml;gen</h3>
+          <p class="m-0 text-[13px] text-text-dim leading-relaxed">In claude.ai unter <strong>Settings &rarr; Connectors &rarr; Add custom connector</strong>:</p>
+          <div class="flex flex-col gap-1.5 my-3">
+            <div class="flex items-center gap-3 px-2.5 py-1.5 bg-surface-2 border border-border rounded-md">
+              <span class="font-mono text-[11px] text-text-dim uppercase tracking-wide min-w-[140px] flex-shrink-0">Server URL</span>
+              <code id="claudeai-server-url" class="font-mono text-xs text-accent break-all">...</code>
+            </div>
           </div>
-          <p class="prompt-token-hint">Claude erkennt automatisch die OAuth-Endpoints via <code>/.well-known/oauth-authorization-server</code> und registriert sich per Dynamic Client Registration.</p>
-
-          <h3>2. Autorisieren</h3>
-          <p>Beim ersten Zugriff &ouml;ffnet claude.ai ein Login-Fenster. Melde dich mit deinem Plankton-Account an &ndash; fertig.</p>
-          <p class="prompt-token-hint">OAuth 2.0 Authorization Code Flow mit PKCE und Refresh Token Rotation. Callback URL: <code>https://claude.ai/api/mcp/auth_callback</code></p>
+          <p class="text-xs text-text-dim m-0">Claude erkennt automatisch die OAuth-Endpoints via <code class="bg-surface-2 px-1 py-px rounded-sm font-mono text-xs">/.well-known/oauth-authorization-server</code> und registriert sich per Dynamic Client Registration.</p>
+          <h3 class="mt-3 mb-1 text-[13px] text-accent">2. Autorisieren</h3>
+          <p class="m-0 text-[13px] text-text-dim leading-relaxed">Beim ersten Zugriff &ouml;ffnet claude.ai ein Login-Fenster. Melde dich mit deinem Plankton-Account an &ndash; fertig.</p>
+          <p class="text-xs text-text-dim m-0">OAuth 2.0 Authorization Code Flow mit PKCE und Refresh Token Rotation. Callback URL: <code class="bg-surface-2 px-1 py-px rounded-sm font-mono text-xs">https://claude.ai/api/mcp/auth_callback</code></p>
         </div>
       </div>
-      <!-- Tab: Plankton (Agenten-Workflow-Generator) -->
+      <!-- Tab: Plankton -->
       <div id="prompt-tab-plankton" class="prompt-tab-content">
-        <div class="prompt-plankton-config">
-          <label>Plankton-URL
-            <input id="prompt-plankton-url" type="text" placeholder="https://plankton.example.com" />
+        <div class="flex flex-col gap-3.5">
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Plankton-URL
+            <input id="prompt-plankton-url" type="text" placeholder="https://plankton.example.com"
+              class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
           </label>
-          <div class="prompt-token-section">
-            <span class="modal-section-title">Agent-Tokens</span>
-            <p class="prompt-token-hint">Tokens können unter <strong>Admin (&#9881;) → Tokens</strong> verwaltet werden.</p>
-            <div id="prompt-token-list" class="prompt-token-list"></div>
-            <div id="prompt-token-loading" class="prompt-token-hint">Lade Tokens...</div>
+          <div class="flex flex-col gap-2">
+            <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Agent-Tokens</span>
+            <p class="text-xs text-text-dim m-0">Tokens können unter <strong class="text-text">Admin (&#9881;) → Tokens</strong> verwaltet werden.</p>
+            <div id="prompt-token-list" class="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto"></div>
+            <div id="prompt-token-loading" class="text-xs text-text-dim">Lade Tokens...</div>
           </div>
-          <div class="modal-actions">
-            <button id="prompt-generate-btn" class="btn-primary">Dateien generieren</button>
+          <div class="flex gap-2 justify-end mt-1">
+            <button id="prompt-generate-btn" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">Dateien generieren</button>
           </div>
         </div>
-        <div id="prompt-output" class="prompt-output" style="display:none">
-          <div class="prompt-output-tabs">
-            <button class="prompt-output-tab prompt-output-tab-active" data-output-tab="setup">Claude Code Setup</button>
-            <button class="prompt-output-tab" data-output-tab="rules">rules.md</button>
-            <button class="prompt-output-tab" data-output-tab="workflow">workflow.md</button>
+        <div id="prompt-output" class="flex flex-col gap-2.5 mt-2" style="display:none">
+          <div class="prompt-output-tabs flex gap-1 border-b border-border pb-1.5">
+            <button class="prompt-output-tab prompt-output-tab-active bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-[11px] px-2.5 py-1 transition-all hover:text-text" data-output-tab="setup">Claude Code Setup</button>
+            <button class="prompt-output-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-[11px] px-2.5 py-1 transition-all hover:text-text" data-output-tab="rules">rules.md</button>
+            <button class="prompt-output-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-[11px] px-2.5 py-1 transition-all hover:text-text" data-output-tab="workflow">workflow.md</button>
           </div>
           <div id="prompt-out-setup" class="prompt-output-content prompt-tab-visible">
-            <div class="prompt-cli-setup">
-              <p>Installiere den Plankton Skill f&uuml;r Claude Code mit der CLI:</p>
-              <pre class="prompt-content" id="prompt-out-setup-pre"></pre>
-              <p class="prompt-token-hint">Die CLI f&uuml;hrt automatisch den Login durch und richtet die Secrets ein.</p>
+            <div>
+              <p class="text-[13px] text-text-dim">Installiere den Plankton Skill f&uuml;r Claude Code mit der CLI:</p>
+              <pre class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-4 max-h-[500px] overflow-y-auto whitespace-pre-wrap break-words select-all" id="prompt-out-setup-pre"></pre>
+              <p class="text-xs text-text-dim">Die CLI f&uuml;hrt automatisch den Login durch und richtet die Secrets ein.</p>
             </div>
           </div>
           <div id="prompt-out-rules" class="prompt-output-content">
-            <pre class="prompt-content" id="prompt-out-rules-pre"></pre>
+            <pre class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-4 max-h-[500px] overflow-y-auto whitespace-pre-wrap break-words select-all" id="prompt-out-rules-pre"></pre>
           </div>
           <div id="prompt-out-workflow" class="prompt-output-content">
-            <pre class="prompt-content" id="prompt-out-workflow-pre"></pre>
+            <pre class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-4 max-h-[500px] overflow-y-auto whitespace-pre-wrap break-words select-all" id="prompt-out-workflow-pre"></pre>
           </div>
-          <div class="modal-actions">
-            <button id="prompt-out-copy" class="btn-primary">In Zwischenablage kopieren</button>
-            <button id="prompt-out-download" class="btn-small">&#8615; Herunterladen</button>
+          <div class="flex gap-2 justify-end mt-1">
+            <button id="prompt-out-copy" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">In Zwischenablage kopieren</button>
+            <button id="prompt-out-download" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">&#8615; Herunterladen</button>
           </div>
         </div>
       </div>
@@ -378,36 +389,36 @@ onMounted(() => {
   </div>
 
   <!-- CLI-Modal (Install CLI) -->
-  <div id="cli-modal" class="modal-overlay">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <span class="modal-heading">Plankton CLI</span>
-        <button class="modal-close" id="cli-modal-close">&#10005;</button>
+  <div id="cli-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">Plankton CLI</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text" id="cli-modal-close">&#10005;</button>
       </div>
-      <div class="prompt-skill-info">
-        <h3>Installation</h3>
-        <p>Installiere die Plankton CLI mit einem Befehl:</p>
-        <pre class="prompt-content" id="cli-install-cmd">curl -fsSL .../install | bash</pre>
-        <div class="modal-actions">
-          <button class="btn-small" data-cli-copy="cli-install-cmd">In Zwischenablage kopieren</button>
+      <div class="flex flex-col gap-2 py-1">
+        <h3 class="m-0 text-base text-text">Installation</h3>
+        <p class="m-0 text-[13px] text-text-dim leading-relaxed">Installiere die Plankton CLI mit einem Befehl:</p>
+        <pre class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-4 max-h-[500px] overflow-y-auto whitespace-pre-wrap break-words select-all" id="cli-install-cmd">curl -fsSL .../install | bash</pre>
+        <div class="flex gap-2 justify-end mt-1">
+          <button class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent" data-cli-copy="cli-install-cmd">In Zwischenablage kopieren</button>
         </div>
 
-        <h3>Login</h3>
-        <p>Server hinzuf&uuml;gen und einloggen (wie <code>git remote add</code>):</p>
-        <pre class="prompt-content" id="cli-login-cmd">plankton remote add origin ...</pre>
-        <div class="modal-actions">
-          <button class="btn-small" data-cli-copy="cli-login-cmd">In Zwischenablage kopieren</button>
+        <h3 class="mt-3 mb-1 text-base text-text">Login</h3>
+        <p class="m-0 text-[13px] text-text-dim leading-relaxed">Server hinzuf&uuml;gen und einloggen (wie <code class="bg-surface-2 px-1 py-px rounded-sm font-mono text-xs">git remote add</code>):</p>
+        <pre class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-4 max-h-[500px] overflow-y-auto whitespace-pre-wrap break-words select-all" id="cli-login-cmd">plankton remote add origin ...</pre>
+        <div class="flex gap-2 justify-end mt-1">
+          <button class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent" data-cli-copy="cli-login-cmd">In Zwischenablage kopieren</button>
         </div>
 
-        <h3>Claude Code Skill</h3>
-        <p>Skill installieren (inkl. Login + Secrets-Setup):</p>
-        <pre class="prompt-content" id="cli-skill-cmd">plankton skill install ... --global</pre>
-        <div class="modal-actions">
-          <button class="btn-small" data-cli-copy="cli-skill-cmd">In Zwischenablage kopieren</button>
+        <h3 class="mt-3 mb-1 text-base text-text">Claude Code Skill</h3>
+        <p class="m-0 text-[13px] text-text-dim leading-relaxed">Skill installieren (inkl. Login + Secrets-Setup):</p>
+        <pre class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-4 max-h-[500px] overflow-y-auto whitespace-pre-wrap break-words select-all" id="cli-skill-cmd">plankton skill install ... --global</pre>
+        <div class="flex gap-2 justify-end mt-1">
+          <button class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent" data-cli-copy="cli-skill-cmd">In Zwischenablage kopieren</button>
         </div>
 
-        <h3>Hilfe</h3>
-        <pre class="prompt-content">plankton help                    # Alle Befehle anzeigen
+        <h3 class="mt-3 mb-1 text-base text-text">Hilfe</h3>
+        <pre class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-4 max-h-[500px] overflow-y-auto whitespace-pre-wrap break-words select-all">plankton help                    # Alle Befehle anzeigen
 plankton remote add origin ...   # Login + Update: gleicher Befehl
 curl -fsSL .../install | bash    # CLI aktualisieren</pre>
       </div>
@@ -415,84 +426,85 @@ curl -fsSL .../install | bash    # CLI aktualisieren</pre>
   </div>
 
   <!-- Admin-Modal (Legacy) -->
-  <div id="admin-modal" class="modal-overlay">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <span class="modal-heading">Administration</span>
-        <button class="modal-close" id="admin-modal-close">&#10005;</button>
+  <div id="admin-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">Administration</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text" id="admin-modal-close">&#10005;</button>
       </div>
-      <div class="admin-tabs">
-        <button class="admin-tab admin-tab-active" data-tab="users">Nutzer</button>
-        <button class="admin-tab" data-tab="tokens">Tokens</button>
+      <div class="admin-tabs flex gap-1 border-b border-border pb-2">
+        <button class="admin-tab admin-tab-active bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-tab="users">Nutzer</button>
+        <button class="admin-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-tab="tokens">Tokens</button>
       </div>
-      <div id="admin-user-list" class="admin-user-list"></div>
-      <div id="admin-user-form" class="admin-user-form" style="display:none">
-        <label>Username <input id="admin-username" type="text" /></label>
-        <label>Anzeigename <input id="admin-displayname" type="text" /></label>
-        <label>Passwort <input id="admin-password" type="password" /></label>
-        <label>Rolle
+      <div id="admin-user-list" class="admin-user-list flex flex-col gap-1.5 max-h-[400px] overflow-y-auto"></div>
+      <div id="admin-user-form" class="flex flex-col gap-3" style="display:none">
+        <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Username <input id="admin-username" type="text" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" /></label>
+        <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Anzeigename <input id="admin-displayname" type="text" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" /></label>
+        <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Passwort <input id="admin-password" type="password" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" /></label>
+        <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Rolle
           <select id="admin-role">
             <option value="user">User</option>
             <option value="admin">Admin</option>
           </select>
         </label>
-        <div class="modal-actions">
-          <button id="admin-form-save" class="btn-primary">Speichern</button>
-          <button id="admin-form-cancel" class="btn-small">Abbrechen</button>
+        <div class="flex gap-2 justify-end mt-1">
+          <button id="admin-form-save" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">Speichern</button>
+          <button id="admin-form-cancel" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">Abbrechen</button>
         </div>
       </div>
-      <div class="modal-actions" id="admin-list-actions">
-        <button id="admin-add-user-btn" class="btn-primary">Neuer Nutzer</button>
+      <div class="flex gap-2 justify-end mt-1" id="admin-list-actions">
+        <button id="admin-add-user-btn" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">Neuer Nutzer</button>
       </div>
       <div id="admin-token-section" style="display:none">
-        <div id="admin-token-list" class="admin-user-list"></div>
-        <div class="admin-token-create">
-          <input id="admin-token-name" type="text" placeholder="Token-Name..." />
-          <select id="admin-token-role">
+        <div id="admin-token-list" class="admin-user-list flex flex-col gap-1.5 max-h-[400px] overflow-y-auto"></div>
+        <div class="flex gap-2 items-center mt-3">
+          <input id="admin-token-name" type="text" placeholder="Token-Name..." class="flex-1 bg-surface-2 border border-border rounded-md text-text text-[13px] px-2.5 py-1.5 outline-none focus:border-accent" />
+          <select id="admin-token-role" class="bg-surface-2 border border-border rounded-md text-text text-[13px] px-2.5 py-1.5 outline-none">
             <option value="developer">Developer</option>
             <option value="tester">Tester</option>
             <option value="manager">Manager</option>
           </select>
-          <button id="admin-create-token-btn" class="btn-primary">Token erstellen</button>
+          <button id="admin-create-token-btn" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">Token erstellen</button>
         </div>
-        <pre id="admin-token-result" class="token-result" style="display:none"></pre>
+        <pre id="admin-token-result" class="bg-surface-2 border border-accent rounded-md text-accent font-mono text-xs p-2.5 break-all mt-2 select-all" style="display:none"></pre>
       </div>
     </div>
   </div>
 
   <!-- Passwort-Modal (Legacy) -->
-  <div id="password-modal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
-        <span class="modal-heading">Passwort ändern</span>
-        <button class="modal-close" id="pw-modal-close">&#10005;</button>
+  <div id="password-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[480px] p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">Passwort ändern</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text" id="pw-modal-close">&#10005;</button>
       </div>
-      <div id="pw-error" class="login-error"></div>
-      <label>Altes Passwort <input id="pw-old" type="password" /></label>
-      <label>Neues Passwort <input id="pw-new" type="password" /></label>
-      <label>Neues Passwort bestätigen <input id="pw-confirm" type="password" /></label>
-      <div class="modal-actions">
-        <button id="pw-save-btn" class="btn-primary">Speichern</button>
+      <div id="pw-error" class="text-[#ff6b6b] text-[13px]"></div>
+      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Altes Passwort <input id="pw-old" type="password" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" /></label>
+      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Neues Passwort <input id="pw-new" type="password" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" /></label>
+      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Neues Passwort bestätigen <input id="pw-confirm" type="password" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" /></label>
+      <div class="flex gap-2 justify-end mt-1">
+        <button id="pw-save-btn" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">Speichern</button>
       </div>
     </div>
   </div>
 
   <!-- Import-Modal (Legacy) -->
-  <div id="import-modal" class="modal-overlay">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <span class="modal-heading">Issues importieren</span>
-        <button class="modal-close" id="import-modal-close">&#10005;</button>
+  <div id="import-modal" class="modal-overlay hidden fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">Issues importieren</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text" id="import-modal-close">&#10005;</button>
       </div>
-      <label>JSON (Array von Tasks)
-        <textarea id="import-json" rows="10" placeholder='[{"title": "...", "column_slug": "TODO", "points": 3, "labels": ["feature"]}]' spellcheck="false"></textarea>
+      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">JSON (Array von Tasks)
+        <textarea id="import-json" rows="10" placeholder='[{"title": "...", "column_slug": "TODO", "points": 3, "labels": ["feature"]}]' spellcheck="false"
+          class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none resize-y transition-colors focus:border-accent"></textarea>
       </label>
-      <div class="modal-actions">
-        <button id="import-validate-btn" class="btn-small">Validieren</button>
-        <button id="import-start-btn" class="btn-primary" style="display:none">Import starten</button>
+      <div class="flex gap-2 justify-end mt-1">
+        <button id="import-validate-btn" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">Validieren</button>
+        <button id="import-start-btn" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity" style="display:none">Import starten</button>
       </div>
-      <div id="import-preview" class="import-preview" style="display:none"></div>
-      <div id="import-result" class="import-result" style="display:none"></div>
+      <div id="import-preview" class="max-h-[180px] overflow-y-auto" style="display:none"></div>
+      <div id="import-result" class="py-2" style="display:none"></div>
     </div>
   </div>
 </template>

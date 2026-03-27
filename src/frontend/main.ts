@@ -1,6 +1,6 @@
 // Plankton Frontend – Entry Point (Vue.js 3 + TypeScript)
 // CSS-Import für Webpack-Bundling.
-import '../../static/styles.css'
+import './styles/globals.css'
 import 'vue-toastification/dist/index.css'
 
 import { createApp } from 'vue'

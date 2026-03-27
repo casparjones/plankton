@@ -215,90 +215,91 @@ defineExpose({ openNew, openEdit, close })
 </script>
 
 <template>
-  <div v-if="isOpen" class="modal-overlay open" @click="onOverlayClick">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <span class="modal-heading">{{ isNew ? 'Neuer Task' : 'Task bearbeiten' }}</span>
-        <button class="modal-close" @click="close">&#10005;</button>
+  <div v-if="isOpen" class="fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] flex items-center justify-center" @click="onOverlayClick">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ isNew ? 'Neuer Task' : 'Task bearbeiten' }}</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text transition-colors" @click="close">&#10005;</button>
       </div>
-      <div class="modal-grid">
-        <div class="modal-col-main">
-          <label>Titel
-            <input v-model="title" type="text" class="task-modal-title-input" />
+      <div class="grid grid-cols-[1fr_260px] gap-6 max-md:grid-cols-1">
+        <div class="flex flex-col gap-3">
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Titel
+            <input v-model="title" type="text" class="task-modal-title-input bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
           </label>
-          <label>Beschreibung
-            <textarea v-model="description" rows="14"></textarea>
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Beschreibung
+            <textarea v-model="description" rows="14" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none resize-y transition-colors focus:border-accent"></textarea>
           </label>
-          <label>Labels <small>(kommagetrennt)</small>
-            <input v-model="labels" type="text" />
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Labels <small class="normal-case font-sans">(kommagetrennt)</small>
+            <input v-model="labels" type="text" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
           </label>
-          <div class="modal-section">
-            <span class="modal-section-title">Kommentare</span>
-            <div class="modal-list">
+          <div class="flex flex-col gap-1.5">
+            <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Kommentare</span>
+            <div class="max-h-[200px] overflow-y-auto flex flex-col gap-1">
               <template v-if="comments.length">
-                <div v-for="(c, i) in comments" :key="i" class="modal-list-item log-entry">
+                <div v-for="(c, i) in comments" :key="i" class="flex gap-1.5 items-baseline text-xs p-1.5 px-2 bg-surface-2 rounded-sm border border-border">
                   <template v-if="typeof c === 'object' && c !== null">
-                    <span class="log-ts">{{ c.ts }}</span>
-                    <span class="log-user">{{ c.user }}</span>
-                    <span class="log-msg">{{ c.msg }}</span>
+                    <span class="font-mono text-[10px] text-text-dim whitespace-nowrap flex-shrink-0">{{ c.ts }}</span>
+                    <span class="text-[10px] text-text-dim whitespace-nowrap flex-shrink-0">{{ c.user }}</span>
+                    <span class="text-xs text-text flex-1 overflow-hidden text-ellipsis">{{ c.msg }}</span>
                   </template>
                   <template v-else>{{ c }}</template>
                 </div>
               </template>
-              <div v-else class="modal-list-empty">Keine Kommentare</div>
+              <div v-else class="text-xs text-text-dim italic">Keine Kommentare</div>
             </div>
-            <div class="comment-input-row">
-              <input v-model="newComment" type="text" placeholder="Kommentar schreiben…" @keydown.enter="addComment" />
-              <button class="btn-small" @click="addComment">+</button>
+            <div class="flex gap-1">
+              <input v-model="newComment" type="text" placeholder="Kommentar schreiben…" @keydown.enter="addComment"
+                class="flex-1 bg-surface-2 border border-border rounded-md text-text text-xs px-2 py-1 outline-none focus:border-accent" />
+              <button class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent" @click="addComment">+</button>
             </div>
           </div>
         </div>
-        <div v-if="!isNew" class="modal-col-side">
-          <label>Typ
-            <select v-model="taskType">
+        <div v-if="!isNew" class="flex flex-col gap-3">
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Typ
+            <select v-model="taskType" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none focus:border-accent">
               <option value="task">Task</option>
               <option value="epic">Epic</option>
               <option value="job">Job</option>
             </select>
           </label>
-          <label>Parent Epic
-            <select v-model="parentId">
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Parent Epic
+            <select v-model="parentId" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none focus:border-accent">
               <option value="">–</option>
               <option v-for="e in epics" :key="e.id" :value="e.id">{{ e.title }}</option>
             </select>
           </label>
-          <label>Points <small>(0–100)</small>
-            <input v-model.number="points" type="number" min="0" max="100" />
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Points <small class="normal-case font-sans">(0–100)</small>
+            <input v-model.number="points" type="number" min="0" max="100" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
           </label>
-          <label>Worker
-            <input v-model="worker" type="text" />
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Worker
+            <input v-model="worker" type="text" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
           </label>
-          <div class="modal-info">
-            <span class="modal-info-label">Erstellt</span>
-            <span class="modal-info-value">{{ createdAt }}</span>
+          <div class="flex flex-col gap-0.5">
+            <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Erstellt</span>
+            <span class="text-xs text-text">{{ createdAt }}</span>
           </div>
-          <div class="modal-info">
-            <span class="modal-info-label">Geändert</span>
-            <span class="modal-info-value">{{ updatedAt }}</span>
+          <div class="flex flex-col gap-0.5">
+            <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Geändert</span>
+            <span class="text-xs text-text">{{ updatedAt }}</span>
           </div>
-          <div class="modal-info">
-            <span class="modal-info-label">Vorherige Spalte</span>
-            <span class="modal-info-value">{{ previousRow }}</span>
+          <div class="flex flex-col gap-0.5">
+            <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Vorherige Spalte</span>
+            <span class="text-xs text-text">{{ previousRow }}</span>
           </div>
-          <div class="modal-section" v-if="otherTasks.length">
-            <span class="modal-section-title">Blockiert durch</span>
-            <div class="multiselect">
-              <div class="multiselect-tags" v-if="selectedBlockers.length">
-                <span v-for="t in selectedBlockers" :key="t.id" class="multiselect-tag">
+          <div class="flex flex-col gap-1.5" v-if="otherTasks.length">
+            <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Blockiert durch</span>
+            <div class="relative">
+              <div class="flex flex-wrap gap-1 mb-1" v-if="selectedBlockers.length">
+                <span v-for="t in selectedBlockers" :key="t.id" class="inline-flex items-center gap-1 bg-surface-2 border border-border rounded-sm px-1.5 py-0.5 text-[11px] font-sans text-text max-w-full">
                   {{ t.title }}
-                  <button type="button" class="multiselect-tag-remove" @click="removeBlocker(t.id)">&times;</button>
+                  <button type="button" class="bg-transparent border-none text-text-dim cursor-pointer text-[13px] px-px leading-none hover:text-danger" @click="removeBlocker(t.id)">&times;</button>
                 </span>
               </div>
-              <div class="multiselect-input-wrap">
+              <div class="relative">
                 <input
                   v-model="blockedBySearch"
                   type="text"
-                  class="multiselect-input"
+                  class="w-full bg-surface-2 border border-border rounded-md text-text text-xs px-2 py-[5px] outline-none focus:border-accent"
                   placeholder="Task suchen…"
                   @focus="blockedByOpen = true"
                   @blur="setTimeout(() => blockedByOpen = false, 150)"
@@ -314,48 +315,48 @@ defineExpose({ openNew, openEdit, close })
               </div>
             </div>
           </div>
-          <div class="modal-section">
-            <span class="modal-section-title">Logs</span>
-            <div class="modal-list modal-list-small">
+          <div class="flex flex-col gap-1.5">
+            <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Logs</span>
+            <div class="max-h-[140px] overflow-y-auto flex flex-col gap-1">
               <template v-if="logs.length">
-                <div v-for="(l, i) in logs" :key="i" class="modal-list-item log-entry">
+                <div v-for="(l, i) in logs" :key="i" class="flex gap-1.5 items-baseline text-xs p-1 px-2 bg-surface-2 rounded-sm border border-border">
                   <template v-if="typeof l === 'object'">
-                    <span class="log-ts">{{ l.ts }}</span>
-                    <span class="log-msg">{{ l.msg }}</span>
-                    <span class="log-user">{{ l.user }}</span>
+                    <span class="font-mono text-[10px] text-text-dim whitespace-nowrap flex-shrink-0">{{ l.ts }}</span>
+                    <span class="text-xs text-text flex-1 overflow-hidden text-ellipsis">{{ l.msg }}</span>
+                    <span class="text-[10px] text-text-dim whitespace-nowrap flex-shrink-0">{{ l.user }}</span>
                   </template>
                   <template v-else>{{ l }}</template>
                 </div>
               </template>
-              <div v-else class="modal-list-empty">Keine Logs</div>
+              <div v-else class="text-xs text-text-dim italic">Keine Logs</div>
             </div>
           </div>
         </div>
-        <div v-else class="modal-col-side">
-          <label>Typ
-            <select v-model="taskType">
+        <div v-else class="flex flex-col gap-3">
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Typ
+            <select v-model="taskType" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none focus:border-accent">
               <option value="task">Task</option>
               <option value="epic">Epic</option>
               <option value="job">Job</option>
             </select>
           </label>
-          <label>Parent Epic
-            <select v-model="parentId">
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Parent Epic
+            <select v-model="parentId" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none focus:border-accent">
               <option value="">–</option>
               <option v-for="e in epics" :key="e.id" :value="e.id">{{ e.title }}</option>
             </select>
           </label>
-          <label>Points <small>(0–100)</small>
-            <input v-model.number="points" type="number" min="0" max="100" />
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Points <small class="normal-case font-sans">(0–100)</small>
+            <input v-model.number="points" type="number" min="0" max="100" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
           </label>
-          <label>Worker
-            <input v-model="worker" type="text" />
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">Worker
+            <input v-model="worker" type="text" class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
           </label>
         </div>
       </div>
-      <div class="modal-actions">
-        <button class="btn-primary" @click="save">Speichern</button>
-        <button v-if="!isNew" class="btn-danger" @click="handleDelete">Löschen</button>
+      <div class="flex gap-2 justify-end mt-1">
+        <button class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity" @click="save">Speichern</button>
+        <button v-if="!isNew" class="bg-transparent border border-danger text-danger rounded-md px-5 py-2 text-[13px] cursor-pointer hover:bg-danger/10 transition-colors" @click="handleDelete">Löschen</button>
       </div>
     </div>
   </div>

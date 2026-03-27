@@ -121,51 +121,53 @@ onMounted(loadProjects)
 </script>
 
 <template>
-  <div class="import-page">
-    <header class="import-header">
-      <a href="/" class="import-back">← Board</a>
-      <span class="import-title">Mobile Import</span>
+  <div class="min-h-screen bg-bg pb-10 max-w-[600px] mx-auto">
+    <header class="flex items-center gap-4 px-5 py-4 border-b border-border bg-surface sticky top-0 z-10">
+      <a href="/" class="font-mono text-sm text-accent no-underline">← Board</a>
+      <span class="font-mono text-base font-semibold text-text">Mobile Import</span>
     </header>
 
     <!-- Projekt auswählen -->
-    <section class="import-section">
-      <label class="import-label">Projekt</label>
-      <select v-model="selectedProjectId" class="import-select">
+    <section class="px-5 py-5 flex flex-col gap-2.5">
+      <label class="font-mono text-[11px] text-text-dim uppercase tracking-wider font-semibold">Projekt</label>
+      <select v-model="selectedProjectId"
+        class="bg-surface-2 border border-border rounded-md text-text text-base px-3.5 py-3 outline-none w-full font-sans focus:border-accent">
         <option v-for="p in projects" :key="p._id" :value="p._id">{{ p.title }}</option>
       </select>
-      <button v-if="!showNewProject" class="import-link" @click="showNewProject = true">+ Neues Projekt</button>
-      <div v-if="showNewProject" class="import-row">
-        <input v-model="newProjectName" class="import-input" placeholder="Projektname…" @keydown.enter="createProject" />
-        <button class="import-btn-sm" @click="createProject">Erstellen</button>
-        <button class="import-btn-sm import-btn-ghost" @click="showNewProject = false">✕</button>
+      <button v-if="!showNewProject" class="bg-transparent border-none text-accent text-[13px] font-mono cursor-pointer p-0 py-1 text-left hover:underline" @click="showNewProject = true">+ Neues Projekt</button>
+      <div v-if="showNewProject" class="flex gap-2 items-center flex-wrap">
+        <input v-model="newProjectName" placeholder="Projektname…" @keydown.enter="createProject"
+          class="bg-surface-2 border border-border rounded-md text-text text-base px-3.5 py-3 outline-none w-full font-sans focus:border-accent" />
+        <button class="px-3.5 py-2 text-[13px] font-mono bg-surface-2 border border-border rounded-md text-text-dim cursor-pointer min-h-[44px] hover:border-accent hover:text-accent" @click="createProject">Erstellen</button>
+        <button class="px-3.5 py-2 text-[13px] font-mono bg-transparent border-transparent rounded-md text-text-dim cursor-pointer min-h-[44px]" @click="showNewProject = false">✕</button>
       </div>
     </section>
 
     <!-- JSON Eingabe -->
-    <section class="import-section">
-      <label class="import-label">Tasks (JSON)</label>
+    <section class="px-5 py-5 flex flex-col gap-2.5">
+      <label class="font-mono text-[11px] text-text-dim uppercase tracking-wider font-semibold">Tasks (JSON)</label>
       <textarea
         v-model="jsonInput"
-        class="import-textarea"
-        :class="{ 'import-error-border': validationError }"
+        :class="['bg-surface-2 border rounded-md text-text text-base px-3.5 py-3 outline-none w-full font-mono resize-y min-h-[120px] leading-relaxed focus:border-accent placeholder:text-text-dim',
+          validationError ? 'border-[#e53935]' : 'border-border']"
         rows="8"
         placeholder='[{"title": "Mein Task", "labels": ["feature"], "points": 5}]'
         spellcheck="false"
       ></textarea>
-      <div class="import-row">
-        <button class="import-btn-sm" @click="pasteFromClipboard">Einfügen</button>
-        <button class="import-btn-sm" @click="validate">Prüfen</button>
-        <button class="import-btn import-btn-primary" @click="doImport">Importieren</button>
+      <div class="flex gap-2 items-center flex-wrap">
+        <button class="px-3.5 py-2 text-[13px] font-mono bg-surface-2 border border-border rounded-md text-text-dim cursor-pointer min-h-[44px] hover:border-accent hover:text-accent" @click="pasteFromClipboard">Einfügen</button>
+        <button class="px-3.5 py-2 text-[13px] font-mono bg-surface-2 border border-border rounded-md text-text-dim cursor-pointer min-h-[44px] hover:border-accent hover:text-accent" @click="validate">Prüfen</button>
+        <button class="bg-accent text-bg border-accent border rounded-md font-semibold px-4.5 py-2.5 text-sm cursor-pointer min-h-[44px] ml-auto hover:opacity-90 transition-opacity" @click="doImport">Importieren</button>
       </div>
-      <div v-if="validationError" class="import-error">{{ validationError }}</div>
-      <div v-if="importResult" class="import-success">{{ importResult }}</div>
+      <div v-if="validationError" class="text-[#ff8a80] px-3 py-2 bg-[#3a1c1c] border border-[#e53935] rounded-md whitespace-pre-wrap text-[13px]">{{ validationError }}</div>
+      <div v-if="importResult" class="text-[#a5d6a7] text-[13px] px-3 py-2 bg-[#1a2e1a] border border-[#43a047] rounded-md whitespace-pre-wrap">{{ importResult }}</div>
     </section>
 
     <!-- Supervisor Prompt -->
-    <section v-if="supervisorPrompt" class="import-section">
-      <label class="import-label">Supervisor Prompt</label>
-      <textarea class="import-textarea import-textarea-ro" :value="supervisorPrompt" rows="6" readonly></textarea>
-      <button class="import-btn" @click="copyPrompt">{{ promptCopied ? '✓ Kopiert' : 'Prompt kopieren' }}</button>
+    <section v-if="supervisorPrompt" class="px-5 py-5 flex flex-col gap-2.5">
+      <label class="font-mono text-[11px] text-text-dim uppercase tracking-wider font-semibold">Supervisor Prompt</label>
+      <textarea class="bg-surface border border-border rounded-md text-text text-[13px] px-3.5 py-3 outline-none w-full font-mono resize-y min-h-[120px] leading-relaxed opacity-80" :value="supervisorPrompt" rows="6" readonly></textarea>
+      <button class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer font-sans text-xs px-2.5 py-1 transition-all hover:border-accent hover:text-accent" @click="copyPrompt">{{ promptCopied ? '✓ Kopiert' : 'Prompt kopieren' }}</button>
     </section>
   </div>
 </template>

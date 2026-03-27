@@ -409,44 +409,43 @@ window.__kanbanToggleSearch = toggleSearch
 
 <template>
   <!-- Suchleiste -->
-  <div v-if="showSearch" class="board-search">
-    <div class="search-bar">
+  <div v-if="showSearch" class="px-6 py-2 bg-surface border-b border-border">
+    <div class="flex gap-2 items-center">
       <input
         ref="searchInputRef"
         v-model="searchQuery"
         type="text"
         placeholder="Suche in Titel & Beschreibung… (Esc zum Schließen)"
-        class="search-input"
+        class="flex-1 bg-surface-2 border border-border rounded-md text-text text-[13px] px-2.5 py-1.5 outline-none font-sans focus:border-accent placeholder:text-text-dim"
         @keydown="onSearchKeydown"
       />
-      <select v-model="filterLabel" class="search-select">
+      <select v-model="filterLabel" class="bg-surface-2 border border-border rounded-md text-text text-xs px-2 py-1.5 outline-none font-mono max-w-[160px] focus:border-accent">
         <option value="">Alle Labels</option>
         <option v-for="l in allLabels" :key="l" :value="l">{{ l }}</option>
       </select>
-      <select v-model="filterWorker" class="search-select">
+      <select v-model="filterWorker" class="bg-surface-2 border border-border rounded-md text-text text-xs px-2 py-1.5 outline-none font-mono max-w-[160px] focus:border-accent">
         <option value="">Alle Worker</option>
         <option v-for="w in allWorkers" :key="w" :value="w">{{ w }}</option>
       </select>
-      <button v-if="hasActiveFilter" class="search-clear" @click="clearFilters" title="Filter zurücksetzen">&#10005;</button>
-      <button class="search-close" @click="toggleSearch" title="Suche schließen">Esc</button>
+      <button v-if="hasActiveFilter" class="bg-transparent border border-border rounded-md text-text-dim text-[11px] px-2 py-1 cursor-pointer font-mono hover:border-accent hover:text-accent" @click="clearFilters" title="Filter zurücksetzen">&#10005;</button>
+      <button class="bg-transparent border border-border rounded-md text-text-dim text-[11px] px-2 py-1 cursor-pointer font-mono hover:border-accent hover:text-accent" @click="toggleSearch" title="Suche schließen">Esc</button>
     </div>
   </div>
-  <div ref="columnsRef" class="board-columns">
-    <!-- Spalten-Container (Drag&Drop für Spaltenreihenfolge deaktiviert für Done) -->
+  <div ref="columnsRef" class="flex gap-3 overflow-x-auto py-2 min-h-[200px] items-start">
     <div
       v-for="col in sortedColumns"
       :key="col.id"
-      class="kanban-column"
+      class="kanban-column min-w-[280px] max-w-[320px] flex-[0_0_300px] bg-surface rounded-lg flex flex-col max-h-[calc(100vh-140px)]"
       :class="{ 'col-done': col.title === 'Done' }"
       :data-id="col.id"
     >
       <!-- Spalten-Header -->
-      <div class="kanban-board-header" :style="{ borderTop: `3px solid ${col.color}` }">
-        <span class="col-title" :style="{ borderColor: col.color }">{{ col.title }}</span>
-        <span class="col-count">{{ (columnTasks[col.id] || []).length }}</span>
-        <div class="col-actions">
-          <button class="col-add-btn" :data-col-id="col.id" title="Task hinzufügen" @click="addTask(col.id)">+</button>
-          <button class="col-menu-btn" :data-col-id="col.id" title="Spalte verwalten" @click="openColMenu($event, col.id)">&#9776;</button>
+      <div class="kanban-board-header flex items-center gap-2 px-3 py-2.5 rounded-t-lg flex-shrink-0 cursor-grab active:cursor-grabbing" :class="{ '!cursor-default': col.title === 'Done' }" :style="{ borderTop: `3px solid ${col.color}` }">
+        <span class="border-l-[3px] pl-2 text-text font-mono text-xs font-semibold uppercase tracking-wider" :style="{ borderColor: col.color }">{{ col.title }}</span>
+        <span class="bg-surface-2 border border-border rounded-[10px] text-text-dim font-mono text-[10px] px-[7px] py-px ml-1.5">{{ (columnTasks[col.id] || []).length }}</span>
+        <div class="flex gap-1 ml-auto">
+          <button class="bg-transparent border border-border rounded text-text-dim cursor-pointer text-base h-[22px] leading-none px-1.5 transition-all hover:border-accent hover:text-accent" :data-col-id="col.id" title="Task hinzufügen" @click="addTask(col.id)">+</button>
+          <button class="bg-transparent border border-border rounded text-text-dim cursor-pointer text-xs h-[22px] leading-none px-[5px] transition-all hover:border-accent hover:text-accent" :data-col-id="col.id" title="Spalte verwalten" @click="openColMenu($event, col.id)">&#9776;</button>
         </div>
       </div>
 
@@ -463,8 +462,11 @@ window.__kanbanToggleSearch = toggleSearch
         :scroll-speed="15"
         :bubble-scroll="true"
         :force-fallback="true"
-        class="kanban-drag"
-        ghost-class="dragging"
+        :fallback-on-body="true"
+        class="min-h-[40px] px-2 py-1 flex-1 overflow-y-auto"
+        ghost-class="sortable-ghost"
+        chosen-class="sortable-chosen"
+        fallback-class="sortable-fallback"
         :move="onMoveCheck"
         @start="onDragStart"
         @end="onDragEnd"
@@ -474,16 +476,16 @@ window.__kanbanToggleSearch = toggleSearch
         <div
           v-for="task in (columnTasks[col.id] || [])"
           :key="task.id"
-          class="kanban-item"
+          class="kanban-item cursor-grab active:cursor-grabbing mb-1.5 bg-surface-2 border border-border rounded-md transition-[border-color,box-shadow] duration-150 select-none hover:border-accent-dim hover:shadow-[0_2px_12px_rgba(124,106,247,0.15)]"
           @click="handleTaskClick(task, $event)"
         >
           <div
-            class="task-inner"
-            :class="{ 'task-selected': state.selectedTasks.has(task.id) }"
+            class="px-3 py-2.5 cursor-pointer"
+            :class="{ 'outline-2 outline-accent -outline-offset-2 rounded-md': state.selectedTasks.has(task.id) }"
             :data-task-id="task.id"
             :style="{ borderLeft: `3px solid ${workerBorderColor(task.worker)}` }"
           >
-            <div class="task-header-row">
+            <div class="flex items-start justify-between gap-1.5 mb-1">
               <input
                 type="checkbox"
                 class="task-checkbox"
@@ -492,30 +494,31 @@ window.__kanbanToggleSearch = toggleSearch
                 @change="toggleTaskSelection(task.id, ($event.target as HTMLInputElement).checked)"
                 @click.stop
               />
-              <span v-if="task.task_type === 'epic'" class="type-badge type-epic" title="Epic">E</span>
-              <span v-else-if="task.task_type === 'job'" class="type-badge type-job" title="Job">J</span>
-              <div class="task-title">{{ task.title }}</div>
-              <span v-if="isBlocked(task)" class="blocked-badge" title="Blocked">B</span>
-              <span v-if="task.points" class="points-badge">{{ task.points }}</span>
+              <span v-if="task.task_type === 'epic'" class="inline-flex items-center justify-center font-mono text-[9px] font-bold w-[18px] h-[18px] rounded-sm flex-shrink-0 bg-badge-epic-bg text-badge-epic-text border border-badge-epic-border" title="Epic">E</span>
+              <span v-else-if="task.task_type === 'job'" class="inline-flex items-center justify-center font-mono text-[9px] font-bold w-[18px] h-[18px] rounded-sm flex-shrink-0 bg-badge-job-bg text-badge-job-text border border-badge-job-border" title="Job">J</span>
+              <div class="text-[13px] font-semibold text-text leading-snug flex-1">{{ task.title }}</div>
+              <span v-if="isBlocked(task)" class="inline-flex items-center justify-center font-mono text-[9px] font-bold w-[18px] h-[18px] rounded-sm flex-shrink-0 bg-badge-blocked-bg text-badge-blocked-text border border-badge-blocked-border" title="Blocked">B</span>
+              <span v-if="task.points" class="bg-accent-dim border border-accent rounded-[10px] text-accent font-mono text-[10px] font-semibold px-[7px] py-px flex-shrink-0">{{ task.points }}</span>
             </div>
-            <div v-if="task.task_type === 'epic' && (task.subtask_ids || []).length" class="subtask-progress">
-              <span class="subtask-bar">
-                <span class="subtask-fill" :style="{ width: subtaskProgress(task).pct + '%' }"></span>
+            <div v-if="task.task_type === 'epic' && (task.subtask_ids || []).length" class="flex items-center gap-1.5 py-0.5">
+              <span class="flex-1 h-1 bg-border rounded-sm overflow-hidden">
+                <span class="block h-full bg-success rounded-sm transition-all duration-200" :style="{ width: subtaskProgress(task).pct + '%' }"></span>
               </span>
-              <span :class="['subtask-count', { 'subtask-done': subtaskProgress(task).done === subtaskProgress(task).total }]">
+              <span :class="['font-mono text-[10px] text-text-dim', { '!text-success': subtaskProgress(task).done === subtaskProgress(task).total }]">
                 {{ subtaskProgress(task).done }}/{{ subtaskProgress(task).total }}
               </span>
             </div>
-            <div v-if="task.description" class="task-desc">
+            <div v-if="task.description" class="text-xs text-text-dim leading-snug mb-1.5">
               {{ ((p) => p.substring(0, 80) + (p.length > 80 ? '…' : ''))(stripMarkdown(task.description)) }}
             </div>
-            <div class="task-meta">
-              <div class="task-labels">
-                <span v-for="label in (task.labels || [])" :key="label" class="label"
+            <div class="flex items-center justify-between gap-1.5 flex-wrap">
+              <div class="flex gap-1 flex-wrap">
+                <span v-for="label in (task.labels || [])" :key="label"
+                  class="font-mono text-[10px] px-1.5 py-px rounded-sm border"
                   :style="{ background: labelColor(label).bg, borderColor: labelColor(label).border, color: labelColor(label).color }">{{ label }}</span>
               </div>
-              <div class="task-assignees">
-                <span v-if="task.worker" class="avatar" :title="task.worker">{{ task.worker[0].toUpperCase() }}</span>
+              <div>
+                <span v-if="task.worker" class="inline-flex items-center justify-center rounded-full font-mono text-[10px] h-5 w-5 uppercase bg-surface border border-border text-text-dim" :title="task.worker">{{ task.worker[0].toUpperCase() }}</span>
               </div>
             </div>
           </div>
@@ -523,77 +526,54 @@ window.__kanbanToggleSearch = toggleSearch
       </VueDraggable>
 
       <!-- Leere Spalte Placeholder -->
-      <div v-if="!(columnTasks[col.id] || []).length" class="kanban-empty">
+      <div v-if="!(columnTasks[col.id] || []).length" class="p-4 text-center opacity-50 text-sm">
         Keine Tasks
       </div>
     </div>
   </div>
 </template>
 
-<style scoped>
-.board-columns {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding: 8px 0;
-  min-height: 200px;
-  align-items: flex-start;
+<style>
+/* SortableJS drag styles – MUST be global (unscoped) because
+   SortableJS clones elements to <body> outside Vue's scope */
+
+/* Ghost = the placeholder left behind at the drop position */
+.sortable-ghost {
+  opacity: 0.3;
+  background: var(--color-accent-dim) !important;
+  border: 2px dashed var(--color-accent) !important;
+  border-radius: var(--radius-md);
+}
+.sortable-ghost > * {
+  visibility: hidden;
 }
 
-.kanban-column {
-  min-width: 280px;
-  max-width: 320px;
-  flex: 0 0 300px;
-  background: var(--surface);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 140px);
+/* Chosen = the original element when picked up */
+.sortable-chosen {
+  opacity: 0.8;
+  cursor: grabbing !important;
 }
 
-.kanban-board-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px 8px 0 0;
-  flex-shrink: 0;
-  cursor: grab;
+/* Fallback = the clone that follows the cursor (force-fallback: true)
+   IMPORTANT: Do NOT set transform here — SortableJS uses transform: translate3d()
+   to position the clone. Overriding it breaks movement. */
+.sortable-fallback {
+  opacity: 0.9 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 2px var(--color-accent) !important;
+  border-radius: var(--radius-md) !important;
+  cursor: grabbing !important;
+  z-index: 9999 !important;
+  transition: none !important;
+  pointer-events: none !important;
 }
 
-.kanban-board-header:active {
-  cursor: grabbing;
-}
-
-.col-done .kanban-board-header {
-  cursor: default;
-}
-
+/* Column drag ghost */
 .column-dragging {
   opacity: 0.4;
 }
 
-.kanban-drag {
-  min-height: 40px;
-  padding: 4px 8px;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.kanban-item {
-  cursor: grab;
-  margin-bottom: 6px;
-}
-
-.kanban-item:active {
-  cursor: grabbing;
-}
-
-.kanban-empty {
-  padding: 16px;
-  text-align: center;
-  opacity: 0.5;
-  font-size: 0.85rem;
+/* New task glow */
+.kanban-item.task-new-glow {
+  animation: task-glow 2s ease-out forwards;
 }
 </style>

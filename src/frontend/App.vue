@@ -156,33 +156,40 @@ onMounted(async () => {
 
 <template>
   <!-- Login-Ansicht (erst nach Auth-Check zeigen, verhindert Flash) -->
-  <div v-if="authChecked && !isAuthenticated" class="login-page">
-    <img src="/icons/plankton-splash.png" alt="" class="login-splash" />
-    <div class="login-card">
-      <div class="login-logo">
-        <img src="/icons/logo.svg" alt="Plankton" class="login-logo-img" />
+  <div v-if="authChecked && !isAuthenticated"
+    class="flex items-center justify-center min-h-screen bg-login-bg relative overflow-hidden">
+    <img src="/icons/plankton-splash.png" alt=""
+      class="absolute inset-0 w-full h-full object-cover opacity-45 pointer-events-none" />
+    <div class="relative bg-login-card-bg backdrop-blur-[12px] border border-login-card-border rounded-2xl p-10 w-[380px] flex flex-col gap-6 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+      <div class="font-mono text-2xl font-semibold text-center text-login-accent flex items-center justify-center gap-3">
+        <img src="/icons/logo.svg" alt="Plankton" class="w-12 h-12" />
         Plankton
       </div>
-      <div v-if="loginError" class="login-error">{{ loginError }}</div>
-      <form @submit.prevent="handleLogin">
-        <label>
+      <div v-if="loginError" class="text-[#ff6b6b] text-[13px]">{{ loginError }}</div>
+      <form @submit.prevent="handleLogin" class="flex flex-col gap-4">
+        <label class="flex flex-col gap-1.5 text-xs text-login-label font-mono uppercase tracking-wide">
           Username
           <input
             v-model="loginUsername"
             type="text"
             autocomplete="username"
             autofocus
+            class="bg-login-input-bg border border-login-input-border rounded-lg text-login-text font-sans text-sm px-3.5 py-3 outline-none transition-colors focus:border-login-accent focus:bg-login-input-focus"
           />
         </label>
-        <label>
+        <label class="flex flex-col gap-1.5 text-xs text-login-label font-mono uppercase tracking-wide">
           Passwort
           <input
             v-model="loginPassword"
             type="password"
             autocomplete="current-password"
+            class="bg-login-input-bg border border-login-input-border rounded-lg text-login-text font-sans text-sm px-3.5 py-3 outline-none transition-colors focus:border-login-accent focus:bg-login-input-focus"
           />
         </label>
-        <button type="submit" class="btn-primary login-btn">Anmelden</button>
+        <button type="submit"
+          class="mt-1.5 py-3 text-sm bg-login-accent text-login-bg font-semibold border-none rounded-lg cursor-pointer transition-all hover:bg-login-accent-hover active:scale-[0.98]">
+          Anmelden
+        </button>
       </form>
     </div>
   </div>

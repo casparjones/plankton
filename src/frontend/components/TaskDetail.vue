@@ -208,143 +208,145 @@ defineExpose({ open, close })
 </script>
 
 <template>
-  <div v-if="isOpen" class="modal-overlay open" @click="onOverlayClick">
-    <div class="modal modal-detail">
-      <div class="modal-header">
-        <span class="modal-heading">{{ task?.task_type === 'epic' ? 'Epic' : task?.task_type === 'job' ? 'Job' : 'Task' }}</span>
-        <button class="modal-close" @click="close">&#10005;</button>
+  <div v-if="isOpen" class="fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] flex items-center justify-center" @click="onOverlayClick">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1440px] max-h-[90vh] overflow-y-auto p-6 w-[90%]">
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ task?.task_type === 'epic' ? 'Epic' : task?.task_type === 'job' ? 'Job' : 'Task' }}</span>
+        <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text transition-colors" @click="close">&#10005;</button>
       </div>
-      <div class="detail-title">{{ task?.title }}</div>
-      <div v-if="columnInfo" class="detail-column-info">
-        <span class="label" :style="{ background: columnInfo.color + '22', borderColor: columnInfo.color, color: columnInfo.color }">{{ columnInfo.title }}</span>
+      <div class="text-[22px] font-bold text-text leading-tight break-words">{{ task?.title }}</div>
+      <div v-if="columnInfo">
+        <span class="font-mono text-[10px] px-1.5 py-px rounded-sm border"
+          :style="{ background: columnInfo.color + '22', borderColor: columnInfo.color, color: columnInfo.color }">{{ columnInfo.title }}</span>
       </div>
-      <div class="detail-grid">
-        <div class="detail-col-main">
-          <div class="detail-section">
-            <span class="detail-section-title">Beschreibung</span>
-            <div class="detail-description markdown-body" v-html="renderMarkdown(task?.description)"></div>
+      <div class="grid grid-cols-[1fr_280px] gap-7 min-h-[300px] max-md:grid-cols-1">
+        <div class="flex flex-col gap-5 min-w-0">
+          <div class="flex flex-col gap-2">
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Beschreibung</span>
+            <div class="text-sm text-text leading-relaxed break-words bg-surface-2 border border-border rounded-md px-4 py-3.5 min-h-[80px] markdown-body" v-html="renderMarkdown(task?.description)"></div>
           </div>
-          <div class="detail-section">
-            <span class="detail-section-title">Labels</span>
-            <div class="detail-labels">
+          <div class="flex flex-col gap-2">
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Labels</span>
+            <div class="flex flex-wrap gap-1.5">
               <template v-if="(task?.labels || []).length">
-                <span v-for="label in task!.labels" :key="label" class="label"
+                <span v-for="label in task!.labels" :key="label" class="text-xs px-2.5 py-[3px] rounded-xl border font-mono"
                   :style="{ background: labelColor(label).bg, borderColor: labelColor(label).border, color: labelColor(label).color }">{{ label }}</span>
               </template>
-              <span v-else>–</span>
+              <span v-else class="text-text-dim">–</span>
             </div>
           </div>
-          <!-- Subtasks (aufklappbar) -->
-          <div v-if="hasSubtasks" class="detail-section">
-            <div class="subtasks-header" @click="subtasksOpen = !subtasksOpen">
-              <span class="subtasks-toggle">{{ subtasksOpen ? '▾' : '▸' }}</span>
-              <span class="detail-section-title" style="cursor:pointer">Subtasks</span>
-              <span class="subtasks-count">
-                <span class="subtasks-done-count">{{ subtasksDone }}</span> / {{ subtasks.length }} done
-                <span v-if="subtasksDone === subtasks.length" class="subtasks-all-done">&#10003;</span>
+          <!-- Subtasks -->
+          <div v-if="hasSubtasks" class="flex flex-col gap-2">
+            <div class="flex items-center gap-1.5 cursor-pointer py-1.5" @click="subtasksOpen = !subtasksOpen">
+              <span class="text-xs text-text-dim w-3.5">{{ subtasksOpen ? '▾' : '▸' }}</span>
+              <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim cursor-pointer">Subtasks</span>
+              <span class="font-mono text-[11px] text-text-dim ml-auto">
+                <span class="text-text font-semibold">{{ subtasksDone }}</span> / {{ subtasks.length }} done
+                <span v-if="subtasksDone === subtasks.length" class="text-[#4caf50] font-bold ml-1">&#10003;</span>
               </span>
-              <div class="subtasks-bar">
-                <div class="subtasks-bar-fill" :style="{ width: (subtasks.length ? (subtasksDone / subtasks.length * 100) : 0) + '%' }"></div>
+              <div class="w-[60px] h-1 bg-surface-2 rounded-sm overflow-hidden ml-2">
+                <div class="h-full bg-accent rounded-sm transition-all duration-300" :style="{ width: (subtasks.length ? (subtasksDone / subtasks.length * 100) : 0) + '%' }"></div>
               </div>
             </div>
-            <div v-if="subtasksOpen" class="subtasks-list">
-              <div v-for="sub in subtasks" :key="sub.id" class="related-item" @click="openRelated(sub.id)">
-                <span :class="['subtask-check', { done: sub.done }]">{{ sub.done ? '✓' : '○' }}</span>
-                <span class="related-title">{{ sub.title }}</span>
-                <span class="related-col">{{ sub.colName }}</span>
+            <div v-if="subtasksOpen" class="flex flex-col gap-0.5 mt-1">
+              <div v-for="sub in subtasks" :key="sub.id" class="flex items-center gap-2 px-3 py-2 bg-surface-2 border border-border rounded-md cursor-pointer transition-colors hover:border-accent" @click="openRelated(sub.id)">
+                <span :class="['text-[13px] w-[18px] flex-shrink-0 text-center text-text-dim', { '!text-[#4caf50] font-bold': sub.done }]">{{ sub.done ? '✓' : '○' }}</span>
+                <span class="flex-1 text-[13px] text-text overflow-hidden text-ellipsis whitespace-nowrap">{{ sub.title }}</span>
+                <span class="font-mono text-[10px] text-text-dim flex-shrink-0">{{ sub.colName }}</span>
               </div>
             </div>
           </div>
 
-          <div v-if="hasRelations" class="detail-section">
-            <span class="detail-section-title">Verknüpfte Tickets</span>
-            <div class="related-tickets">
-              <div v-for="group in relatedTickets" :key="group.label" class="related-group">
-                <div class="related-group-label">{{ group.icon }} {{ group.label }}</div>
-                <div v-for="item in group.items" :key="item.id" class="related-item" @click="openRelated(item.id)">
-                  <span :class="['related-check', { done: item.done }]">{{ item.done ? '✓' : '○' }}</span>
-                  <span v-if="item.taskType !== 'task'" class="related-type">{{ item.taskType === 'epic' ? 'E' : 'J' }}</span>
-                  <span class="related-title">{{ item.title }}</span>
-                  <span class="related-col">{{ item.colName }}</span>
+          <div v-if="hasRelations" class="flex flex-col gap-2">
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Verknüpfte Tickets</span>
+            <div class="flex flex-col gap-3">
+              <div v-for="group in relatedTickets" :key="group.label">
+                <div class="font-mono text-[11px] text-text-dim uppercase tracking-wide mb-1">{{ group.icon }} {{ group.label }}</div>
+                <div v-for="item in group.items" :key="item.id" class="flex items-center gap-2 px-3 py-2 bg-surface-2 border border-border rounded-md cursor-pointer transition-colors hover:border-accent" @click="openRelated(item.id)">
+                  <span :class="['text-sm w-[18px] flex-shrink-0 text-center text-text-dim', { '!text-[#43a047]': item.done }]">{{ item.done ? '✓' : '○' }}</span>
+                  <span v-if="item.taskType !== 'task'" class="inline-flex items-center justify-center font-mono text-[9px] font-bold w-[18px] h-[18px] rounded-sm flex-shrink-0 bg-[#1a2e1a] text-[#a5d6a7] border border-[#43a047]">{{ item.taskType === 'epic' ? 'E' : 'J' }}</span>
+                  <span class="flex-1 text-[13px] text-text overflow-hidden text-ellipsis whitespace-nowrap">{{ item.title }}</span>
+                  <span class="font-mono text-[10px] text-text-dim flex-shrink-0">{{ item.colName }}</span>
                 </div>
               </div>
             </div>
           </div>
-          <div class="detail-section">
-            <span class="detail-section-title">Kommentare</span>
-            <div class="detail-list detail-comments-list">
+          <div class="flex flex-col gap-2">
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Kommentare</span>
+            <div class="max-h-[300px] overflow-y-auto flex flex-col gap-1.5">
               <template v-if="comments.length">
-                <div v-for="(c, i) in comments" :key="i" class="detail-list-item log-entry">
+                <div v-for="(c, i) in comments" :key="i" class="flex gap-1.5 items-baseline text-[13px] p-2 px-3 bg-surface-2 rounded-md border border-border leading-snug">
                   <template v-if="typeof c === 'object' && c !== null">
-                    <span class="log-ts">{{ c.ts }}</span>
-                    <span class="log-user">{{ c.user }}</span>
-                    <span class="log-msg markdown-body" v-html="renderMarkdown(c.msg)"></span>
+                    <span class="font-mono text-[10px] text-text-dim whitespace-nowrap flex-shrink-0">{{ c.ts }}</span>
+                    <span class="text-[10px] text-text-dim whitespace-nowrap flex-shrink-0">{{ c.user }}</span>
+                    <span class="text-xs text-text flex-1 markdown-body" v-html="renderMarkdown(c.msg)"></span>
                   </template>
                   <template v-else>
-                    <span class="log-msg markdown-body" v-html="renderMarkdown(String(c))"></span>
+                    <span class="text-xs text-text flex-1 markdown-body" v-html="renderMarkdown(String(c))"></span>
                   </template>
                 </div>
               </template>
-              <div v-else class="detail-list-empty">Keine Kommentare</div>
+              <div v-else class="text-xs text-text-dim italic">Keine Kommentare</div>
             </div>
-            <div class="detail-comment-input">
+            <div class="flex gap-2 items-end">
               <textarea
                 v-model="newComment"
                 placeholder="Kommentar schreiben…"
                 rows="2"
+                class="flex-1 bg-surface-2 border border-border rounded-md text-text font-sans text-[13px] px-2.5 py-2 outline-none resize-y min-h-[36px] transition-colors focus:border-accent placeholder:text-text-dim"
                 @keydown.ctrl.enter="addComment"
                 @keydown.meta.enter="addComment"
               ></textarea>
-              <button class="btn-primary btn-sm" @click="addComment" :disabled="!newComment.trim()">Senden</button>
+              <button class="bg-accent border-none text-white font-semibold rounded-md px-3.5 py-1.5 text-xs cursor-pointer hover:opacity-85 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed" @click="addComment" :disabled="!newComment.trim()">Senden</button>
             </div>
           </div>
         </div>
-        <div class="detail-col-side">
-          <div class="detail-side-actions">
-            <button class="btn-mcp" @click="copyMcpLink" :title="mcpLinkCopied ? 'Kopiert!' : 'MCP-Link für Claude Code kopieren'">
+        <div class="flex flex-col gap-4">
+          <div class="flex gap-2 justify-end">
+            <button class="bg-surface-2 border border-border text-text-dim font-mono rounded-md px-3.5 py-1.5 text-xs cursor-pointer transition-all hover:border-accent hover:text-accent" @click="copyMcpLink" :title="mcpLinkCopied ? 'Kopiert!' : 'MCP-Link für Claude Code kopieren'">
               {{ mcpLinkCopied ? '✓ Kopiert' : 'MCP Link' }}
             </button>
-            <button class="btn-primary" @click="editTask">Bearbeiten</button>
+            <button class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity" @click="editTask">Bearbeiten</button>
           </div>
-          <div class="detail-section">
-            <span class="detail-section-title">Details</span>
-            <div class="detail-info-grid">
-              <div class="detail-info-item">
-                <span class="detail-info-item-label">Typ</span>
-                <span class="detail-info-item-value">{{ task?.task_type || 'task' }}</span>
+          <div class="flex flex-col gap-2">
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Details</span>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Typ</span>
+                <span class="text-sm text-text font-medium">{{ task?.task_type || 'task' }}</span>
               </div>
-              <div class="detail-info-item">
-                <span class="detail-info-item-label">Points</span>
-                <span class="detail-info-item-value">{{ task?.points || '–' }}</span>
+              <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Points</span>
+                <span class="text-sm text-text font-medium">{{ task?.points || '–' }}</span>
               </div>
-              <div class="detail-info-item">
-                <span class="detail-info-item-label">Worker</span>
-                <span class="detail-info-item-value">{{ task?.worker || '–' }}</span>
+              <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Worker</span>
+                <span class="text-sm text-text font-medium">{{ task?.worker || '–' }}</span>
               </div>
-              <div class="detail-info-item">
-                <span class="detail-info-item-label">Erstellt</span>
-                <span class="detail-info-item-value">{{ formatDate(task?.created_at) }}</span>
+              <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Erstellt</span>
+                <span class="text-sm text-text font-medium">{{ formatDate(task?.created_at) }}</span>
               </div>
-              <div class="detail-info-item">
-                <span class="detail-info-item-label">Geändert</span>
-                <span class="detail-info-item-value">{{ formatDate(task?.updated_at) }}</span>
+              <div class="flex flex-col gap-[3px] bg-surface-2 border border-border rounded-md px-3 py-2.5">
+                <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">Geändert</span>
+                <span class="text-sm text-text font-medium">{{ formatDate(task?.updated_at) }}</span>
               </div>
             </div>
           </div>
-          <div class="detail-section">
-            <span class="detail-section-title">Logs</span>
-            <div class="detail-list">
+          <div class="flex flex-col gap-2">
+            <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">Logs</span>
+            <div class="max-h-[250px] overflow-y-auto flex flex-col gap-1.5">
               <template v-if="logs.length">
-                <div v-for="(l, i) in logs" :key="i" class="detail-list-item log-entry">
+                <div v-for="(l, i) in logs" :key="i" class="text-[11px] text-text-dim p-1 px-2 bg-surface-2 rounded-sm border border-border font-mono flex gap-1.5 items-baseline">
                   <template v-if="typeof l === 'object'">
-                    <span class="log-ts">{{ l.ts }}</span>
-                    <span class="log-msg">{{ l.msg }}</span>
-                    <span class="log-user">{{ l.user }}</span>
+                    <span class="text-[10px] text-text-dim whitespace-nowrap flex-shrink-0">{{ l.ts }}</span>
+                    <span class="text-xs text-text flex-1 overflow-hidden text-ellipsis">{{ l.msg }}</span>
+                    <span class="text-[10px] text-text-dim whitespace-nowrap flex-shrink-0">{{ l.user }}</span>
                   </template>
                   <template v-else>{{ l }}</template>
                 </div>
               </template>
-              <div v-else class="detail-list-empty">Keine Logs</div>
+              <div v-else class="text-xs text-text-dim italic">Keine Logs</div>
             </div>
           </div>
         </div>
