@@ -228,6 +228,7 @@ export default {
   drag: {
     moveFailed: 'Échec du déplacement',
     blockedBy: 'Bloqué par : {blockers}',
+    BLOCKED_BY: 'Impossible de déplacer vers Done — bloqué par : {details}',
   },
 
   auth: {

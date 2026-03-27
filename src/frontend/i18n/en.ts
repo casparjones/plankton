@@ -245,6 +245,7 @@ export default {
   drag: {
     moveFailed: 'Move failed',
     blockedBy: 'Blocked by: {blockers}',
+    BLOCKED_BY: 'Cannot move to Done — blocked by: {details}',
   },
 
   // ─── Auth ───

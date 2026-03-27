@@ -36,6 +36,22 @@ impl IntoResponse for ApiError {
             ApiError::Io(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             ApiError::Json(e) => (StatusCode::BAD_REQUEST, e.to_string()),
         };
-        (status, Json(serde_json::json!({"error": msg}))).into_response()
+        // Structured errors: "CODE:details" → { "error": "details", "code": "CODE" }
+        let (code, message) = if let Some(idx) = msg.find(':') {
+            let c = &msg[..idx];
+            if c.chars().all(|ch| ch.is_ascii_uppercase() || ch == '_') {
+                (Some(c.to_string()), msg[idx + 1..].trim().to_string())
+            } else {
+                (None, msg)
+            }
+        } else {
+            (None, msg)
+        };
+        let body = if let Some(c) = code {
+            serde_json::json!({"error": message, "code": c})
+        } else {
+            serde_json::json!({"error": message})
+        };
+        (status, Json(body)).into_response()
     }
 }

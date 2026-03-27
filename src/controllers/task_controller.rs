@@ -296,8 +296,7 @@ pub async fn move_task(
                     .collect();
                 if !open_blockers.is_empty() {
                     return Err(ApiError::BadRequest(format!(
-                        "Task ist blockiert durch: {}",
-                        open_blockers.join(", ")
+                        "BLOCKED_BY:{}", open_blockers.join(", ")
                     )));
                 }
             }
@@ -363,8 +362,7 @@ pub async fn batch_move_tasks(
                         .collect();
                     if !open_blockers.is_empty() {
                         return Err(ApiError::BadRequest(format!(
-                            "Task \"{}\" ist blockiert durch: {}",
-                            task.title, open_blockers.join(", ")
+                            "BLOCKED_BY:{}", open_blockers.join(", ")
                         )));
                     }
                 }

@@ -18,7 +18,7 @@ function stripMarkdown(text: string): string {
 
 import { t } from '../i18n'
 import { state } from '../state'
-import api from '../api'
+import api, { ApiError } from '../api'
 import { useToast } from 'vue-toastification'
 
 const toast = useToast()
@@ -259,8 +259,13 @@ function persistMoves(moves: { task_id: string; column_id: string; order: number
     })
     .catch(err => {
       console.error('[DnD] ❌ batch-move failed:', err)
-      const errMsg = err?.response?.data?.error || err?.message || ''
-      toast.error(errMsg ? `${t('drag.moveFailed')}: ${errMsg}` : t('drag.moveFailed'))
+      // Use i18n key from server error code if available
+      if (err instanceof ApiError && err.code) {
+        const i18nKey = `drag.${err.code}`
+        toast.error(t(i18nKey, { details: err.message }), { timeout: 5000 })
+      } else {
+        toast.error(t('drag.moveFailed'), { timeout: 5000 })
+      }
       // Rollback: optimistic update rückgängig machen
       for (const s of snapshot) {
         const task = state.project?.tasks.find((t: Task) => t.id === s.task_id)
