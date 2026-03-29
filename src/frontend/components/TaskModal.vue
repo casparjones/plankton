@@ -217,7 +217,7 @@ defineExpose({ openNew, openEdit, close })
 
 <template>
   <div v-if="isOpen" class="fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] flex items-center justify-center" @click="onOverlayClick">
-    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
+    <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] max-h-[90dvh] overflow-y-auto p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ isNew ? t('taskModal.newTask') : t('taskModal.editTask') }}</span>
         <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text transition-colors" @click="close">&#10005;</button>
