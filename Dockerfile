@@ -23,7 +23,7 @@ COPY src/frontend ./src/frontend/
 # Alle statischen Dateien kopieren (Icons, Styles, HTML, Splash, etc.)
 COPY static ./static/
 
-# Bundle bauen → erzeugt static/bundle.js + static/bundle.css
+# Bundle bauen → erzeugt static/bundle.[hash].js + static/bundle.[hash].css + static/index.html
 RUN npm run build
 
 # ============================================================

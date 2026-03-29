@@ -2,9 +2,9 @@
 // Baut das Frontend via webpack – wird von Cargo vor dem Kompilieren ausgeführt.
 //
 // Logik:
-// - Wenn static/bundle.js bereits existiert (z.B. im Docker-Build von Stage 1
+// - Wenn static/index.html bereits existiert (z.B. im Docker-Build von Stage 1
 //   vorbereitet), wird npm übersprungen → kein Node.js im Rust-Builder nötig
-// - Wenn bundle.js fehlt (lokale Entwicklung), wird npm install + build ausgeführt
+// - Wenn index.html fehlt (lokale Entwicklung), wird npm install + build ausgeführt
 
 use std::path::Path;
 use std::process::Command;
@@ -18,12 +18,12 @@ fn main() {
 
     let root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let root = Path::new(&root);
-    let bundle = root.join("static/bundle.js");
+    let index = root.join("static/index.html");
 
     // Bundle bereits vorhanden (Docker Stage 1 oder manuelles npm run build)?
     // Dann überspringen – kein Node.js erforderlich.
-    if bundle.exists() {
-        println!("cargo:warning=bundle.js gefunden – npm build übersprungen");
+    if index.exists() {
+        println!("cargo:warning=index.html gefunden – npm build übersprungen");
         return;
     }
 

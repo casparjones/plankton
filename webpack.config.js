@@ -1,13 +1,22 @@
 const path = require('path');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 const { VueLoaderPlugin } = require('vue-loader');
 
 module.exports = {
   entry: './src/frontend/main.ts',
   output: {
-    filename: 'bundle.js',
+    filename: 'bundle.[contenthash:8].js',
     path: path.resolve(__dirname, 'static'),
-    clean: false,
+    publicPath: '/',
+    clean: {
+      keep: (filename) => {
+        // Keep everything except old bundle.* and index.html (which we regenerate)
+        if (/^bundle\./.test(filename)) return false;
+        if (filename === 'index.html') return false;
+        return true;
+      },
+    },
   },
   resolve: {
     extensions: ['.ts', '.js', '.vue', '.json'],
@@ -16,7 +25,11 @@ module.exports = {
     },
   },
   plugins: [
-    new MiniCssExtractPlugin({ filename: 'bundle.css' }),
+    new MiniCssExtractPlugin({ filename: 'bundle.[contenthash:8].css' }),
+    new HtmlWebpackPlugin({
+      template: './src/frontend/index.html',
+      inject: true,
+    }),
     new VueLoaderPlugin(),
   ],
   module: {
