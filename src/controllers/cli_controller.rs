@@ -723,6 +723,55 @@ cmd_info() {{
     echo ""
 }}
 
+# ─── Update ──────────────────────────────────────────────────
+
+cmd_update() {{
+    load_config
+
+    echo ""
+    echo "  🪼 Plankton CLI Update"
+    echo "  ━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Determine install URL: prefer active server, fallback to INSTALLED_FROM
+    local update_url="${{PLANKTON_SERVER:-$INSTALLED_FROM}}"
+
+    # Fetch server version for comparison
+    local server_version=""
+    if [[ -n "$update_url" ]]; then
+        server_version=$(curl -fsSL "${{update_url}}/api/version" 2>/dev/null | jq -r '.cli_version // .version // empty' 2>/dev/null || true)
+    fi
+
+    if [[ -n "$server_version" && "$server_version" != "null" ]]; then
+        echo "  Local version:  $VERSION"
+        echo "  Server version: $server_version"
+        echo ""
+        if [[ "$server_version" == "$VERSION" ]]; then
+            echo "  ✓ Already up to date."
+            echo ""
+            return 0
+        fi
+        echo "  → Updating to $server_version ..."
+    else
+        echo "  Local version:  $VERSION"
+        echo "  → Installing latest version from ${{update_url}} ..."
+    fi
+
+    echo ""
+
+    # Run the installer from the server
+    if curl -fsSL "${{update_url}}/install" | bash; then
+        echo ""
+        echo "  ✓ Update complete. Run 'plankton --version' to verify."
+    else
+        echo ""
+        echo "  ✗ Update failed. Try manually:"
+        echo "    curl -fsSL ${{update_url}}/install | bash"
+        return 1
+    fi
+    echo ""
+}}
+
 # ─── Init (.vibe Struktur) ───────────────────────────────────
 
 cmd_init() {{
@@ -1173,6 +1222,7 @@ cmd_help() {{
     echo "    init                 Create .vibe/ project structure"
     echo "    skill install [-g]   Download & install SKILL.md"
     echo "    skill update  [-g]   Update installed SKILL.md"
+    echo "    update               Update CLI to latest version from server"
     echo "    tokens               List agent tokens (admin)"
     echo "    help                 Show this help"
     echo ""
@@ -1183,6 +1233,7 @@ cmd_help() {{
     echo ""
     echo "  Install / Update:"
     echo "    curl -fsSL $INSTALLED_FROM/install | bash"
+    echo "    plankton update"
     echo ""
 }}
 
@@ -1200,6 +1251,7 @@ case "${{1:-help}}" in
     export)     shift; cmd_export "$@" ;;
     import)     shift; cmd_import "$@" ;;
     init)       cmd_init ;;
+    update)     cmd_update ;;
     skill)
         shift
         case "${{1:-install}}" in

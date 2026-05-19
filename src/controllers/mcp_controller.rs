@@ -35,6 +35,14 @@ fn all_tools() -> Vec<ToolDef> {
             "type": "object",
             "properties": { "title": { "type": "string", "description": "Project title" } }
         })) },
+        ToolDef { name: "update_project", description: "Update project metadata (title, owner)", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id"],
+            "properties": {
+                "project_id": { "type": "string", "description": "Project ID or slug" },
+                "title": { "type": "string", "description": "New project title" },
+                "owner": { "type": "string", "description": "Project owner (username/display_name)" }
+            }
+        })) },
         ToolDef { name: "list_epics", description: "List columns as epics with task counts", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id"],
             "properties": { "project_id": { "type": "string" } }
@@ -72,7 +80,7 @@ fn all_tools() -> Vec<ToolDef> {
                 "parent_id": { "type": "string" }
             }
         })) },
-        ToolDef { name: "add_log", description: "Append a log entry to a task", roles: Some(&["developer", "tester", "manager", "admin"]), schema: Some(|| serde_json::json!({
+        ToolDef { name: "add_log", description: "DEPRECATED: Use add_comment instead. Kept for backward compatibility — internally routes to add_comment.", roles: Some(&["developer", "tester", "manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id", "task_id", "message"],
             "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "message": { "type": "string" } }
         })) },
@@ -84,7 +92,7 @@ fn all_tools() -> Vec<ToolDef> {
             "type": "object", "required": ["project_id"],
             "properties": { "project_id": { "type": "string" } }
         })) },
-        ToolDef { name: "add_comment", description: "Add a comment to a task", roles: Some(&["tester", "developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
+        ToolDef { name: "add_comment", description: "Add a comment to a task. This is the primary tool for agent communication: validation results, decisions, review feedback, handoffs between agents. Prefer add_comment over add_log.", roles: Some(&["tester", "developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id", "task_id", "text"],
             "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "text": { "type": "string" } }
         })) },
@@ -703,6 +711,34 @@ async fn execute_tool(
             let project = default_project(title.to_string());
             Ok(serde_json::to_value(state.store.create_project(project).await?)?)
         }
+        "update_project" => {
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let real_id = state.store.resolve_project_id(project_id).await?;
+            let mut project = state.store.get_project(&real_id).await?;
+            if let Some(new_title) = args["title"].as_str() {
+                project.title = new_title.to_string();
+                // Regenerate slug when title changes
+                let base_slug = project_slugify(&project.title);
+                let existing = state.store.list_projects().await?;
+                let mut slug = base_slug.clone();
+                let mut idx = 2;
+                loop {
+                    let conflict = existing.iter().any(|p| p.id != real_id && p.slug == slug);
+                    if !conflict { break; }
+                    slug = format!("{}-{}", base_slug, idx);
+                    idx += 1;
+                }
+                project.slug = slug;
+            }
+            if let Some(new_owner) = args["owner"].as_str() {
+                project.owner = if new_owner.is_empty() { None } else { Some(new_owner.to_string()) };
+            }
+            let updated = state.store.put_project(project).await?;
+            publish_update(state, &real_id).await;
+            Ok(serde_json::to_value(&updated)?)
+        }
         "create_task" => {
             let project_id = args["project_id"]
                 .as_str()
@@ -913,6 +949,9 @@ async fn execute_tool(
             Ok(serde_json::json!({"tasks": tasks}))
         }
         "add_log" => {
+            // DEPRECATED: add_log is now an alias for add_comment (Ansatz A).
+            // Agent calls to add_log are routed to task.comments for visibility.
+            // Internal system events are written by Plankton itself (move, create, etc.).
             let project_id = args["project_id"]
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
@@ -924,7 +963,8 @@ async fn execute_tool(
                 .ok_or_else(|| ApiError::BadRequest("message missing".into()))?;
             let mut project = state.store.get_project(project_id).await?;
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
-                task.logs.push(log_entry(&caller, message));
+                // Route to comments (same as add_comment) for agent-visible output
+                task.comments.push(log_entry(&caller, message));
                 task.updated_at = Utc::now().to_rfc3339();
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
@@ -934,7 +974,8 @@ async fn execute_tool(
             if let Some(t) = task_data {
                 publish_event(state, project_id, "task_updated", serde_json::to_value(&t)?).await;
             }
-            Ok(serde_json::json!({"ok": true}))
+            Ok(serde_json::json!({"ok": true, "note": "add_log is deprecated, use add_comment instead"})
+            )
         }
         "submit_for_review" => {
             let project_id = args["project_id"]
@@ -944,19 +985,40 @@ async fn execute_tool(
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
             let mut project = state.store.get_project(project_id).await?;
+            // Find the "In Progress" and "Testing" columns by title
+            let in_progress_col = project.columns.iter().find(|c| c.title == "In Progress").map(|c| c.id.clone());
+            let testing_col = project.columns.iter().find(|c| c.title == "Testing").map(|c| c.id.clone());
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
+                // Validate that task is in "In Progress" column
+                if let Some(ref in_progress_id) = in_progress_col {
+                    if &task.column_id != in_progress_id {
+                        let current_col_name = project.columns.iter()
+                            .find(|c| c.id == task.column_id)
+                            .map(|c| c.title.as_str())
+                            .unwrap_or("Unknown");
+                        return Err(ApiError::BadRequest(format!(
+                            "Task must be in 'In Progress' before submitting for review. Current column: '{}'. Move the task to 'In Progress' first.",
+                            current_col_name
+                        )));
+                    }
+                }
                 if !task.labels.contains(&"review".to_string()) {
                     task.labels.push("review".to_string());
                 }
+                // Move to Testing column if it exists
+                if let Some(ref testing_id) = testing_col {
+                    task.previous_row = task.column_id.clone();
+                    task.column_id = testing_id.clone();
+                }
                 task.updated_at = Utc::now().to_rfc3339();
-                task.logs.push(log_entry(&caller, "submitted for review"));
+                task.logs.push(log_entry(&caller, "submitted for review → Testing"));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
             let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             state.store.put_project(project).await?;
             if let Some(t) = task_data {
-                publish_event(state, project_id, "task_updated", serde_json::to_value(&t)?).await;
+                publish_event(state, project_id, "task_moved", serde_json::to_value(&t)?).await;
             }
             Ok(serde_json::json!({"ok": true, "task_id": task_id}))
         }
