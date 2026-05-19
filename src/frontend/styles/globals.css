@@ -315,4 +315,22 @@ body[data-theme="light"] {
   }
   .sidebar.sidebar-open ~ .sidebar-overlay { display: block !important; }
   input, textarea, select { font-size: 16px !important; }
+
+  /* Kanban: task cards occupy 90% of column width so the right 10% serves as
+     a visible scroll affordance / touch scroll zone. */
+  .kanban-item {
+    width: 90%;
+  }
+
+  /* Column task list: allow vertical pan for natural scroll, Sortable handles
+     its own touch capture for drag. */
+  .kanban-task-list {
+    touch-action: pan-y;
+  }
+
+  /* Column header (drag handle for column reorder): lock touch-action so the
+     browser doesn't intercept the gesture. */
+  .kanban-board-header {
+    touch-action: none;
+  }
 }

@@ -483,7 +483,7 @@ window.__kanbanToggleSearch = toggleSearch
         :bubble-scroll="true"
         :force-fallback="true"
         :fallback-on-body="true"
-        class="min-h-[40px] px-2 py-1 flex-1 overflow-y-auto"
+        class="kanban-task-list min-h-[40px] px-2 py-1 flex-1 overflow-y-auto"
         ghost-class="sortable-ghost"
         chosen-class="sortable-chosen"
         fallback-class="sortable-fallback"
@@ -595,5 +595,26 @@ window.__kanbanToggleSearch = toggleSearch
 /* New task flash – duplicated here as global fallback (globals.css is canonical) */
 .kanban-item.task--new {
   animation: task-flash 1.6s ease-out forwards;
+}
+
+/* ─── Touch / Mobile ─── */
+
+/* Task list container: allow vertical pan (column scrolling) while
+   Sortable handles horizontal drag via its own touch listeners. */
+.kanban-task-list {
+  touch-action: pan-y;
+}
+
+/* Column drag handle: block touch-pan so Sortable can capture the gesture. */
+.kanban-board-header {
+  touch-action: none;
+}
+
+@media (max-width: 768px) {
+  /* Each kanban card takes 90% of the column width, leaving a 10% right
+     margin that acts as a visible scroll affordance on mobile. */
+  .kanban-item {
+    width: 90%;
+  }
 }
 </style>
