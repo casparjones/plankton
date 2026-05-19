@@ -32,6 +32,14 @@ export default {
     admin: 'Admin',
     logout: 'Sign out',
     noUsers: 'No users',
+    searchPlaceholder: 'Search projects…',
+    sortLabel: 'Sort',
+    sortCustom: 'Manual',
+    sortAlphaAsc: 'A → Z',
+    sortAlphaDesc: 'Z → A',
+    sortUpdatedDesc: 'Recently changed',
+    sortUpdatedAsc: 'Oldest first',
+    sortTaskCount: 'Task count',
   },
 
   // ─── Board ───
@@ -265,5 +273,19 @@ export default {
   // ─── Auth ───
   auth: {
     loginFailed: 'Login failed',
+  },
+
+  // ─── Notifications ───
+  notifications: {
+    taskMoved: '{actor} moved "{title}" → {column}',
+    taskCreated: '{actor} created "{title}"',
+    taskUpdated: '{actor} updated "{title}"',
+    taskCommented: '{actor} commented on "{title}"',
+    someone: 'Someone',
+    unknownTask: 'Task',
+    enabledToast: 'Notifications enabled',
+    disabledToast: 'Notifications disabled',
+    browserPermissionTitle: 'Enable browser notifications?',
+    notificationToggle: 'Notifications',
   },
 } as const

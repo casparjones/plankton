@@ -29,6 +29,14 @@ export default {
     admin: 'Admin',
     logout: 'Abmelden',
     noUsers: 'Keine Nutzer',
+    searchPlaceholder: 'Projekte suchen…',
+    sortLabel: 'Sortierung',
+    sortCustom: 'Manuell',
+    sortAlphaAsc: 'A → Z',
+    sortAlphaDesc: 'Z → A',
+    sortUpdatedDesc: 'Zuletzt geändert',
+    sortUpdatedAsc: 'Älteste zuerst',
+    sortTaskCount: 'Anzahl Tasks',
   },
 
   board: {
@@ -246,5 +254,18 @@ export default {
 
   auth: {
     loginFailed: 'Anmeldung fehlgeschlagen',
+  },
+
+  notifications: {
+    taskMoved: '{actor} hat „{title}" → {column} verschoben',
+    taskCreated: '{actor} hat „{title}" erstellt',
+    taskUpdated: '{actor} hat „{title}" aktualisiert',
+    taskCommented: '{actor} hat „{title}" kommentiert',
+    someone: 'Jemand',
+    unknownTask: 'Task',
+    enabledToast: 'Benachrichtigungen aktiviert',
+    disabledToast: 'Benachrichtigungen deaktiviert',
+    browserPermissionTitle: 'Browser-Benachrichtigungen erlauben?',
+    notificationToggle: 'Benachrichtigungen',
   },
 } as const

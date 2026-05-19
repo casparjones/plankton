@@ -29,6 +29,14 @@ export default {
     admin: 'Admin',
     logout: 'Se déconnecter',
     noUsers: 'Aucun utilisateur',
+    searchPlaceholder: 'Rechercher des projets…',
+    sortLabel: 'Trier',
+    sortCustom: 'Manuel',
+    sortAlphaAsc: 'A → Z',
+    sortAlphaDesc: 'Z → A',
+    sortUpdatedDesc: 'Modifié récemment',
+    sortUpdatedAsc: 'Les plus anciens',
+    sortTaskCount: 'Nombre de tâches',
   },
 
   board: {

@@ -29,6 +29,14 @@ export default {
     admin: 'Admin',
     logout: 'Cerrar sesión',
     noUsers: 'Sin usuarios',
+    searchPlaceholder: 'Buscar proyectos…',
+    sortLabel: 'Ordenar',
+    sortCustom: 'Manual',
+    sortAlphaAsc: 'A → Z',
+    sortAlphaDesc: 'Z → A',
+    sortUpdatedDesc: 'Modificado recientemente',
+    sortUpdatedAsc: 'Más antiguos primero',
+    sortTaskCount: 'Número de tareas',
   },
 
   board: {
