@@ -179,7 +179,7 @@ function refreshColumnTasks(): void {
   }
   columnTasks.value = result
   console.log('[KanbanBoard] columnTasks updated:', Object.keys(result).length, 'columns')
-  // Apply glow animation to newly created/imported tasks.
+  // Apply flash animation to newly created/imported tasks.
   const glowId = (window as any).__newTaskGlowId
   const glowIds: string[] = (window as any).__newTaskGlowIds || []
   if (glowId) glowIds.push(glowId)
@@ -188,14 +188,22 @@ function refreshColumnTasks(): void {
   if (glowIds.length > 0) {
     nextTick(() => {
       let firstEl: HTMLElement | null = null
-      for (const id of glowIds) {
+      glowIds.forEach((id, idx) => {
         const el = document.querySelector(`.kanban-item[data-task-id="${id}"]`) as HTMLElement | null
         if (el) {
-          el.classList.add('task-new-glow')
-          setTimeout(() => el.classList.remove('task-new-glow'), 2500)
+          // Stagger: each task flashes 120 ms after the previous one
+          const delay = idx * 120
+          el.style.animationDelay = `${delay}ms`
+          el.classList.add('task--new')
+          // Remove after animation completes (1600 ms + stagger)
+          setTimeout(() => {
+            el.classList.remove('task--new')
+            el.style.animationDelay = ''
+          }, 1800 + delay)
           if (!firstEl) firstEl = el
         }
-      }
+      })
+      // Scroll column to the first new task
       if (firstEl) firstEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     })
   }
@@ -584,8 +592,8 @@ window.__kanbanToggleSearch = toggleSearch
   opacity: 0.4;
 }
 
-/* New task glow */
-.kanban-item.task-new-glow {
-  animation: task-glow 2s ease-out forwards;
+/* New task flash – duplicated here as global fallback (globals.css is canonical) */
+.kanban-item.task--new {
+  animation: task-flash 1.6s ease-out forwards;
 }
 </style>

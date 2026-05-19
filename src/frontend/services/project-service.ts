@@ -111,9 +111,14 @@ export async function saveTask(task: Task, silent?: boolean): Promise<void> {
 
 export async function createTaskViaApi(task: Task): Promise<void> {
   state.project = await api.post<ProjectDoc>(`/api/projects/${state.project!._id}/tasks`, task);
-  // Mark the newly created task for glow animation.
+  // Mark the newly created task for flash animation (task--new CSS class via KanbanBoard).
   const created = state.project.tasks.find(t => t.title === task.title && t.column_id === task.column_id);
-  if (created) (window as any).__newTaskGlowId = created.id;
+  if (created) {
+    // Support both single and batch creation paths.
+    const existing: string[] = (window as any).__newTaskGlowIds || [];
+    existing.push(created.id);
+    (window as any).__newTaskGlowIds = existing;
+  }
   renderBoard();
   toast.success(`"${task.title}" erstellt`);
 }

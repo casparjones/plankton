@@ -272,6 +272,11 @@ body[data-theme="light"] {
   .import-errors { font-size: 11px; color: var(--color-danger); }
   .import-error { color: var(--color-danger); font-size: 13px; padding: 8px; background: rgba(224, 92, 106, 0.1); border-radius: var(--radius-md); }
 
+  /* New task flash animation */
+  .task--new {
+    animation: task-flash 1.6s ease-out forwards;
+  }
+
   /* Git */
   .git-icon-ok { color: #a5d6a7; }
   .git-icon-error { color: var(--color-danger); animation: git-pulse 2s infinite; }
@@ -285,6 +290,12 @@ body[data-theme="light"] {
 @keyframes task-glow {
   0%   { box-shadow: 0 0 8px 2px var(--color-accent); border-color: var(--color-accent); }
   100% { box-shadow: none; border-color: var(--color-border); }
+}
+
+@keyframes task-flash {
+  0%   { box-shadow: 0 0 0 2px var(--color-accent), 0 0 18px 4px var(--color-accent); border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-2)); }
+  60%  { box-shadow: 0 0 8px 2px var(--color-accent); border-color: var(--color-accent); background: var(--color-surface-2); }
+  100% { box-shadow: none; border-color: var(--color-border); background: var(--color-surface-2); }
 }
 
 @keyframes git-pulse {
