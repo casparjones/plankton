@@ -43,6 +43,18 @@ export default {
     manageColumn: 'Spalte verwalten',
     projectMenu: 'Projekt-Menü',
     importIssues: 'Import',
+    archive: 'Archiv',
+  },
+
+  archive: {
+    title: 'Archivierte Tasks',
+    empty: 'Keine archivierten Tasks',
+    loading: 'Lade Archiv…',
+    restoreToDone: 'In Done wiederherstellen',
+    restoreToTodo: 'In Todo wiederherstellen',
+    restored: '"{title}" wiederhergestellt',
+    archivedAt: 'Archiviert',
+    error: 'Fehler beim Laden des Archivs',
   },
 
   bulk: {

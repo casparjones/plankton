@@ -43,6 +43,18 @@ export default {
     manageColumn: 'Gérer la colonne',
     projectMenu: 'Menu du projet',
     importIssues: 'Importer',
+    archive: 'Archive',
+  },
+
+  archive: {
+    title: 'Tâches archivées',
+    empty: 'Aucune tâche archivée',
+    loading: 'Chargement de l\'archive…',
+    restoreToDone: 'Restaurer dans Terminé',
+    restoreToTodo: 'Restaurer dans À faire',
+    restored: '"{title}" restauré',
+    archivedAt: 'Archivé',
+    error: 'Erreur lors du chargement',
   },
 
   bulk: {

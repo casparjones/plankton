@@ -43,6 +43,18 @@ export default {
     manageColumn: 'Gestionar columna',
     projectMenu: 'Menú del proyecto',
     importIssues: 'Importar',
+    archive: 'Archivo',
+  },
+
+  archive: {
+    title: 'Tareas archivadas',
+    empty: 'Sin tareas archivadas',
+    loading: 'Cargando archivo…',
+    restoreToDone: 'Restaurar a Terminado',
+    restoreToTodo: 'Restaurar a Por hacer',
+    restored: '"{title}" restaurada',
+    archivedAt: 'Archivado',
+    error: 'Error al cargar el archivo',
   },
 
   bulk: {

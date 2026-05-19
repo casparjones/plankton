@@ -47,6 +47,19 @@ export default {
     manageColumn: 'Manage column',
     projectMenu: 'Project menu',
     importIssues: 'Import',
+    archive: 'Archive',
+  },
+
+  // ─── Archive ───
+  archive: {
+    title: 'Archived Tasks',
+    empty: 'No archived tasks',
+    loading: 'Loading archive…',
+    restoreToDone: 'Restore to Done',
+    restoreToTodo: 'Restore to Todo',
+    restored: '"{title}" restored',
+    archivedAt: 'Archived',
+    error: 'Error loading archive',
   },
 
   // ─── Bulk actions ───

@@ -7,6 +7,7 @@ import { ref, onMounted } from 'vue'
 import KanbanBoard from './KanbanBoard.vue'
 import TaskModal from './TaskModal.vue'
 import TaskDetail from './TaskDetail.vue'
+import ArchivePanel from './ArchivePanel.vue'
 import type { Task } from '../types'
 
 import { t, useI18n } from '../i18n'
@@ -44,6 +45,7 @@ const props = defineProps<{
 // Refs für Vue-Komponenten
 const taskModalRef = ref<InstanceType<typeof TaskModal> | null>(null)
 const taskDetailRef = ref<InstanceType<typeof TaskDetail> | null>(null)
+const archivePanelRef = ref<InstanceType<typeof ArchivePanel> | null>(null)
 
 /** Projekt erstellen via Eingabefeld. */
 function handleCreateProject(): void {
@@ -221,6 +223,11 @@ onMounted(() => {
         <h1 id="project-title" class="font-mono text-base font-semibold tracking-tight flex-1"></h1>
         <span id="git-status-icon" class="git-status-icon cursor-pointer text-base ml-2 opacity-70 transition-opacity hover:opacity-100" style="display:none" title="Git"></span>
         <button class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm px-2.5 py-1 transition-all ml-auto hover:border-accent hover:text-accent" :title="t('board.search') + ' (Ctrl+K)'" onclick="window.__kanbanToggleSearch?.()">&#128269;</button>
+        <button
+          class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer font-mono text-xs px-2.5 py-1 transition-all hover:border-accent hover:text-accent"
+          :title="t('board.archive')"
+          @click="archivePanelRef?.open()"
+        >&#128451; {{ t('board.archive') }}</button>
         <button id="import-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer font-sans text-xs px-2.5 py-1 transition-all hover:border-accent hover:text-accent" :title="t('board.importIssues')">&#8615; {{ t('board.importIssues') }}</button>
         <button id="project-menu-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-base px-2.5 py-1 transition-all ml-auto hover:border-accent hover:text-accent" :title="t('board.projectMenu')">&#9776;</button>
         <div id="project-dropdown" class="project-dropdown absolute top-full right-6 z-[2000] bg-surface border border-border rounded-md shadow-[0_8px_24px_rgba(0,0,0,0.4)] py-1 min-w-[200px]"></div>
@@ -236,9 +243,10 @@ onMounted(() => {
     </main>
   </div>
 
-  <!-- Vue-Komponenten für Task-Modal und Task-Detail -->
+  <!-- Vue-Komponenten für Task-Modal, Task-Detail und Archiv-Panel -->
   <TaskModal ref="taskModalRef" />
   <TaskDetail ref="taskDetailRef" @edit="onEditFromDetail" />
+  <ArchivePanel ref="archivePanelRef" />
 
   <!-- Spalten-Modal (Legacy) -->
   <div id="column-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
