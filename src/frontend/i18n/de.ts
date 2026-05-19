@@ -44,6 +44,7 @@ export default {
     projectMenu: 'Projekt-Menü',
     importIssues: 'Import',
     archive: 'Archiv',
+    copyBoardInfo: 'Board-Info für KI kopieren (Name, ID, URL)',
   },
 
   archive: {

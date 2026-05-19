@@ -44,6 +44,7 @@ export default {
     projectMenu: 'Menú del proyecto',
     importIssues: 'Importar',
     archive: 'Archivo',
+    copyBoardInfo: 'Copiar info del board para IA (nombre, ID, URL)',
   },
 
   archive: {

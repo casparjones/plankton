@@ -56,6 +56,18 @@ function handleCreateProject(): void {
   }
 }
 
+const boardInfoCopied = ref(false)
+
+function copyBoardInfo(): void {
+  if (!state.project) return
+  const url = `${window.location.origin}/p/${state.project.slug}`
+  const text = `Board: ${state.project.title} | ID: ${state.project._id} | URL: ${url}`
+  navigator.clipboard.writeText(text).then(() => {
+    boardInfoCopied.value = true
+    setTimeout(() => { boardInfoCopied.value = false }, 1500)
+  })
+}
+
 /** Task-Detail → Bearbeiten: Öffnet das Task-Modal. */
 function onEditFromDetail(task: Task): void {
   taskModalRef.value?.openEdit(task)
@@ -221,6 +233,12 @@ onMounted(() => {
       <header class="px-6 py-4 pb-3 border-b border-border bg-surface flex items-center gap-3 relative">
         <button class="sidebar-toggle hidden bg-transparent border border-border rounded-md text-text-dim text-base px-2 py-1 cursor-pointer flex-shrink-0 hover:border-accent hover:text-accent" onclick="document.querySelector('.sidebar').classList.toggle('sidebar-open')">&#9776;</button>
         <h1 id="project-title" class="font-mono text-base font-semibold tracking-tight flex-1"></h1>
+        <button
+          v-if="state.project"
+          class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-xs px-2 py-1 transition-all hover:border-accent hover:text-accent flex-shrink-0"
+          :title="t('board.copyBoardInfo')"
+          @click="copyBoardInfo"
+        >{{ boardInfoCopied ? '✓' : '⧉' }}</button>
         <span id="git-status-icon" class="git-status-icon cursor-pointer text-base ml-2 opacity-70 transition-opacity hover:opacity-100" style="display:none" title="Git"></span>
         <button class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm px-2.5 py-1 transition-all ml-auto hover:border-accent hover:text-accent" :title="t('board.search') + ' (Ctrl+K)'" onclick="window.__kanbanToggleSearch?.()">&#128269;</button>
         <button

@@ -48,6 +48,7 @@ export default {
     projectMenu: 'Project menu',
     importIssues: 'Import',
     archive: 'Archive',
+    copyBoardInfo: 'Copy board info for AI (name, ID, URL)',
   },
 
   // ─── Archive ───
