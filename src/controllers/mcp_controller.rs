@@ -5,8 +5,8 @@ use axum::{
     response::{sse::Event, Sse},
     Json,
 };
-use chrono::{Local, Utc};
-use futures::{stream, Stream, StreamExt as _};
+use chrono::Utc;
+use futures::stream;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -61,15 +61,15 @@ fn all_tools() -> Vec<ToolDef> {
                 "parent_id": { "type": "string", "description": "Parent epic ID for subtasks" }
             }
         })) },
-        ToolDef { name: "assign_task", description: "Assign a worker to a task", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+        ToolDef { name: "assign_task", description: "Assign a worker to a task. Pass _rev (from get_task/get_project) to enable optimistic locking (409 Conflict if stale).", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id", "task_id", "worker"],
-            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "worker": { "type": "string" } }
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "worker": { "type": "string" }, "_rev": { "type": "string", "description": "Optional project revision for optimistic locking" } }
         })) },
         ToolDef { name: "get_assigned_tasks", description: "Get tasks assigned to the caller", roles: Some(&["developer"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id"],
             "properties": { "project_id": { "type": "string" } }
         })) },
-        ToolDef { name: "update_task", description: "Update task title/description/labels", roles: Some(&["developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
+        ToolDef { name: "update_task", description: "Update task title/description/labels. Pass _rev (from get_task/get_project) to enable optimistic locking (409 Conflict if stale).", roles: Some(&["developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id", "task_id"],
             "properties": {
                 "project_id": { "type": "string" }, "task_id": { "type": "string" },
@@ -77,7 +77,8 @@ fn all_tools() -> Vec<ToolDef> {
                 "labels": { "type": "array", "items": { "type": "string" } },
                 "worker": { "type": "string" }, "points": { "type": "number" },
                 "task_type": { "type": "string", "enum": ["task", "epic", "job"] },
-                "parent_id": { "type": "string" }
+                "parent_id": { "type": "string" },
+                "_rev": { "type": "string", "description": "Optional project revision for optimistic locking" }
             }
         })) },
         ToolDef { name: "add_log", description: "DEPRECATED: Use add_comment instead. Kept for backward compatibility — internally routes to add_comment.", roles: Some(&["developer", "tester", "manager", "admin"]), schema: Some(|| serde_json::json!({
@@ -104,13 +105,13 @@ fn all_tools() -> Vec<ToolDef> {
             "type": "object", "required": ["project_id", "task_id"],
             "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "comment": { "type": "string" } }
         })) },
-        ToolDef { name: "move_task", description: "Move a task between columns", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+        ToolDef { name: "move_task", description: "Move a task between columns. Pass _rev (from get_task/get_project) to enable optimistic locking (409 Conflict if stale). BLOCKING: Moving a task to 'In Progress' fails with 400 if any blocker in blocked_by is not yet in 'Done'. Use add_relation(relation='blocks') to set dependencies.", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id", "task_id", "column_id"],
-            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "column_id": { "type": "string" }, "order": { "type": "number" } }
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "column_id": { "type": "string" }, "order": { "type": "number" }, "_rev": { "type": "string", "description": "Optional project revision for optimistic locking" } }
         })) },
-        ToolDef { name: "delete_task", description: "Delete a task", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+        ToolDef { name: "delete_task", description: "Delete a task. Pass _rev (from get_task/get_project) to enable optimistic locking (409 Conflict if stale).", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id", "task_id"],
-            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" } }
+            "properties": { "project_id": { "type": "string" }, "task_id": { "type": "string" }, "_rev": { "type": "string", "description": "Optional project revision for optimistic locking" } }
         })) },
         ToolDef { name: "list_subtasks", description: "List subtasks of an epic with completion status", roles: None, schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id", "parent_id"],
@@ -127,6 +128,19 @@ fn all_tools() -> Vec<ToolDef> {
         ToolDef { name: "reorder_tasks", description: "Reorder tasks within a column by providing task IDs in desired order", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id", "column_id", "task_ids"],
             "properties": { "project_id": { "type": "string" }, "column_id": { "type": "string" }, "task_ids": { "type": "array", "items": { "type": "string" } } }
+        })) },
+        ToolDef { name: "create_task_from_template", description: "Create a task from a named template. Built-in templates: bug, feature, security, epic, chore. Custom templates can be placed in .plankton/templates/<name>.json. Supports {{title}} and {{date}} variable substitution.", roles: Some(&["developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "template_name"],
+            "properties": {
+                "project_id": { "type": "string", "description": "Project ID" },
+                "template_name": { "type": "string", "description": "Template name: 'bug', 'feature', 'security', 'epic', 'chore', or custom name matching .plankton/templates/<name>.json" },
+                "title": { "type": "string", "description": "Task title (replaces {{title}} in template)" },
+                "labels": { "type": "array", "items": { "type": "string" }, "description": "Additional labels (merged with template labels)" },
+                "worker": { "type": "string", "description": "Assigned worker" },
+                "points": { "type": "number", "description": "Story points" },
+                "column_id": { "type": "string", "description": "Target column (default: first column)" },
+                "parent_id": { "type": "string", "description": "Parent epic ID for subtasks" }
+            }
         })) },
     ]
 }
@@ -148,7 +162,10 @@ fn tools_for_role(role: &str) -> Vec<ToolDef> {
 
 /// Caller-Identität aus Headers auflösen (JWT oder Agent-Token).
 /// Gibt Err(Unauthorized) zurück wenn kein gültiger Token gefunden wird.
-async fn resolve_caller(headers: &axum::http::HeaderMap, state: &AppState) -> Result<(String, String), ApiError> {
+async fn resolve_caller(
+    headers: &axum::http::HeaderMap,
+    state: &AppState,
+) -> Result<(String, String), ApiError> {
     if let Some(t) = extract_token_from_headers(headers) {
         if let Ok(claims) = validate_jwt(&t, &state.jwt_secret) {
             return Ok((claims.display_name, claims.role));
@@ -190,8 +207,8 @@ pub async fn call_tool(
 
 /// Erzeugt eine 401-Response mit WWW-Authenticate Header (RFC 9728 Protected Resource).
 fn unauthorized_response(host: &str, scheme: &str) -> axum::response::Response {
+    use axum::http::{header, StatusCode};
     use axum::response::IntoResponse;
-    use axum::http::{StatusCode, header};
     let resource_url = format!("{scheme}://{host}/.well-known/oauth-protected-resource");
     let www_auth = format!(
         "Bearer realm=\"OAuth\", resource_metadata=\"{resource_url}\", error=\"invalid_token\", error_description=\"Missing or invalid access token\""
@@ -203,7 +220,8 @@ fn unauthorized_response(host: &str, scheme: &str) -> axum::response::Response {
             "error": "invalid_token",
             "error_description": "Missing or invalid access token"
         })),
-    ).into_response()
+    )
+        .into_response()
 }
 
 /// Prüft ob der Client SSE-Streaming akzeptiert (Accept: text/event-stream).
@@ -221,7 +239,7 @@ async fn handle_single_rpc(
     rpc: &JsonRpcRequest,
     caller: &str,
     caller_role: &str,
-    session_id: &Option<String>,
+    _session_id: &Option<String>,
 ) -> Option<JsonRpcResponse> {
     let id = rpc.id.clone().unwrap_or(serde_json::Value::Null);
     // Notifications (kein id-Feld) erhalten keine Antwort
@@ -239,7 +257,9 @@ async fn handle_single_rpc(
             }
         }
         "initialized" | "notifications/initialized" => {
-            if is_notification { return None; }
+            if is_notification {
+                return None;
+            }
             JsonRpcResponse {
                 jsonrpc: "2.0".into(),
                 result: Some(serde_json::json!({})),
@@ -266,7 +286,10 @@ async fn handle_single_rpc(
             let tool_list: Vec<_> = tools
                 .iter()
                 .map(|t| {
-                    let schema = t.schema.map(|f| f()).unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}}));
+                    let schema = t
+                        .schema
+                        .map(|f| f())
+                        .unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}}));
                     serde_json::json!({
                         "name": t.name,
                         "description": t.description,
@@ -282,10 +305,10 @@ async fn handle_single_rpc(
             }
         }
         "tools/call" => {
-            let tool_name = rpc.params["name"]
-                .as_str()
-                .unwrap_or("");
-            let arguments = rpc.params.get("arguments")
+            let tool_name = rpc.params["name"].as_str().unwrap_or("");
+            let arguments = rpc
+                .params
+                .get("arguments")
                 .cloned()
                 .unwrap_or(serde_json::json!({}));
             match execute_tool(state, tool_name, &arguments, caller).await {
@@ -331,7 +354,11 @@ async fn handle_single_rpc(
         },
     };
 
-    if is_notification { None } else { Some(response) }
+    if is_notification {
+        None
+    } else {
+        Some(response)
+    }
 }
 
 /// POST /mcp – JSON-RPC 2.0 MCP-Endpunkt mit Streamable HTTP Transport.
@@ -342,15 +369,21 @@ pub async fn mcp_jsonrpc(
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> axum::response::Response {
-    use axum::response::IntoResponse;
     use axum::http::{header, StatusCode};
+    use axum::response::IntoResponse;
 
     let use_sse = wants_sse(&headers);
     let auth_result = resolve_caller(&headers, &state).await;
 
     // Host/Scheme für WWW-Authenticate Header
-    let scheme = headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or("http");
-    let host = headers.get("host").and_then(|v| v.to_str().ok()).unwrap_or("localhost");
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("http");
+    let host = headers
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost");
 
     // Session-ID aus Header
     let session_id = headers
@@ -362,7 +395,10 @@ pub async fn mcp_jsonrpc(
     if auth_result.is_err() {
         let has_valid_session = if let Some(ref sid) = session_id {
             let sessions = state.mcp_sessions.lock().await;
-            sessions.get(sid).map(|s| !s.caller.is_empty() && !s.role.is_empty()).unwrap_or(false)
+            sessions
+                .get(sid)
+                .map(|s| !s.caller.is_empty() && !s.role.is_empty())
+                .unwrap_or(false)
         } else {
             false
         };
@@ -378,7 +414,10 @@ pub async fn mcp_jsonrpc(
             let resp = JsonRpcResponse {
                 jsonrpc: "2.0".into(),
                 result: None,
-                error: Some(JsonRpcError { code: -32700, message: format!("Parse error: {e}") }),
+                error: Some(JsonRpcError {
+                    code: -32700,
+                    message: format!("Parse error: {e}"),
+                }),
                 id: serde_json::Value::Null,
             };
             return Json(resp).into_response();
@@ -393,7 +432,10 @@ pub async fn mcp_jsonrpc(
                 let resp = JsonRpcResponse {
                     jsonrpc: "2.0".into(),
                     result: None,
-                    error: Some(JsonRpcError { code: -32600, message: format!("Invalid batch: {e}") }),
+                    error: Some(JsonRpcError {
+                        code: -32600,
+                        message: format!("Invalid batch: {e}"),
+                    }),
                     id: serde_json::Value::Null,
                 };
                 return Json(resp).into_response();
@@ -406,7 +448,10 @@ pub async fn mcp_jsonrpc(
                 let resp = JsonRpcResponse {
                     jsonrpc: "2.0".into(),
                     result: None,
-                    error: Some(JsonRpcError { code: -32600, message: format!("Invalid request: {e}") }),
+                    error: Some(JsonRpcError {
+                        code: -32600,
+                        message: format!("Invalid request: {e}"),
+                    }),
                     id: serde_json::Value::Null,
                 };
                 return Json(resp).into_response();
@@ -431,9 +476,15 @@ pub async fn mcp_jsonrpc(
                         drop(sessions);
                         let new_sid = Uuid::new_v4().to_string();
                         let (tx, _) = broadcast::channel::<String>(100);
-                        state.mcp_sessions.lock().await.insert(new_sid.clone(), McpSession {
-                            caller: caller.clone(), role: role.clone(), created_at: Utc::now(), tx,
-                        });
+                        state.mcp_sessions.lock().await.insert(
+                            new_sid.clone(),
+                            McpSession {
+                                caller: caller.clone(),
+                                role: role.clone(),
+                                created_at: Utc::now(),
+                                tx,
+                            },
+                        );
                         session_id = Some(new_sid);
                     } else {
                         return unauthorized_response(host, scheme);
@@ -445,9 +496,15 @@ pub async fn mcp_jsonrpc(
                 if let Ok((caller, role)) = &auth_result {
                     let new_sid = Uuid::new_v4().to_string();
                     let (tx, _) = broadcast::channel::<String>(100);
-                    state.mcp_sessions.lock().await.insert(new_sid.clone(), McpSession {
-                        caller: caller.clone(), role: role.clone(), created_at: Utc::now(), tx,
-                    });
+                    state.mcp_sessions.lock().await.insert(
+                        new_sid.clone(),
+                        McpSession {
+                            caller: caller.clone(),
+                            role: role.clone(),
+                            created_at: Utc::now(),
+                            tx,
+                        },
+                    );
                     session_id = Some(new_sid);
                 } else {
                     return unauthorized_response(host, scheme);
@@ -475,10 +532,16 @@ pub async fn mcp_jsonrpc(
             created_at: Utc::now(),
             tx,
         };
-        state.mcp_sessions.lock().await.insert(new_session_id.clone(), session);
+        state
+            .mcp_sessions
+            .lock()
+            .await
+            .insert(new_session_id.clone(), session);
 
         // protocolVersion vom Client übernehmen (Kompatibilität mit 2024-11-05 und 2025-03-26)
-        let client_version = init_rpc.params.get("protocolVersion")
+        let client_version = init_rpc
+            .params
+            .get("protocolVersion")
             .and_then(|v| v.as_str())
             .unwrap_or("2024-11-05");
         let resp = JsonRpcResponse {
@@ -495,11 +558,13 @@ pub async fn mcp_jsonrpc(
         };
 
         return (
-            [
-                (header::HeaderName::from_static("mcp-session-id"), new_session_id),
-            ],
+            [(
+                header::HeaderName::from_static("mcp-session-id"),
+                new_session_id,
+            )],
             Json(resp),
-        ).into_response();
+        )
+            .into_response();
     }
 
     // Auth: Token aus Header ODER Caller aus bestehender Session (Fallback)
@@ -524,7 +589,8 @@ pub async fn mcp_jsonrpc(
     // Alle Requests verarbeiten
     let mut responses: Vec<JsonRpcResponse> = Vec::new();
     for rpc in &requests {
-        if let Some(resp) = handle_single_rpc(&state, rpc, &caller, &caller_role, &session_id).await {
+        if let Some(resp) = handle_single_rpc(&state, rpc, &caller, &caller_role, &session_id).await
+        {
             responses.push(resp);
         }
     }
@@ -534,8 +600,12 @@ pub async fn mcp_jsonrpc(
         let sid_header = session_id.unwrap_or_default();
         return (
             StatusCode::ACCEPTED,
-            [(header::HeaderName::from_static("mcp-session-id"), sid_header)],
-        ).into_response();
+            [(
+                header::HeaderName::from_static("mcp-session-id"),
+                sid_header,
+            )],
+        )
+            .into_response();
     }
 
     // SSE-Modus: Antworten als SSE-Events streamen (nur initiale Events, kein long-lived Stream)
@@ -544,9 +614,9 @@ pub async fn mcp_jsonrpc(
         let initial_events: Vec<Result<Event, std::convert::Infallible>> = responses
             .into_iter()
             .filter_map(|r| {
-                serde_json::to_string(&r).ok().map(|json| {
-                    Ok(Event::default().event("message").data(json))
-                })
+                serde_json::to_string(&r)
+                    .ok()
+                    .map(|json| Ok(Event::default().event("message").data(json)))
             })
             .collect();
 
@@ -565,20 +635,32 @@ pub async fn mcp_jsonrpc(
     let sid_header = session_id.unwrap_or_default();
     if responses.len() == 1 {
         (
-            [(header::HeaderName::from_static("mcp-session-id"), sid_header)],
+            [(
+                header::HeaderName::from_static("mcp-session-id"),
+                sid_header,
+            )],
             Json(responses.into_iter().next().unwrap()),
-        ).into_response()
+        )
+            .into_response()
     } else if responses.is_empty() {
         // Nur Notifications – kein Body, 202 Accepted
         (
             StatusCode::ACCEPTED,
-            [(header::HeaderName::from_static("mcp-session-id"), sid_header)],
-        ).into_response()
+            [(
+                header::HeaderName::from_static("mcp-session-id"),
+                sid_header,
+            )],
+        )
+            .into_response()
     } else {
         (
-            [(header::HeaderName::from_static("mcp-session-id"), sid_header)],
+            [(
+                header::HeaderName::from_static("mcp-session-id"),
+                sid_header,
+            )],
             Json(responses),
-        ).into_response()
+        )
+            .into_response()
     }
 }
 
@@ -587,20 +669,23 @@ pub async fn mcp_sse_stream(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
 ) -> axum::response::Response {
-    use axum::response::IntoResponse;
     use axum::http::StatusCode;
+    use axum::response::IntoResponse;
 
     // Auth prüfen: 401 mit WWW-Authenticate wenn kein gültiger Token
     if resolve_caller(&headers, &state).await.is_err() {
-        let scheme = headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or("http");
-        let host = headers.get("host").and_then(|v| v.to_str().ok()).unwrap_or("localhost");
+        let scheme = headers
+            .get("x-forwarded-proto")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("http");
+        let host = headers
+            .get("host")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("localhost");
         return unauthorized_response(host, scheme);
     }
 
-    let session_id = match headers
-        .get("mcp-session-id")
-        .and_then(|v| v.to_str().ok())
-    {
+    let session_id = match headers.get("mcp-session-id").and_then(|v| v.to_str().ok()) {
         Some(sid) => sid.to_string(),
         None => return StatusCode::BAD_REQUEST.into_response(),
     };
@@ -614,10 +699,14 @@ pub async fn mcp_sse_stream(
 
     let out = stream::unfold(rx, move |mut rx| async move {
         match rx.recv().await {
-            Ok(msg) => Some((Ok::<_, std::convert::Infallible>(Event::default().data(msg)), rx)),
-            Err(broadcast::error::RecvError::Lagged(_)) => {
-                Some((Ok::<_, std::convert::Infallible>(Event::default().event("heartbeat").data("ping")), rx))
-            }
+            Ok(msg) => Some((
+                Ok::<_, std::convert::Infallible>(Event::default().data(msg)),
+                rx,
+            )),
+            Err(broadcast::error::RecvError::Lagged(_)) => Some((
+                Ok::<_, std::convert::Infallible>(Event::default().event("heartbeat").data("ping")),
+                rx,
+            )),
             Err(broadcast::error::RecvError::Closed) => None,
         }
     });
@@ -631,10 +720,7 @@ pub async fn mcp_session_delete(
 ) -> axum::http::StatusCode {
     use axum::http::StatusCode;
 
-    let session_id = match headers
-        .get("mcp-session-id")
-        .and_then(|v| v.to_str().ok())
-    {
+    let session_id = match headers.get("mcp-session-id").and_then(|v| v.to_str().ok()) {
         Some(sid) => sid.to_string(),
         None => return StatusCode::BAD_REQUEST,
     };
@@ -647,7 +733,17 @@ pub async fn mcp_session_delete(
     }
 }
 
-/// Zentraler Tool-Executor für Legacy und JSON-RPC MCP.
+/// Zentraler Tool-Executor für Legacy und JSON-RPC MCP. Öffentlich für Integrationstests.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) async fn execute_tool_pub(
+    state: &AppState,
+    tool: &str,
+    args: &serde_json::Value,
+    caller: &str,
+) -> Result<serde_json::Value, ApiError> {
+    execute_tool(state, tool, args, caller).await
+}
+
 async fn execute_tool(
     state: &AppState,
     tool: &str,
@@ -658,15 +754,18 @@ async fn execute_tool(
         "list_projects" => {
             // Nur Metadaten: id, title, slug, task_count, column_count
             let projects = state.store.list_projects().await?;
-            let summary: Vec<serde_json::Value> = projects.iter().map(|p| {
-                serde_json::json!({
-                    "id": p.id,
-                    "title": p.title,
-                    "slug": p.slug,
-                    "task_count": p.tasks.len(),
-                    "column_count": p.columns.len(),
+            let summary: Vec<serde_json::Value> = projects
+                .iter()
+                .map(|p| {
+                    serde_json::json!({
+                        "id": p.id,
+                        "title": p.title,
+                        "slug": p.slug,
+                        "task_count": p.tasks.len(),
+                        "column_count": p.columns.len(),
+                    })
                 })
-            }).collect();
+                .collect();
             Ok(serde_json::to_value(summary)?)
         }
         "get_project" => {
@@ -675,18 +774,24 @@ async fn execute_tool(
                 .ok_or_else(|| ApiError::BadRequest("id missing".into()))?;
             let project = state.store.get_project(id).await?;
             // Kompakt: Spalten + Tasks ohne Logs/Comments
-            let columns: Vec<serde_json::Value> = project.columns.iter()
+            let columns: Vec<serde_json::Value> = project
+                .columns
+                .iter()
                 .filter(|c| !c.hidden)
                 .map(|c| serde_json::json!({"id": c.id, "title": c.title, "order": c.order}))
                 .collect();
-            let tasks: Vec<serde_json::Value> = project.tasks.iter().map(|t| {
-                serde_json::json!({
-                    "id": t.id, "title": t.title, "description": t.description,
-                    "column_id": t.column_id, "labels": t.labels, "worker": t.worker,
-                    "points": t.points, "task_type": t.task_type, "parent_id": t.parent_id,
-                    "order": t.order,
+            let tasks: Vec<serde_json::Value> = project
+                .tasks
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "id": t.id, "title": t.title, "description": t.description,
+                        "column_id": t.column_id, "labels": t.labels, "worker": t.worker,
+                        "points": t.points, "task_type": t.task_type, "parent_id": t.parent_id,
+                        "order": t.order,
+                    })
                 })
-            }).collect();
+                .collect();
             Ok(serde_json::json!({
                 "id": project.id, "title": project.title, "slug": project.slug,
                 "columns": columns, "tasks": tasks,
@@ -700,16 +805,19 @@ async fn execute_tool(
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
             let project = state.store.get_project(project_id).await?;
-            let task = project.tasks.iter().find(|t| t.id == task_id)
+            let task = project
+                .tasks
+                .iter()
+                .find(|t| t.id == task_id)
                 .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
             Ok(serde_json::to_value(task)?)
         }
         "create_project" => {
-            let title = args["title"]
-                .as_str()
-                .unwrap_or("Untitled Project");
+            let title = args["title"].as_str().unwrap_or("Untitled Project");
             let project = default_project(title.to_string());
-            Ok(serde_json::to_value(state.store.create_project(project).await?)?)
+            Ok(serde_json::to_value(
+                state.store.create_project(project).await?,
+            )?)
         }
         "update_project" => {
             let project_id = args["project_id"]
@@ -726,14 +834,20 @@ async fn execute_tool(
                 let mut idx = 2;
                 loop {
                     let conflict = existing.iter().any(|p| p.id != real_id && p.slug == slug);
-                    if !conflict { break; }
+                    if !conflict {
+                        break;
+                    }
                     slug = format!("{}-{}", base_slug, idx);
                     idx += 1;
                 }
                 project.slug = slug;
             }
             if let Some(new_owner) = args["owner"].as_str() {
-                project.owner = if new_owner.is_empty() { None } else { Some(new_owner.to_string()) };
+                project.owner = if new_owner.is_empty() {
+                    None
+                } else {
+                    Some(new_owner.to_string())
+                };
             }
             let updated = state.store.put_project(project).await?;
             publish_update(state, &real_id).await;
@@ -751,9 +865,7 @@ async fn execute_tool(
                 description: args["description"].as_str().unwrap_or("").to_string(),
                 column_id: args["column_id"]
                     .as_str()
-                    .unwrap_or(
-                        project.columns.first().map(|c| c.id.as_str()).unwrap_or(""),
-                    )
+                    .unwrap_or(project.columns.first().map(|c| c.id.as_str()).unwrap_or(""))
                     .to_string(),
                 creator: caller.to_string(),
                 order: project.tasks.len() as i32,
@@ -775,7 +887,13 @@ async fn execute_tool(
             };
             project.tasks.push(task.clone());
             state.store.put_project(project).await?;
-            publish_event(state, project_id, "task_created", serde_json::to_value(&task)?).await;
+            publish_event(
+                state,
+                project_id,
+                "task_created",
+                serde_json::to_value(&task)?,
+            )
+            .await;
             Ok(serde_json::to_value(&task)?)
         }
         "update_task" => {
@@ -785,7 +903,19 @@ async fn execute_tool(
             let task_id = args["task_id"]
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
+            // Layer 1: Per-Projekt Write-Lock
+            let lock = state.get_project_write_lock(project_id).await;
+            let _guard = lock.lock().await;
             let mut project = state.store.get_project(project_id).await?;
+            // Layer 2: Optionaler _rev-Check
+            if let Some(client_rev) = args["_rev"].as_str() {
+                let current_rev = project.rev.clone().unwrap_or_else(|| "0".into());
+                if client_rev != current_rev {
+                    return Err(ApiError::Conflict(format!(
+                        "conflict: current_rev is {current_rev}"
+                    )));
+                }
+            }
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
                 if let Some(title) = args["title"].as_str() {
                     task.title = title.to_string();
@@ -830,7 +960,19 @@ async fn execute_tool(
             let column_id = args["column_id"]
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("column_id missing".into()))?;
+            // Layer 1: Per-Projekt Write-Lock
+            let lock = state.get_project_write_lock(project_id).await;
+            let _guard = lock.lock().await;
             let mut project = state.store.get_project(project_id).await?;
+            // Layer 2: Optionaler _rev-Check
+            if let Some(client_rev) = args["_rev"].as_str() {
+                let current_rev = project.rev.clone().unwrap_or_else(|| "0".into());
+                if client_rev != current_rev {
+                    return Err(ApiError::Conflict(format!(
+                        "conflict: current_rev is {current_rev}"
+                    )));
+                }
+            }
             let col_name = |cid: &str| -> String {
                 project
                     .columns
@@ -839,8 +981,44 @@ async fn execute_tool(
                     .map(|c| c.title.clone())
                     .unwrap_or_else(|| cid.to_string())
             };
+            // Blocking-Enforcement: Move nach "In Progress" prüft blocked_by
+            let target_col_title = col_name(column_id);
+            if target_col_title == "In Progress" {
+                if let Some(task) = project.tasks.iter().find(|t| t.id == task_id) {
+                    if !task.blocked_by.is_empty() {
+                        let done_col_id = project
+                            .columns
+                            .iter()
+                            .find(|c| c.title == "Done")
+                            .map(|c| c.id.clone());
+                        let open_blockers: Vec<String> = task
+                            .blocked_by
+                            .iter()
+                            .filter_map(|bid| {
+                                project.tasks.iter().find(|t| &t.id == bid).and_then(|bt| {
+                                    let is_done = done_col_id
+                                        .as_deref()
+                                        .map(|did| bt.column_id == did)
+                                        .unwrap_or(false);
+                                    if is_done {
+                                        None
+                                    } else {
+                                        Some(bt.title.clone())
+                                    }
+                                })
+                            })
+                            .collect();
+                        if !open_blockers.is_empty() {
+                            return Err(ApiError::BadRequest(format!(
+                                "Task is blocked by: {}",
+                                open_blockers.join(", ")
+                            )));
+                        }
+                    }
+                }
+            }
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
-                let old_name = col_name(&task.column_id);
+                let _old_name = col_name(&task.column_id);
                 let new_name = col_name(column_id);
                 task.previous_row = task.column_id.clone();
                 task.column_id = column_id.to_string();
@@ -848,7 +1026,8 @@ async fn execute_tool(
                     task.order = order as i32;
                 }
                 task.updated_at = Utc::now().to_rfc3339();
-                task.logs.push(log_entry(&caller, &format!("→ {}", new_name)));
+                task.logs
+                    .push(log_entry(caller, &format!("→ {}", new_name)));
             }
             let task_data = project.tasks.iter().find(|t| t.id == task_id).cloned();
             state.store.put_project(project).await?;
@@ -864,17 +1043,37 @@ async fn execute_tool(
             let task_id = args["task_id"]
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
+            // Layer 1: Per-Projekt Write-Lock
+            let lock = state.get_project_write_lock(project_id).await;
+            let _guard = lock.lock().await;
             let mut project = state.store.get_project(project_id).await?;
+            // Layer 2: Optionaler _rev-Check
+            if let Some(client_rev) = args["_rev"].as_str() {
+                let current_rev = project.rev.clone().unwrap_or_else(|| "0".into());
+                if client_rev != current_rev {
+                    return Err(ApiError::Conflict(format!(
+                        "conflict: current_rev is {current_rev}"
+                    )));
+                }
+            }
             // Relationen aufräumen
             for task in &mut project.tasks {
                 task.blocks.retain(|id| id != task_id);
                 task.blocked_by.retain(|id| id != task_id);
                 task.subtask_ids.retain(|id| id != task_id);
-                if task.parent_id == task_id { task.parent_id.clear(); }
+                if task.parent_id == task_id {
+                    task.parent_id.clear();
+                }
             }
             project.tasks.retain(|t| t.id != task_id);
             state.store.put_project(project).await?;
-            publish_event(state, project_id, "task_deleted", serde_json::json!({ "task_id": task_id })).await;
+            publish_event(
+                state,
+                project_id,
+                "task_deleted",
+                serde_json::json!({ "task_id": task_id }),
+            )
+            .await;
             Ok(serde_json::json!({"deleted": task_id}))
         }
         "summarize_board" => {
@@ -898,8 +1097,7 @@ async fn execute_tool(
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
             let project = state.store.get_project(project_id).await?;
-            let mut visible_cols: Vec<_> =
-                project.columns.iter().filter(|c| !c.hidden).collect();
+            let mut visible_cols: Vec<_> = project.columns.iter().filter(|c| !c.hidden).collect();
             visible_cols.sort_by_key(|c| c.order);
             let epics: Vec<_> = visible_cols
                 .iter()
@@ -920,11 +1118,24 @@ async fn execute_tool(
             let worker = args["worker"]
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("worker missing".into()))?;
+            // Layer 1: Per-Projekt Write-Lock
+            let lock = state.get_project_write_lock(project_id).await;
+            let _guard = lock.lock().await;
             let mut project = state.store.get_project(project_id).await?;
+            // Layer 2: Optionaler _rev-Check
+            if let Some(client_rev) = args["_rev"].as_str() {
+                let current_rev = project.rev.clone().unwrap_or_else(|| "0".into());
+                if client_rev != current_rev {
+                    return Err(ApiError::Conflict(format!(
+                        "conflict: current_rev is {current_rev}"
+                    )));
+                }
+            }
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
                 task.worker = worker.to_string();
                 task.updated_at = Utc::now().to_rfc3339();
-                task.logs.push(log_entry(&caller, &format!("assigned → {}", worker)));
+                task.logs
+                    .push(log_entry(caller, &format!("assigned → {}", worker)));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
@@ -964,7 +1175,7 @@ async fn execute_tool(
             let mut project = state.store.get_project(project_id).await?;
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
                 // Route to comments (same as add_comment) for agent-visible output
-                task.comments.push(log_entry(&caller, message));
+                task.comments.push(log_entry(caller, message));
                 task.updated_at = Utc::now().to_rfc3339();
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
@@ -974,7 +1185,8 @@ async fn execute_tool(
             if let Some(t) = task_data {
                 publish_event(state, project_id, "task_updated", serde_json::to_value(&t)?).await;
             }
-            Ok(serde_json::json!({"ok": true, "note": "add_log is deprecated, use add_comment instead"})
+            Ok(
+                serde_json::json!({"ok": true, "note": "add_log is deprecated, use add_comment instead"}),
             )
         }
         "submit_for_review" => {
@@ -986,13 +1198,23 @@ async fn execute_tool(
                 .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
             let mut project = state.store.get_project(project_id).await?;
             // Find the "In Progress" and "Testing" columns by title
-            let in_progress_col = project.columns.iter().find(|c| c.title == "In Progress").map(|c| c.id.clone());
-            let testing_col = project.columns.iter().find(|c| c.title == "Testing").map(|c| c.id.clone());
+            let in_progress_col = project
+                .columns
+                .iter()
+                .find(|c| c.title == "In Progress")
+                .map(|c| c.id.clone());
+            let testing_col = project
+                .columns
+                .iter()
+                .find(|c| c.title == "Testing")
+                .map(|c| c.id.clone());
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
                 // Validate that task is in "In Progress" column
                 if let Some(ref in_progress_id) = in_progress_col {
                     if &task.column_id != in_progress_id {
-                        let current_col_name = project.columns.iter()
+                        let current_col_name = project
+                            .columns
+                            .iter()
                             .find(|c| c.id == task.column_id)
                             .map(|c| c.title.as_str())
                             .unwrap_or("Unknown");
@@ -1011,7 +1233,8 @@ async fn execute_tool(
                     task.column_id = testing_id.clone();
                 }
                 task.updated_at = Utc::now().to_rfc3339();
-                task.logs.push(log_entry(&caller, "submitted for review → Testing"));
+                task.logs
+                    .push(log_entry(caller, "submitted for review → Testing"));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
@@ -1047,7 +1270,7 @@ async fn execute_tool(
                 .ok_or_else(|| ApiError::BadRequest("text missing".into()))?;
             let mut project = state.store.get_project(project_id).await?;
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
-                task.comments.push(log_entry(&caller, text));
+                task.comments.push(log_entry(caller, text));
                 task.updated_at = Utc::now().to_rfc3339();
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
@@ -1079,7 +1302,7 @@ async fn execute_tool(
                     task.column_id = done_id.clone();
                 }
                 task.updated_at = Utc::now().to_rfc3339();
-                task.logs.push(log_entry(&caller, "✓ approved"));
+                task.logs.push(log_entry(caller, "✓ approved"));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
@@ -1097,9 +1320,7 @@ async fn execute_tool(
             let task_id = args["task_id"]
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
-            let comment = args["comment"]
-                .as_str()
-                .unwrap_or("Rejected");
+            let comment = args["comment"].as_str().unwrap_or("Rejected");
             let mut project = state.store.get_project(project_id).await?;
             if let Some(task) = project.tasks.iter_mut().find(|t| t.id == task_id) {
                 task.labels.retain(|l| l != "review");
@@ -1108,8 +1329,9 @@ async fn execute_tool(
                     task.column_id = prev;
                 }
                 task.updated_at = Utc::now().to_rfc3339();
-                task.comments.push(log_entry(&caller, &comment));
-                task.logs.push(log_entry(&caller, &format!("✗ rejected: {}", comment)));
+                task.comments.push(log_entry(caller, comment));
+                task.logs
+                    .push(log_entry(caller, &format!("✗ rejected: {}", comment)));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
             }
@@ -1128,14 +1350,23 @@ async fn execute_tool(
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("parent_id missing".into()))?;
             let project = state.store.get_project(project_id).await?;
-            let done_col = project.columns.iter().find(|c| c.title == "Done").map(|c| c.id.as_str());
+            let done_col = project
+                .columns
+                .iter()
+                .find(|c| c.title == "Done")
+                .map(|c| c.id.as_str());
             let subtasks: Vec<_> = project
                 .tasks
                 .iter()
                 .filter(|t| t.parent_id == parent_id)
                 .map(|t| {
                     let is_done = done_col.map(|d| t.column_id == d).unwrap_or(false);
-                    let col_name = project.columns.iter().find(|c| c.id == t.column_id).map(|c| c.title.as_str()).unwrap_or("?");
+                    let col_name = project
+                        .columns
+                        .iter()
+                        .find(|c| c.id == t.column_id)
+                        .map(|c| c.title.as_str())
+                        .unwrap_or("?");
                     serde_json::json!({
                         "id": t.id, "title": t.title, "task_type": t.task_type,
                         "column": col_name, "worker": t.worker, "done": is_done
@@ -1161,22 +1392,32 @@ async fn execute_tool(
             match relation {
                 "blocks" => {
                     if let Some(t) = project.tasks.iter_mut().find(|t| t.id == from_id) {
-                        if !t.blocks.contains(&to_id.to_string()) { t.blocks.push(to_id.to_string()); }
+                        if !t.blocks.contains(&to_id.to_string()) {
+                            t.blocks.push(to_id.to_string());
+                        }
                     }
                     if let Some(t) = project.tasks.iter_mut().find(|t| t.id == to_id) {
-                        if !t.blocked_by.contains(&from_id.to_string()) { t.blocked_by.push(from_id.to_string()); }
+                        if !t.blocked_by.contains(&from_id.to_string()) {
+                            t.blocked_by.push(from_id.to_string());
+                        }
                     }
                 }
                 "subtask" => {
                     // from = parent (epic), to = child (subtask)
                     if let Some(t) = project.tasks.iter_mut().find(|t| t.id == from_id) {
-                        if !t.subtask_ids.contains(&to_id.to_string()) { t.subtask_ids.push(to_id.to_string()); }
+                        if !t.subtask_ids.contains(&to_id.to_string()) {
+                            t.subtask_ids.push(to_id.to_string());
+                        }
                     }
                     if let Some(t) = project.tasks.iter_mut().find(|t| t.id == to_id) {
                         t.parent_id = from_id.to_string();
                     }
                 }
-                _ => return Err(ApiError::BadRequest(format!("unknown relation: {relation} (use blocks|subtask)"))),
+                _ => {
+                    return Err(ApiError::BadRequest(format!(
+                        "unknown relation: {relation} (use blocks|subtask)"
+                    )))
+                }
             }
             state.store.put_project(project).await?;
             publish_update(state, project_id).await;
@@ -1213,7 +1454,11 @@ async fn execute_tool(
                         t.parent_id.clear();
                     }
                 }
-                _ => return Err(ApiError::BadRequest(format!("unknown relation: {relation}"))),
+                _ => {
+                    return Err(ApiError::BadRequest(format!(
+                        "unknown relation: {relation}"
+                    )))
+                }
             }
             state.store.put_project(project).await?;
             publish_update(state, project_id).await;
@@ -1226,14 +1471,18 @@ async fn execute_tool(
             let column_id = args["column_id"]
                 .as_str()
                 .ok_or_else(|| ApiError::BadRequest("column_id missing".into()))?;
-            let task_ids = args["task_ids"]
-                .as_array()
-                .ok_or_else(|| ApiError::BadRequest("task_ids missing (array of task IDs in desired order)".into()))?;
+            let task_ids = args["task_ids"].as_array().ok_or_else(|| {
+                ApiError::BadRequest("task_ids missing (array of task IDs in desired order)".into())
+            })?;
             let mut project = state.store.get_project(project_id).await?;
             let mut reordered = 0;
             for (i, tid_val) in task_ids.iter().enumerate() {
                 if let Some(tid) = tid_val.as_str() {
-                    if let Some(task) = project.tasks.iter_mut().find(|t| t.id == tid && t.column_id == column_id) {
+                    if let Some(task) = project
+                        .tasks
+                        .iter_mut()
+                        .find(|t| t.id == tid && t.column_id == column_id)
+                    {
                         task.order = i as i32;
                         task.updated_at = Utc::now().to_rfc3339();
                         reordered += 1;
@@ -1244,8 +1493,166 @@ async fn execute_tool(
             publish_update(state, project_id).await;
             Ok(serde_json::json!({"ok": true, "reordered": reordered}))
         }
+        "create_task_from_template" => {
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let template_name = args["template_name"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("template_name missing".into()))?;
+            let title = args["title"].as_str().unwrap_or("").to_string();
+
+            // Template laden (lokale Datei hat Vorrang vor eingebetteten Defaults)
+            let tmpl = load_template(template_name)?;
+
+            // Variable-Substitution im Beschreibungstext und Titel
+            let today = Utc::now().format("%Y-%m-%d").to_string();
+            let raw_title = tmpl
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            // Wenn ein expliziter Titel übergeben wurde, wird er direkt verwendet.
+            // Andernfalls wird der Template-Titel mit Variable-Substitution genutzt.
+            let resolved_title = if title.is_empty() {
+                apply_template_vars(&raw_title, &title, &today)
+            } else {
+                title.clone()
+            };
+            let raw_desc = tmpl
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let resolved_desc = apply_template_vars(&raw_desc, &title, &today);
+
+            // Labels aus Template + optionale extras
+            let tmpl_labels: Vec<String> = tmpl
+                .get("labels")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let extra_labels: Vec<String> = args["labels"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut labels = tmpl_labels;
+            for l in extra_labels {
+                if !labels.contains(&l) {
+                    labels.push(l);
+                }
+            }
+
+            let task_type = args["task_type"]
+                .as_str()
+                .or_else(|| tmpl.get("task_type").and_then(|v| v.as_str()))
+                .unwrap_or("task")
+                .to_string();
+
+            let mut project = state.store.get_project(project_id).await?;
+            let now = Utc::now().to_rfc3339();
+            let task = Task {
+                id: Uuid::new_v4().to_string(),
+                title: resolved_title,
+                description: resolved_desc,
+                column_id: args["column_id"]
+                    .as_str()
+                    .unwrap_or(project.columns.first().map(|c| c.id.as_str()).unwrap_or(""))
+                    .to_string(),
+                creator: caller.to_string(),
+                order: project.tasks.len() as i32,
+                created_at: now.clone(),
+                updated_at: now,
+                labels,
+                worker: args["worker"].as_str().unwrap_or("").to_string(),
+                points: args["points"].as_i64().unwrap_or(0) as i32,
+                task_type,
+                parent_id: args["parent_id"].as_str().unwrap_or("").to_string(),
+                ..Task::default()
+            };
+            project.tasks.push(task.clone());
+            state.store.put_project(project).await?;
+            publish_event(
+                state,
+                project_id,
+                "task_created",
+                serde_json::to_value(&task)?,
+            )
+            .await;
+            Ok(serde_json::to_value(&task)?)
+        }
         _ => Err(ApiError::BadRequest(format!("unknown tool: {tool}"))),
     }
+}
+
+/// Ersetzt `{{title}}` und `{{date}}` in einem Template-String.
+fn apply_template_vars(text: &str, title: &str, date: &str) -> String {
+    text.replace("{{title}}", title).replace("{{date}}", date)
+}
+
+/// Template-Daten: JSON-Objekt mit title, description, labels, task_type.
+///
+/// Lookup-Reihenfolge:
+/// 1. `.plankton/templates/<name>.json` (lokale Datei, falls vorhanden)
+/// 2. Eingebettete Standard-Templates
+fn load_template(name: &str) -> Result<serde_json::Value, ApiError> {
+    // 1. Lokale Datei prüfen
+    let local_path = std::path::Path::new(".plankton/templates").join(format!("{name}.json"));
+    if local_path.exists() {
+        let content = std::fs::read_to_string(&local_path)
+            .map_err(|e| ApiError::BadRequest(format!("failed to read template file: {e}")))?;
+        let tmpl: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| ApiError::BadRequest(format!("invalid JSON in template file: {e}")))?;
+        return Ok(tmpl);
+    }
+
+    // 2. Eingebettete Standard-Templates
+    let tmpl = match name {
+        "bug" => serde_json::json!({
+            "title": "BUG: {{title}}",
+            "task_type": "task",
+            "labels": ["bug"],
+            "description": "## Problem\n\n## Schritte zur Reproduktion\n\n1. \n2. \n\n## Erwartetes Verhalten\n\n## Tatsächliches Verhalten\n\n## Akzeptanzkriterien\n\n- [ ] Bug behoben\n- [ ] Kein Regressionsfehler"
+        }),
+        "feature" => serde_json::json!({
+            "title": "FEATURE: {{title}}",
+            "task_type": "task",
+            "labels": ["feature"],
+            "description": "## Anforderung\n\n## Hintergrund\n\n## Akzeptanzkriterien\n\n- [ ] Feature implementiert\n- [ ] Tests vorhanden\n- [ ] Dokumentation aktualisiert\n\n## Erstellt am\n\n{{date}}"
+        }),
+        "security" => serde_json::json!({
+            "title": "SECURITY: {{title}}",
+            "task_type": "task",
+            "labels": ["security"],
+            "description": "## Schwachstelle\n\n## Severity\n\n- [ ] Critical\n- [ ] High\n- [ ] Medium\n- [ ] Low\n\n## Betroffene Komponenten\n\n## Reproduktion\n\n## Gegenmaßnahmen\n\n## Akzeptanzkriterien\n\n- [ ] Schwachstelle behoben\n- [ ] Kein Regressionsfehler\n- [ ] Security-Review durchgeführt\n\n## Erstellt am\n\n{{date}}"
+        }),
+        "epic" => serde_json::json!({
+            "title": "EPIC: {{title}}",
+            "task_type": "epic",
+            "labels": ["epic"],
+            "description": "## Ziel\n\n## Hintergrund\n\n## Sub-Tasks\n\n- [ ] \n- [ ] \n\n## Akzeptanzkriterien\n\n- [ ] Alle Sub-Tasks abgeschlossen\n\n## Erstellt am\n\n{{date}}"
+        }),
+        "chore" => serde_json::json!({
+            "title": "CHORE: {{title}}",
+            "task_type": "task",
+            "labels": ["chore"],
+            "description": "## Aufgabe\n\n## Motivation\n\n## Definition of Done\n\n- [ ] Aufgabe erledigt\n\n## Erstellt am\n\n{{date}}"
+        }),
+        _ => {
+            return Err(ApiError::BadRequest(format!(
+                "template '{name}' not found (no local file at .plankton/templates/{name}.json and no built-in default)"
+            )));
+        }
+    };
+    Ok(tmpl)
 }
 
 /// GET /docs – Maschinenlesbare API-Dokumentation.
@@ -1545,7 +1952,10 @@ curl -s -X DELETE $PLANKTON_URL/mcp -H "Mcp-Session-Id: $SESSION"
 
     (
         [
-            (axum::http::header::CONTENT_TYPE, "text/markdown; charset=utf-8"),
+            (
+                axum::http::header::CONTENT_TYPE,
+                "text/markdown; charset=utf-8",
+            ),
             (
                 axum::http::header::CONTENT_DISPOSITION,
                 "attachment; filename=\"SKILL.md\"",

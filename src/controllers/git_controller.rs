@@ -1,4 +1,5 @@
 // Handler für Git-Repository-Konfiguration pro Projekt.
+#![allow(dead_code, unused_imports)]
 
 use axum::{
     extract::{Path, State},

@@ -14,6 +14,8 @@ export interface ProjectDoc {
   users: User[]
   tasks: Task[]
   git?: GitConfig | null
+  /** Reihenfolge des Projekts in der Sidebar (aufsteigend, 0-basiert). */
+  order?: number
 }
 
 /** Git-Repository-Konfiguration für ein Projekt. */

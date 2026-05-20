@@ -6,6 +6,7 @@ import api from '../api';
 import { state } from '../state';
 import { renderBoard } from '../components/board';
 import type { ProjectDoc, Task } from '../types';
+import { notificationService } from './notification-service';
 
 interface SSEPayload {
   event: string;
@@ -68,12 +69,23 @@ export function subscribeSSE(projectId: string): void {
         // Glow für via SSE empfangene neue Tasks (von anderen Clients/Agenten)
         (window as any).__newTaskGlowId = task.id;
         renderBoard();
+        notificationService.notify(payload);
         break;
       }
       case 'task_updated':
+        patchTask(payload.data as unknown as Task);
+        renderBoard();
+        notificationService.notify(payload);
+        break;
+
       case 'task_moved':
         patchTask(payload.data as unknown as Task);
         renderBoard();
+        notificationService.notify(payload);
+        break;
+
+      case 'task_commented':
+        notificationService.notify(payload);
         break;
 
       case 'task_deleted':
@@ -99,3 +111,11 @@ export function subscribeSSE(projectId: string): void {
 
   state.eventSource = es;
 }
+
+/**
+ * Test-Hilfsfunktion: SSE-Event manuell simulieren.
+ * Nur in Dev/Test-Umgebungen genutzt (Playwright-Tests).
+ */
+;(window as any).__simulateSSE = (event: string, data: Record<string, unknown>) => {
+  notificationService.notify({ event, data });
+};

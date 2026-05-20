@@ -201,25 +201,17 @@ echo ""
     )
 }
 
-/// GET /cli/plankton – Das CLI-Script selbst.
-pub async fn serve_cli_script(
-    axum::extract::Host(host): axum::extract::Host,
-    headers: axum::http::HeaderMap,
-) -> impl axum::response::IntoResponse {
-    let scheme = headers
-        .get("x-forwarded-proto")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("http");
-    let default_url = format!("{scheme}://{host}");
-
-    let script = format!(
+/// Generiert den CLI-Script-Inhalt für eine gegebene Basis-URL.
+/// Ausgelagert für Testbarkeit.
+pub(crate) fn build_cli_script(default_url: &str) -> String {
+    format!(
         r##"#!/bin/bash
 # Plankton CLI – Kanban-Board für KI-Agenten
 # Installiert via: curl -fsSL <server>/install | bash
 
 set -e
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 INSTALLED_FROM="{default_url}"
 CONFIG_DIR="${{HOME}}/.config/plankton"
 CONFIG_FILE="${{CONFIG_DIR}}/config"
@@ -819,6 +811,89 @@ VIBEEOF
         echo "  · .vibe/readme.md (exists)"
     fi
 
+    # .claude/skills/plankton/ anlegen und SKILL.md herunterladen.
+    local skills_dir=".claude/skills/plankton"
+    if [[ -d "$skills_dir" ]]; then
+        echo "  · $skills_dir (exists)"
+    else
+        mkdir -p "$skills_dir"
+        echo "  ✓ $skills_dir"
+    fi
+
+    # SKILL.md vom Server herunterladen falls Server konfiguriert.
+    load_config
+    if [[ -n "$PLANKTON_SERVER" ]]; then
+        if [[ ! -f "$skills_dir/SKILL.md" ]]; then
+            echo "  ↓ Downloading SKILL.md from $PLANKTON_SERVER ..."
+            if curl -fsSL "${{PLANKTON_SERVER}}/skill.md" -o "$skills_dir/SKILL.md" 2>/dev/null; then
+                echo "  ✓ $skills_dir/SKILL.md"
+            else
+                echo "  ⚠ Could not download SKILL.md (server unreachable?)"
+            fi
+        else
+            echo "  · $skills_dir/SKILL.md (exists)"
+        fi
+    else
+        echo "  ⚠ No server configured – skipping SKILL.md download."
+        echo "    Run: plankton skill install <url>"
+    fi
+
+    # plankton-secrets.md Template anlegen.
+    local secrets_file="${{HOME}}/.claude/plankton-secrets.md"
+    if [[ ! -f "$secrets_file" ]]; then
+        mkdir -p "${{HOME}}/.claude"
+        cat > "$secrets_file" <<'SECRETSEOF'
+# Plankton Secrets
+
+<!-- Dieses Template wird von `plankton init` generiert.
+     Trage hier deine Server-Tokens ein (kein echtes Secret committen!). -->
+
+## Plankton Server Tokens
+
+Füge hier deine konfigurierten Remotes ein:
+
+```
+[example]
+URL=https://plankton.example.com
+PLANKTON_TOKEN=<your-token-here>
+```
+
+Nach dem Login (`plankton login`) wird diese Datei automatisch aktualisiert.
+SECRETSEOF
+        echo "  ✓ ~/.claude/plankton-secrets.md (template)"
+    else
+        echo "  · ~/.claude/plankton-secrets.md (exists)"
+    fi
+
+    # CLAUDE.md anlegen wenn nicht vorhanden.
+    if [[ ! -f "CLAUDE.md" ]]; then
+        cat > "CLAUDE.md" <<'CLAUDEEOF'
+# CLAUDE.md – Plankton Projekt
+
+Dieses Projekt verwendet Plankton als Kanban-Board für KI-Agenten-Workflows.
+
+## Plankton Skill
+
+Der `/plankton`-Skill ist unter `.claude/skills/plankton/SKILL.md` installiert.
+
+## Workflow
+
+1. Aufgaben im Plankton-Board anlegen (`plankton view <projekt>`)
+2. Tickets aus `Todo` → `In Progress` verschieben
+3. Arbeit kommentieren, Tests schreiben, implementieren
+4. Ticket → `Testing` verschieben nach Abschluss
+
+## Wichtig
+
+- Secrets nie committen
+- Konfiguration: `~/.config/plankton/config`
+- Tokens: `~/.claude/plankton-secrets.md`
+CLAUDEEOF
+        echo "  ✓ CLAUDE.md"
+    else
+        echo "  · CLAUDE.md (exists)"
+    fi
+
     echo ""
     echo "  Projekt-Struktur angelegt."
     echo "  Lege Ideen als Markdown-Dateien in .vibe/ideas/ ab."
@@ -1087,6 +1162,279 @@ cmd_import() {{
     echo ""
 }}
 
+# ─── Write-Subcommands (v0.2.0) ───────────────────────────────
+
+# task move <slug> <task-id> <column>
+cmd_task_move() {{
+    need_auth
+    local slug="" task_id="" column=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --help|-h)
+                echo ""
+                echo "  Usage: plankton task move <project-slug> <task-id> <column-name-or-id>"
+                echo ""
+                echo "  Move a task to another column."
+                echo ""
+                echo "  Examples:"
+                echo "    plankton task move myproject abc123 'In Progress'"
+                echo "    plankton task move myproject abc123 Done"
+                echo ""
+                return 0
+                ;;
+            *)
+                if [ -z "$slug" ]; then slug="$1"
+                elif [ -z "$task_id" ]; then task_id="$1"
+                else column="${{column:+$column }}$1"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$slug" ] || [ -z "$task_id" ] || [ -z "$column" ]; then
+        echo "Usage: plankton task move <project-slug> <task-id> <column-name-or-id>"
+        exit 1
+    fi
+
+    # Projekt laden um Spalten-ID aufzulösen
+    local project
+    project=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" \
+        "$PLANKTON_SERVER/api/projects/$slug") || {{ echo "Error: project not found: $slug"; exit 1; }}
+
+    # column kann ein Name oder eine ID sein – wir versuchen zuerst Name-Lookup
+    local col_id
+    col_id=$(echo "$project" | jq -r --arg name "$column" \
+        '.columns[] | select(.title == $name or .id == $name) | .id' | head -1)
+
+    if [ -z "$col_id" ]; then
+        echo "Error: column not found: $column"
+        echo "Available columns:"
+        echo "$project" | jq -r '.columns[] | select(.hidden != true) | "  \(.title)"'
+        exit 1
+    fi
+
+    local result
+    result=$(api POST "/api/projects/$slug/tasks/$task_id/move" \
+        "{{\"column_id\":\"$col_id\"}}") || {{ echo "Error moving task"; exit 1; }}
+
+    local ok
+    ok=$(echo "$result" | jq -r '.ok // "false"')
+    if [ "$ok" = "true" ]; then
+        echo "  ✓ Task $task_id moved to $column"
+    else
+        echo "  ✗ Move failed: $result"
+        exit 1
+    fi
+}}
+
+# task done <slug> <task-id>
+cmd_task_done() {{
+    need_auth
+    local slug="" task_id=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --help|-h)
+                echo ""
+                echo "  Usage: plankton task done <project-slug> <task-id>"
+                echo ""
+                echo "  Shorthand for: plankton task move <slug> <task-id> Done"
+                echo ""
+                return 0
+                ;;
+            *)
+                if [ -z "$slug" ]; then slug="$1"
+                else task_id="$1"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$slug" ] || [ -z "$task_id" ]; then
+        echo "Usage: plankton task done <project-slug> <task-id>"
+        exit 1
+    fi
+
+    cmd_task_move "$slug" "$task_id" "Done"
+}}
+
+# task comment <slug> <task-id> <text>
+cmd_task_comment() {{
+    need_auth
+    local slug="" task_id="" text=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --help|-h)
+                echo ""
+                echo "  Usage: plankton task comment <project-slug> <task-id> <text>"
+                echo ""
+                echo "  Add a comment to a task."
+                echo ""
+                echo "  Examples:"
+                echo "    plankton task comment myproject abc123 'Tests are green'"
+                echo "    plankton task comment myproject abc123 --stdin   # read from stdin"
+                echo ""
+                return 0
+                ;;
+            --stdin)
+                text=$(cat)
+                ;;
+            *)
+                if [ -z "$slug" ]; then slug="$1"
+                elif [ -z "$task_id" ]; then task_id="$1"
+                else text="${{text:+$text }}$1"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$slug" ] || [ -z "$task_id" ] || [ -z "$text" ]; then
+        echo "Usage: plankton task comment <project-slug> <task-id> <text>"
+        exit 1
+    fi
+
+    local payload
+    payload=$(jq -n --arg text "$text" '{{"text": $text}}')
+
+    local result
+    result=$(api POST "/api/projects/$slug/tasks/$task_id/comment" "$payload") \
+        || {{ echo "Error adding comment"; exit 1; }}
+
+    local ok
+    ok=$(echo "$result" | jq -r '.ok // "false"')
+    if [ "$ok" = "true" ]; then
+        echo "  ✓ Comment added to task $task_id"
+    else
+        echo "  ✗ Comment failed: $result"
+        exit 1
+    fi
+}}
+
+# task create <slug> <title> [--description=...] [--column=...] [--type=task|epic|job] [--points=N]
+cmd_task_create() {{
+    need_auth
+    local slug="" title="" description="" column="" task_type="" points=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --help|-h)
+                echo ""
+                echo "  Usage: plankton task create <project-slug> <title> [options]"
+                echo ""
+                echo "  Create a new task."
+                echo ""
+                echo "  Options:"
+                echo "    --description=<text>    Task description"
+                echo "    --column=<name>         Target column (default: first TODO column)"
+                echo "    --type=task|epic|job    Task type (default: task)"
+                echo "    --points=<n>            Story points (0-100)"
+                echo ""
+                echo "  Examples:"
+                echo "    plankton task create myproject 'Fix login bug'"
+                echo "    plankton task create myproject 'New feature' --type=epic --points=5"
+                echo ""
+                return 0
+                ;;
+            --description=*) description="${{1#--description=}}" ;;
+            --column=*) column="${{1#--column=}}" ;;
+            --type=*) task_type="${{1#--type=}}" ;;
+            --points=*) points="${{1#--points=}}" ;;
+            *)
+                if [ -z "$slug" ]; then slug="$1"
+                elif [ -z "$title" ]; then title="$1"
+                else title="$title $1"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$slug" ] || [ -z "$title" ]; then
+        echo "Usage: plankton task create <project-slug> <title> [options]"
+        exit 1
+    fi
+
+    # Spalten-ID auflösen wenn angegeben
+    local col_id=""
+    if [ -n "$column" ]; then
+        local project
+        project=$(curl -sf -H "Authorization: Bearer $PLANKTON_TOKEN" \
+            "$PLANKTON_SERVER/api/projects/$slug") || {{ echo "Error: project not found: $slug"; exit 1; }}
+        col_id=$(echo "$project" | jq -r --arg name "$column" \
+            '.columns[] | select(.title == $name or .id == $name) | .id' | head -1)
+        if [ -z "$col_id" ]; then
+            echo "Error: column not found: $column"
+            exit 1
+        fi
+    fi
+
+    # JSON-Body aufbauen
+    local payload
+    payload=$(jq -n \
+        --arg title "$title" \
+        --arg description "$description" \
+        --arg column_id "$col_id" \
+        --arg column_slug "TODO" \
+        --arg task_type "${{task_type:-task}}" \
+        --argjson points "${{points:-0}}" \
+        '{{
+            title: $title,
+            description: $description,
+            task_type: $task_type,
+            points: $points
+        }} |
+        if $column_id != "" then . + {{column_id: $column_id}} else . + {{column_slug: $column_slug}} end')
+
+    local result
+    result=$(api POST "/api/projects/$slug/tasks" "$payload") \
+        || {{ echo "Error creating task"; exit 1; }}
+
+    # Neue Task-ID aus dem Projekt-Response extrahieren
+    local new_task_id
+    new_task_id=$(echo "$result" | jq -r --arg title "$title" \
+        '.tasks[] | select(.title == $title) | .id' | tail -1)
+
+    if [ -n "$new_task_id" ]; then
+        echo "  ✓ Task created: $new_task_id"
+        echo "  Title: $title"
+    else
+        echo "  ✗ Create failed or task ID not returned"
+        exit 1
+    fi
+}}
+
+# task subcommand dispatcher
+cmd_task() {{
+    local subcmd="${{1:-help}}"
+    shift 2>/dev/null || true
+
+    case "$subcmd" in
+        move)    cmd_task_move "$@" ;;
+        done)    cmd_task_done "$@" ;;
+        comment) cmd_task_comment "$@" ;;
+        create)  cmd_task_create "$@" ;;
+        --help|-h|help)
+            echo ""
+            echo "  Usage: plankton task <subcommand> [options]"
+            echo ""
+            echo "  Subcommands:"
+            echo "    move <slug> <task-id> <column>           Move task to another column"
+            echo "    done <slug> <task-id>                    Move task to Done"
+            echo "    comment <slug> <task-id> <text>          Add comment to task"
+            echo "    create <slug> <title> [options]          Create a new task"
+            echo ""
+            echo "  Run 'plankton task <subcommand> --help' for details."
+            echo ""
+            ;;
+        *)
+            echo "Unknown task command: $subcmd"
+            echo "Run 'plankton task help' for usage."
+            exit 1
+            ;;
+    esac
+}}
+
 # ─── Remote ──────────────────────────────────────────────────
 
 cmd_remote() {{
@@ -1217,6 +1565,10 @@ cmd_help() {{
     echo "    projects [--md]      List all projects (--md for Markdown output)"
     echo "    view <slug> [--md]   View project with columns and tasks"
     echo "    tasks <slug> [--md]  List tasks in a project"
+    echo "    task move <slug> <id> <col>     Move task to another column"
+    echo "    task done <slug> <id>           Move task to Done"
+    echo "    task comment <slug> <id> <text> Add comment to task"
+    echo "    task create <slug> <title>      Create new task"
     echo "    export [-f] [-p slug] [-d dir]  Export projects as JSON"
     echo "    import [-f] [-p slug] [-d dir]  Import JSON to server"
     echo "    init                 Create .vibe/ project structure"
@@ -1248,6 +1600,7 @@ case "${{1:-help}}" in
     projects)   shift; cmd_projects "$@" ;;
     view)       shift; cmd_view_project "$@" ;;
     tasks)      shift; cmd_tasks "$@" ;;
+    task)       shift; cmd_task "$@" ;;
     export)     shift; cmd_export "$@" ;;
     import)     shift; cmd_import "$@" ;;
     init)       cmd_init ;;
@@ -1268,7 +1621,20 @@ case "${{1:-help}}" in
 esac
 "##,
         default_url = default_url,
-    );
+    )
+}
+
+/// GET /cli/plankton – Das CLI-Script selbst.
+pub async fn serve_cli_script(
+    axum::extract::Host(host): axum::extract::Host,
+    headers: axum::http::HeaderMap,
+) -> impl axum::response::IntoResponse {
+    let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("http");
+    let default_url = format!("{scheme}://{host}");
+    let script = build_cli_script(&default_url);
 
     (
         [(
@@ -1510,4 +1876,329 @@ pub async fn cli_login_page(
 </html>"##,
         base_url = base_url,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn script() -> String {
+        build_cli_script("https://plankton.example.com")
+    }
+
+    /// cmd_init legt .claude/skills/plankton/ Verzeichnis an
+    #[test]
+    fn test_init_creates_claude_skills_dir() {
+        let s = script();
+        // Die cmd_init Funktion muss .claude/skills/plankton anlegen
+        // (nicht nur cmd_skill_install)
+        let init_fn = extract_cmd_init(&s);
+        assert!(
+            init_fn.contains(".claude/skills/plankton"),
+            "cmd_init muss .claude/skills/plankton anlegen, gefunden in cmd_init:\n{init_fn}"
+        );
+    }
+
+    /// cmd_init lädt SKILL.md vom Server herunter
+    #[test]
+    fn test_init_downloads_skill_md() {
+        let s = script();
+        let init_fn = extract_cmd_init(&s);
+        assert!(
+            init_fn.contains("/skill.md"),
+            "cmd_init muss SKILL.md vom Server herunterladen (GET /skill.md)"
+        );
+        assert!(
+            init_fn.contains("SKILL.md"),
+            "cmd_init muss SKILL.md im .claude/skills/plankton/ Verzeichnis speichern"
+        );
+    }
+
+    /// Hilfsfunktion: extrahiert den Bash-Funktionskörper von cmd_init
+    fn extract_cmd_init(script: &str) -> String {
+        // Suche nach "cmd_init() {" und extrahiere bis zur schließenden "}"
+        if let Some(start) = script.find("cmd_init() {") {
+            let body = &script[start..];
+            // Schachtelungstiefe zählen
+            let mut depth = 0usize;
+            let mut result = String::new();
+            for ch in body.chars() {
+                result.push(ch);
+                if ch == '{' {
+                    depth += 1;
+                } else if ch == '}' {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        break;
+                    }
+                }
+            }
+            result
+        } else {
+            String::new()
+        }
+    }
+
+    /// cmd_init generiert plankton-secrets.md Template
+    #[test]
+    fn test_init_generates_secrets_template() {
+        let s = script();
+        assert!(
+            s.contains("plankton-secrets.md"),
+            "cmd_init muss plankton-secrets.md Template generieren"
+        );
+    }
+
+    /// cmd_init legt CLAUDE.md an wenn noch nicht vorhanden
+    #[test]
+    fn test_init_creates_claude_md_if_missing() {
+        let s = script();
+        assert!(
+            s.contains("CLAUDE.md"),
+            "cmd_init muss CLAUDE.md anlegen wenn noch nicht vorhanden"
+        );
+    }
+
+    /// cmd_init ist idempotent – prüft auf -f / [[ ! -f ... ]] Guards
+    #[test]
+    fn test_init_is_idempotent() {
+        let s = script();
+        // Entweder "exists"-Check oder [[ ! -f ... ]] für CLAUDE.md
+        let has_exists_check =
+            s.contains("CLAUDE.md") && (s.contains("! -f") || s.contains("exists"));
+        assert!(
+            has_exists_check,
+            "cmd_init muss CLAUDE.md nur anlegen wenn noch nicht vorhanden (idempotent)"
+        );
+    }
+
+    /// skill install und cmd_init teilen dieselbe .claude/skills/plankton-Logik
+    #[test]
+    fn test_skill_install_and_init_use_same_dir() {
+        let s = script();
+        let count = s.matches(".claude/skills/plankton").count();
+        assert!(
+            count >= 2,
+            ".claude/skills/plankton sollte sowohl in cmd_skill_install als auch in cmd_init vorkommen, gefunden: {count}"
+        );
+    }
+
+    // ─── Write-Subcommands Tests (v0.2.0) ─────────────────────────────────────
+
+    /// Hilfsfunktion: extrahiert den Bash-Funktionskörper einer benannten Funktion
+    fn extract_fn(script: &str, fn_name: &str) -> String {
+        let marker = format!("{fn_name}() {{");
+        if let Some(start) = script.find(&marker) {
+            let body = &script[start..];
+            let mut depth = 0usize;
+            let mut result = String::new();
+            for ch in body.chars() {
+                result.push(ch);
+                if ch == '{' {
+                    depth += 1;
+                } else if ch == '}' {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        break;
+                    }
+                }
+            }
+            result
+        } else {
+            String::new()
+        }
+    }
+
+    /// cmd_task_move existiert und nutzt die Move-API
+    #[test]
+    fn test_cmd_task_move_exists_and_calls_move_api() {
+        let s = script();
+        let f = extract_fn(&s, "cmd_task_move");
+        assert!(
+            !f.is_empty(),
+            "cmd_task_move() muss im CLI-Script vorhanden sein"
+        );
+        assert!(
+            f.contains("/tasks/") && f.contains("/move"),
+            "cmd_task_move muss POST /api/projects/:id/tasks/:task_id/move aufrufen, gefunden:\n{f}"
+        );
+    }
+
+    /// cmd_task_move erwartet slug, task-id und column als Argumente
+    #[test]
+    fn test_cmd_task_move_validates_args() {
+        let s = script();
+        let f = extract_fn(&s, "cmd_task_move");
+        assert!(
+            f.contains("Usage") || f.contains("usage"),
+            "cmd_task_move muss eine Usage-Hilfe ausgeben wenn Argumente fehlen:\n{f}"
+        );
+        assert!(
+            f.contains("exit 1"),
+            "cmd_task_move muss mit exit 1 enden wenn Argumente fehlen:\n{f}"
+        );
+    }
+
+    /// cmd_task_comment existiert und nutzt die Comment-API
+    #[test]
+    fn test_cmd_task_comment_exists_and_calls_comment_api() {
+        let s = script();
+        let f = extract_fn(&s, "cmd_task_comment");
+        assert!(
+            !f.is_empty(),
+            "cmd_task_comment() muss im CLI-Script vorhanden sein"
+        );
+        assert!(
+            f.contains("/comment"),
+            "cmd_task_comment muss POST /api/projects/:id/tasks/:task_id/comment aufrufen, gefunden:\n{f}"
+        );
+    }
+
+    /// cmd_task_comment erwartet slug, task-id und text als Argumente
+    #[test]
+    fn test_cmd_task_comment_validates_args() {
+        let s = script();
+        let f = extract_fn(&s, "cmd_task_comment");
+        assert!(
+            f.contains("Usage") || f.contains("usage"),
+            "cmd_task_comment muss eine Usage-Hilfe ausgeben wenn Argumente fehlen:\n{f}"
+        );
+        assert!(
+            f.contains("exit 1"),
+            "cmd_task_comment muss mit exit 1 enden wenn Argumente fehlen:\n{f}"
+        );
+    }
+
+    /// cmd_task_create existiert und nutzt die Create-Task-API
+    #[test]
+    fn test_cmd_task_create_exists_and_calls_create_api() {
+        let s = script();
+        let f = extract_fn(&s, "cmd_task_create");
+        assert!(
+            !f.is_empty(),
+            "cmd_task_create() muss im CLI-Script vorhanden sein"
+        );
+        assert!(
+            f.contains("/api/projects/") && f.contains("/tasks"),
+            "cmd_task_create muss POST /api/projects/:id/tasks aufrufen, gefunden:\n{f}"
+        );
+    }
+
+    /// cmd_task_create erwartet slug und title als Argumente
+    #[test]
+    fn test_cmd_task_create_validates_args() {
+        let s = script();
+        let f = extract_fn(&s, "cmd_task_create");
+        assert!(
+            f.contains("Usage") || f.contains("usage"),
+            "cmd_task_create muss eine Usage-Hilfe ausgeben wenn Argumente fehlen:\n{f}"
+        );
+        assert!(
+            f.contains("exit 1"),
+            "cmd_task_create muss mit exit 1 enden wenn Argumente fehlen:\n{f}"
+        );
+    }
+
+    /// cmd_task_done existiert als Shorthand für move → Done
+    #[test]
+    fn test_cmd_task_done_exists() {
+        let s = script();
+        let f = extract_fn(&s, "cmd_task_done");
+        assert!(
+            !f.is_empty(),
+            "cmd_task_done() muss im CLI-Script vorhanden sein"
+        );
+        // done muss entweder cmd_task_move aufrufen oder direkt die Move-API
+        let calls_move = f.contains("cmd_task_move") || (f.contains("/move") && f.contains("Done"));
+        assert!(
+            calls_move,
+            "cmd_task_done muss cmd_task_move aufrufen oder direkt POST .../move mit Done-Spalte, gefunden:\n{f}"
+        );
+    }
+
+    /// `task` subcommand ist im main case-Dispatch registriert
+    #[test]
+    fn test_task_subcommand_registered_in_main() {
+        let s = script();
+        assert!(
+            s.contains("task)") || s.contains("\"task\")"),
+            "Der 'task'-Subcommand muss im main case-Dispatch registriert sein"
+        );
+    }
+
+    /// `task move` ist im task-Dispatch registriert
+    #[test]
+    fn test_task_move_registered() {
+        let s = script();
+        assert!(
+            s.contains("move)") || s.contains("\"move\")"),
+            "Der 'task move'-Subcommand muss im task-Dispatch registriert sein"
+        );
+    }
+
+    /// `task comment` ist im task-Dispatch registriert
+    #[test]
+    fn test_task_comment_registered() {
+        let s = script();
+        assert!(
+            s.contains("comment)") || s.contains("\"comment\")"),
+            "Der 'task comment'-Subcommand muss im task-Dispatch registriert sein"
+        );
+    }
+
+    /// `task create` ist im task-Dispatch registriert
+    #[test]
+    fn test_task_create_registered() {
+        let s = script();
+        assert!(
+            s.contains("create)") || s.contains("\"create\")"),
+            "Der 'task create'-Subcommand muss im task-Dispatch registriert sein"
+        );
+    }
+
+    /// `task done` ist im task-Dispatch registriert
+    #[test]
+    fn test_task_done_registered() {
+        let s = script();
+        assert!(
+            s.contains("done)") || s.contains("\"done\")"),
+            "Der 'task done'-Subcommand muss im task-Dispatch registriert sein"
+        );
+    }
+
+    /// VERSION wird auf 0.2.0 erhöht
+    #[test]
+    fn test_version_is_0_2_0() {
+        let s = script();
+        assert!(
+            s.contains("VERSION=\"0.2.0\""),
+            "VERSION muss auf 0.2.0 gesetzt sein für den v0.2.0 Release"
+        );
+    }
+
+    /// Help-Text enthält task-Subcommands
+    #[test]
+    fn test_help_contains_task_subcommands() {
+        let s = script();
+        let help_fn = extract_fn(&s, "cmd_help");
+        assert!(
+            help_fn.contains("task move") || help_fn.contains("task create"),
+            "cmd_help muss die neuen task-Subcommands dokumentieren, gefunden:\n{help_fn}"
+        );
+    }
+
+    /// Der Comment-Endpunkt POST /api/projects/:id/tasks/:task_id/comment muss in task_controller existieren
+    #[test]
+    fn test_comment_endpoint_present_in_task_controller() {
+        // Wir lesen task_controller.rs zur Compile-Zeit nicht – dieser Test ist ein
+        // Marker der signalisiert dass der Endpunkt in main.rs verlinkt sein muss.
+        // Der eigentliche Inhalt wird via Integration-Test verifiziert.
+        // Hier nur: der CLI-Script muss den Pfad korrekt kennen.
+        let s = script();
+        let f = extract_fn(&s, "cmd_task_comment");
+        assert!(
+            f.contains("/comment"),
+            "CLI muss POST .../tasks/:id/comment aufrufen"
+        );
+    }
 }

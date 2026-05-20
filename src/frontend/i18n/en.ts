@@ -40,6 +40,8 @@ export default {
     sortUpdatedDesc: 'Recently changed',
     sortUpdatedAsc: 'Oldest first',
     sortTaskCount: 'Task count',
+    newProject: '+ Project',
+    reorderSaved: 'Order saved',
   },
 
   // ─── Board ───

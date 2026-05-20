@@ -1,4 +1,5 @@
 // Git-Synchronisation: klont/öffnet ein Repository, schreibt Projektdaten als JSON, committed und pusht.
+#![allow(dead_code, unused_imports)]
 
 use std::path::{Path, PathBuf};
 
@@ -39,7 +40,11 @@ fn make_callbacks(repo_url: &str) -> RemoteCallbacks<'_> {
 }
 
 /// Klont ein Repository oder öffnet es, wenn es bereits existiert.
-fn open_or_clone(repo_url: &str, branch: &str, local_path: &Path) -> Result<Repository, git2::Error> {
+fn open_or_clone(
+    repo_url: &str,
+    branch: &str,
+    local_path: &Path,
+) -> Result<Repository, git2::Error> {
     if local_path.join(".git").exists() {
         let repo = Repository::open(local_path)?;
         // Pull: fetch + reset auf remote branch
@@ -58,8 +63,9 @@ fn open_or_clone(repo_url: &str, branch: &str, local_path: &Path) -> Result<Repo
         Ok(repo)
     } else {
         // Verzeichnis erstellen und klonen
-        std::fs::create_dir_all(local_path)
-            .map_err(|e| git2::Error::from_str(&format!("Verzeichnis erstellen fehlgeschlagen: {e}")))?;
+        std::fs::create_dir_all(local_path).map_err(|e| {
+            git2::Error::from_str(&format!("Verzeichnis erstellen fehlgeschlagen: {e}"))
+        })?;
 
         let mut fo = FetchOptions::new();
         fo.remote_callbacks(make_callbacks(repo_url));
@@ -96,15 +102,19 @@ pub fn sync_project_to_git(project: &ProjectDoc, config: &GitConfig) -> Result<(
         .map_err(|e| format!("Datei schreiben fehlgeschlagen: {e}"))?;
 
     // Git add
-    let mut index = repo.index()
+    let mut index = repo
+        .index()
         .map_err(|e| format!("Index öffnen fehlgeschlagen: {e}"))?;
-    index.add_path(Path::new(&config.path))
+    index
+        .add_path(Path::new(&config.path))
         .map_err(|e| format!("Git add fehlgeschlagen: {e}"))?;
-    index.write()
+    index
+        .write()
         .map_err(|e| format!("Index schreiben fehlgeschlagen: {e}"))?;
 
     // Prüfen ob es Änderungen gibt
-    let tree_oid = index.write_tree()
+    let tree_oid = index
+        .write_tree()
         .map_err(|e| format!("Tree schreiben fehlgeschlagen: {e}"))?;
 
     let head = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
@@ -115,7 +125,8 @@ pub fn sync_project_to_git(project: &ProjectDoc, config: &GitConfig) -> Result<(
         }
     }
 
-    let tree = repo.find_tree(tree_oid)
+    let tree = repo
+        .find_tree(tree_oid)
         .map_err(|e| format!("Tree finden fehlgeschlagen: {e}"))?;
 
     // Commit erstellen
@@ -135,22 +146,27 @@ pub fn sync_project_to_git(project: &ProjectDoc, config: &GitConfig) -> Result<(
     .map_err(|e| format!("Commit fehlgeschlagen: {e}"))?;
 
     // Push
-    let mut remote = repo.find_remote("origin")
+    let mut remote = repo
+        .find_remote("origin")
         .map_err(|e| format!("Remote 'origin' nicht gefunden: {e}"))?;
     let mut push_opts = PushOptions::new();
     push_opts.remote_callbacks(make_callbacks(&config.repo_url));
-    remote.push(
-        &[&format!("refs/heads/{branch}:refs/heads/{branch}")],
-        Some(&mut push_opts),
-    )
-    .map_err(|e| format!("Push fehlgeschlagen: {e}"))?;
+    remote
+        .push(
+            &[&format!("refs/heads/{branch}:refs/heads/{branch}")],
+            Some(&mut push_opts),
+        )
+        .map_err(|e| format!("Push fehlgeschlagen: {e}"))?;
 
     Ok(())
 }
 
 /// Führt den Git-Sync für ein Projekt aus und aktualisiert die GitConfig (last_push/last_error).
 pub async fn perform_git_sync(state: &AppState, project_id: &str) -> Result<(), String> {
-    let mut project = state.store.get_project(project_id).await
+    let mut project = state
+        .store
+        .get_project(project_id)
+        .await
         .map_err(|e| format!("Projekt laden fehlgeschlagen: {e}"))?;
 
     let config = match &project.git {
@@ -162,11 +178,10 @@ pub async fn perform_git_sync(state: &AppState, project_id: &str) -> Result<(), 
     // Sync in einem Blocking-Thread (git2 ist synchron)
     let project_clone = project.clone();
     let config_clone = config.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        sync_project_to_git(&project_clone, &config_clone)
-    })
-    .await
-    .map_err(|e| format!("Spawn-Fehler: {e}"))?;
+    let result =
+        tokio::task::spawn_blocking(move || sync_project_to_git(&project_clone, &config_clone))
+            .await
+            .map_err(|e| format!("Spawn-Fehler: {e}"))?;
 
     // GitConfig aktualisieren
     let git = project.git.as_mut().unwrap();
@@ -183,7 +198,10 @@ pub async fn perform_git_sync(state: &AppState, project_id: &str) -> Result<(), 
     }
 
     // Projekt mit aktualisierter GitConfig speichern
-    state.store.put_project(project).await
+    state
+        .store
+        .put_project(project)
+        .await
         .map_err(|e| format!("Projekt speichern fehlgeschlagen: {e}"))?;
 
     result

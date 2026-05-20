@@ -23,7 +23,11 @@ pub fn hash_password(password: &str) -> Result<String, ApiError> {
 pub fn verify_password(password: &str, hash: &str) -> bool {
     PasswordHash::new(hash)
         .ok()
-        .map(|h| Argon2::default().verify_password(password.as_bytes(), &h).is_ok())
+        .map(|h| {
+            Argon2::default()
+                .verify_password(password.as_bytes(), &h)
+                .is_ok()
+        })
         .unwrap_or(false)
 }
 

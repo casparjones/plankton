@@ -52,7 +52,8 @@ pub async fn oauth_authorize(
             .into_response());
         }
         // Client-Name aus der Redirect-URI ableiten
-        params.redirect_uri
+        params
+            .redirect_uri
             .split("//")
             .nth(1)
             .and_then(|s| s.split('/').next())
@@ -61,8 +62,8 @@ pub async fn oauth_authorize(
     };
 
     // Prüfe ob User schon eingeloggt (Cookie)
-    let logged_in_user = extract_token_from_headers(&headers)
-        .and_then(|t| validate_jwt(&t, &state.jwt_secret).ok());
+    let logged_in_user =
+        extract_token_from_headers(&headers).and_then(|t| validate_jwt(&t, &state.jwt_secret).ok());
 
     let scheme = headers
         .get("x-forwarded-proto")
@@ -89,8 +90,13 @@ pub async fn oauth_authorize(
                 created_at: Utc::now(),
                 code_challenge: params.code_challenge.clone(),
             };
-            tracing::info!("OAuth consent: code={} client={} redirect_uri={} challenge={:?}",
-                &code[..16], auth_code.client_id[..16].to_string(), &auth_code.redirect_uri, &auth_code.code_challenge);
+            tracing::info!(
+                "OAuth consent: code={} client={} redirect_uri={} challenge={:?}",
+                &code[..16],
+                auth_code.client_id[..16].to_string(),
+                &auth_code.redirect_uri,
+                &auth_code.code_challenge
+            );
             if let Err(e) = state.store.save_oauth_code(&auth_code).await {
                 tracing::error!("Failed to save OAuth code: {e:?}");
             }
@@ -316,7 +322,10 @@ pub async fn oauth_token(
                 .ok_or(ApiError::BadRequest("Missing code".into()))?;
 
             // Code einlösen (einmalig, aus Dateisystem)
-            tracing::info!("OAuth token exchange: looking for code={}", &code_str[..16.min(code_str.len())]);
+            tracing::info!(
+                "OAuth token exchange: looking for code={}",
+                &code_str[..16.min(code_str.len())]
+            );
             let auth_code = state.store.take_oauth_code(code_str).await?;
 
             // Code ist max 5 Minuten gültig
@@ -326,10 +335,7 @@ pub async fn oauth_token(
             }
 
             // Client validieren
-            let client_id = params
-                .client_id
-                .as_deref()
-                .unwrap_or("");
+            let client_id = params.client_id.as_deref().unwrap_or("");
             if client_id != auth_code.client_id {
                 return Err(ApiError::BadRequest("Client mismatch".into()));
             }
@@ -354,19 +360,26 @@ pub async fn oauth_token(
             } else {
                 // Prüfe ob der Client PKCE erfordert (auth_method "none")
                 let clients = state.oauth_clients.lock().await;
-                let is_public = clients.iter()
+                let is_public = clients
+                    .iter()
                     .find(|c| c.client_id == auth_code.client_id)
                     .map(|c| c.auth_method == "none")
                     .unwrap_or(false);
                 if is_public {
-                    return Err(ApiError::BadRequest("PKCE required for public clients".into()));
+                    return Err(ApiError::BadRequest(
+                        "PKCE required for public clients".into(),
+                    ));
                 }
             }
 
             // User laden und Access Token erstellen
             let user = state.store.get_user(&auth_code.user_id).await?;
-            let access_token =
-                create_jwt_with_duration(&user, &state.jwt_secret, false, chrono::Duration::hours(1))?;
+            let access_token = create_jwt_with_duration(
+                &user,
+                &state.jwt_secret,
+                false,
+                chrono::Duration::hours(1),
+            )?;
 
             // Refresh Token generieren und persistent speichern
             let refresh_token_str = generate_oauth_code();
@@ -403,8 +416,12 @@ pub async fn oauth_token(
 
             // User laden und neuen Access Token erstellen
             let user = state.store.get_user(&old_refresh.user_id).await?;
-            let access_token =
-                create_jwt_with_duration(&user, &state.jwt_secret, false, chrono::Duration::hours(1))?;
+            let access_token = create_jwt_with_duration(
+                &user,
+                &state.jwt_secret,
+                false,
+                chrono::Duration::hours(1),
+            )?;
 
             // Neuen Refresh Token (Rotation)
             let new_refresh_str = generate_oauth_code();
@@ -484,7 +501,11 @@ pub async fn oauth_register(
         .to_string();
     let redirect_uris: Vec<String> = payload["redirect_uris"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     if redirect_uris.is_empty() {
@@ -563,7 +584,11 @@ pub async fn admin_create_oauth_client(
         .to_string();
     let redirect_uris: Vec<String> = payload["redirect_uris"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     let client_id = generate_oauth_code();

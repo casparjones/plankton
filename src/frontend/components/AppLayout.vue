@@ -3,14 +3,19 @@
 // Task-Modal und Task-Detail sind Vue-Komponenten, die übrigen Modals
 // nutzen weiterhin Legacy-DOM mit Event-Listenern in onMounted().
 
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import KanbanBoard from './KanbanBoard.vue'
 import TaskModal from './TaskModal.vue'
 import TaskDetail from './TaskDetail.vue'
 import ArchivePanel from './ArchivePanel.vue'
+import DashboardContainer from './DashboardContainer.vue'
+import StatusCountsWidget from './StatusCountsWidget.vue'
+import VelocityWidget from './VelocityWidget.vue'
+import BurndownWidget from './BurndownWidget.vue'
 import type { Task } from '../types'
 
 import { t, useI18n } from '../i18n'
+import { notificationService } from '../services/notification-service'
 
 const { locale, setLocale, locales } = useI18n()
 import { state } from '../state'
@@ -30,9 +35,6 @@ import { openPasswordModal, closePasswordModal, savePassword } from '../componen
 import { openImportModal, closeImportModal, validateImport, executeImport } from '../components/import-modal'
 // @ts-ignore
 import { openGitModal, closeGitModal, saveGitConfig, triggerGitSync } from '../components/git-settings'
-// @ts-ignore
-import { createProject } from '../services/project-service'
-
 /** Triggert Board-Refresh via globale Bridge-Funktion. */
 function triggerBoardRefresh(): void {
   if (typeof window.__kanbanRefresh === 'function') window.__kanbanRefresh()
@@ -47,16 +49,20 @@ const taskModalRef = ref<InstanceType<typeof TaskModal> | null>(null)
 const taskDetailRef = ref<InstanceType<typeof TaskDetail> | null>(null)
 const archivePanelRef = ref<InstanceType<typeof ArchivePanel> | null>(null)
 
-/** Projekt erstellen via Eingabefeld. */
-function handleCreateProject(): void {
-  const input = document.getElementById('new-project-input') as HTMLInputElement
-  if (input && input.value.trim()) {
-    createProject(input.value.trim())
-    input.value = ''
+const boardInfoCopied = ref(false)
+const notificationsEnabled = ref(notificationService.isEnabled())
+
+function toggleNotifications(): void {
+  notificationsEnabled.value = notificationService.toggle()
+  const msg = notificationsEnabled.value
+    ? t('notifications.enabledToast')
+    : t('notifications.disabledToast')
+  import('../toast').then(({ toast }) => toast.info(msg, { timeout: 2000 }))
+  // Browser-Permission anfragen wenn erstmals aktiviert
+  if (notificationsEnabled.value) {
+    notificationService.requestBrowserPermission()
   }
 }
-
-const boardInfoCopied = ref(false)
 
 function copyBoardInfo(): void {
   if (!state.project) return
@@ -75,11 +81,6 @@ function onEditFromDetail(task: Task): void {
 
 /** Registriert Event-Listener für Legacy-Modals. */
 onMounted(() => {
-  // Projekt erstellen.
-  document.getElementById('new-project-input')?.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Enter') handleCreateProject()
-  })
-
   // Bulk-Aktionen.
   document.getElementById('bulk-delete-btn')?.addEventListener('click', bulkDeleteSelected)
   document.getElementById('bulk-cancel-btn')?.addEventListener('click', () => {
@@ -191,13 +192,9 @@ onMounted(() => {
         <span class="font-mono text-lg font-semibold tracking-wide text-accent flex items-center gap-2.5">
           <img src="/icons/logo.svg" alt="" class="w-8 h-8" /> Plankton
         </span>
-        <button id="theme-toggle" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm px-2 py-0.5 leading-none transition-all hover:border-accent hover:text-accent" :title="t('sidebar.changeTheme')">&#9728;</button>
-      </div>
-      <div class="p-3 flex flex-col gap-1.5 border-b border-border">
-        <input id="new-project-input" :placeholder="t('project.projectName') + '…'" autocomplete="one-time-code" name="project-title-new"
-          class="bg-surface-2 border border-border rounded-md text-text font-sans text-[13px] px-2.5 py-1.5 outline-none transition-colors focus:border-accent" />
-        <button id="new-project-btn" @click="handleCreateProject"
-          class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer font-sans text-[13px] px-2.5 py-1.5 transition-colors hover:bg-accent">{{ t('create') }}</button>
+        <div class="flex items-center gap-1">
+          <button id="theme-toggle" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm px-2 py-0.5 leading-none transition-all hover:border-accent hover:text-accent" :title="t('sidebar.changeTheme')">&#9728;</button>
+        </div>
       </div>
       <ul id="project-list" class="list-none flex-1 overflow-y-auto py-2"></ul>
       <!-- Language Switcher -->
@@ -246,6 +243,16 @@ onMounted(() => {
           :title="t('board.archive')"
           @click="archivePanelRef?.open()"
         >&#128451; {{ t('board.archive') }}</button>
+        <button
+          id="notification-toggle"
+          data-notification-toggle
+          class="notification-toggle bg-transparent border rounded-md cursor-pointer font-sans text-xs px-2.5 py-1 transition-all flex-shrink-0"
+          :class="notificationsEnabled
+            ? 'border-accent text-accent hover:bg-accent/10'
+            : 'border-border text-text-dim hover:border-accent hover:text-accent opacity-50'"
+          :title="t('notifications.notificationToggle')"
+          @click="toggleNotifications"
+        >&#128276; <span class="hidden sm:inline">{{ t('notifications.notificationToggle') }}</span></button>
         <button id="import-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer font-sans text-xs px-2.5 py-1 transition-all hover:border-accent hover:text-accent" :title="t('board.importIssues')">&#8615; {{ t('board.importIssues') }}</button>
         <button id="project-menu-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-base px-2.5 py-1 transition-all ml-auto hover:border-accent hover:text-accent" :title="t('board.projectMenu')">&#9776;</button>
         <div id="project-dropdown" class="project-dropdown absolute top-full right-6 z-[2000] bg-surface border border-border rounded-md shadow-[0_8px_24px_rgba(0,0,0,0.4)] py-1 min-w-[200px]"></div>
@@ -255,6 +262,17 @@ onMounted(() => {
         <button id="bulk-delete-btn" class="bg-transparent border border-danger text-danger rounded-md cursor-pointer text-xs px-2 py-0.5 hover:bg-danger/10">{{ t('bulk.deleteSelected') }}</button>
         <button id="bulk-cancel-btn" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">{{ t('bulk.deselectAll') }}</button>
       </div>
+      <DashboardContainer>
+        <template #counts>
+          <StatusCountsWidget />
+        </template>
+        <template #velocity>
+          <VelocityWidget />
+        </template>
+        <template #burndown>
+          <BurndownWidget />
+        </template>
+      </DashboardContainer>
       <div id="board" class="flex-1 overflow-x-auto overflow-y-hidden p-5 px-6">
         <KanbanBoard />
       </div>

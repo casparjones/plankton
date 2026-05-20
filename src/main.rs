@@ -4,19 +4,41 @@
 // REST-API für ein Kanban-Board mit MCP-Unterstützung.
 // ============================================================
 
-mod models;
-mod error;
-mod store;
-mod state;
+#[cfg(test)]
+mod blocking_test;
+#[cfg(test)]
+mod burndown_test;
+#[cfg(test)]
+mod cli_write_test;
 mod config;
-mod services;
 mod controllers;
+mod error;
+#[cfg(test)]
+mod mcp_compat_test;
 mod middleware;
+mod models;
+#[cfg(test)]
+mod optimistic_locking_test;
+#[cfg(test)]
+mod project_reorder_test;
+mod services;
+#[cfg(test)]
+mod slug_dedup_test;
+mod state;
+#[cfg(test)]
+mod stats_columns_test;
+mod store;
+#[cfg(test)]
+mod task_templates_test;
+#[cfg(test)]
+mod velocity_test;
+#[cfg(test)]
+mod webhook_test;
 
 use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
     Router,
 };
 use reqwest::Client;
@@ -93,6 +115,8 @@ async fn main() -> anyhow::Result<()> {
         oauth_clients: Arc::new(Mutex::new(Vec::new())),
         oauth_codes: Arc::new(Mutex::new(HashMap::new())),
         oauth_refresh_tokens: Arc::new(Mutex::new(HashMap::new())),
+        write_locks: Arc::new(Mutex::new(HashMap::new())),
+        http_client: Client::new(),
     };
 
     // Users-Verzeichnis sicherstellen und Default-Admin anlegen.
@@ -138,8 +162,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/authorize", get(oauth_authorize))
         .route("/token", post(oauth_token))
         .route("/register", post(oauth_register))
-        .route("/.well-known/oauth-authorization-server", get(oauth_metadata))
-        .route("/.well-known/oauth-protected-resource", get(oauth_protected_resource))
+        .route(
+            "/.well-known/oauth-authorization-server",
+            get(oauth_metadata),
+        )
+        .route(
+            "/.well-known/oauth-protected-resource",
+            get(oauth_protected_resource),
+        )
         // OAuth paths with /oauth/ prefix (what claude.ai expects)
         .route("/oauth/authorize", get(oauth_authorize))
         .route("/oauth/token", post(oauth_token))
@@ -153,10 +183,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/cli/plankton", get(serve_cli_script))
         .route("/cli-login", get(cli_login_page))
         // Healthcheck (kein Auth)
-        .route("/healthz", get(|| async { axum::Json(serde_json::json!({"status":"ok"})) }))
+        .route(
+            "/healthz",
+            get(|| async { axum::Json(serde_json::json!({"status":"ok"})) }),
+        )
         // Öffentliche User-Liste
         .route("/api/users", get(public_list_users))
         // Projekt-API
+        .route("/api/projects/reorder", post(reorder_projects))
         .route("/api/projects", get(list_projects).post(create_project))
         .route(
             "/api/projects/:id",
@@ -166,6 +200,10 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/api/projects/:id/tasks/:task_id",
             put(update_task).delete(delete_task),
+        )
+        .route(
+            "/api/projects/:id/tasks/:task_id/comment",
+            post(add_comment),
         )
         .route("/api/projects/:id/tasks/:task_id/move", post(move_task))
         .route("/api/projects/:id/tasks/reorder", post(reorder_tasks))
@@ -184,6 +222,18 @@ async fn main() -> anyhow::Result<()> {
         // Git-Integration deaktiviert (siehe git_controller.rs)
         // .route("/api/projects/:id/git", get(get_git_config).put(update_git_config))
         // .route("/api/projects/:id/git/sync", post(git_sync))
+        .route(
+            "/api/projects/:id/stats/columns",
+            get(project_stats_columns),
+        )
+        .route(
+            "/api/projects/:id/stats/velocity",
+            get(project_stats_velocity),
+        )
+        .route(
+            "/api/projects/:id/stats/burndown",
+            get(project_stats_burndown),
+        )
         .route("/api/projects/:id/events", get(project_events))
         // Admin-Routen
         .route(
@@ -194,7 +244,10 @@ async fn main() -> anyhow::Result<()> {
             "/api/admin/users/:user_id",
             put(admin_update_user).delete(admin_delete_user),
         )
-        .route("/api/admin/users/:user_id/password", put(admin_reset_password))
+        .route(
+            "/api/admin/users/:user_id/password",
+            put(admin_reset_password),
+        )
         // Admin-Token-Routen
         .route(
             "/api/admin/tokens",
@@ -211,7 +264,17 @@ async fn main() -> anyhow::Result<()> {
         // MCP (Legacy + Streamable HTTP Transport)
         .route("/mcp/tools", get(list_tools))
         .route("/mcp/call", post(call_tool))
-        .route("/mcp", post(mcp_jsonrpc).get(mcp_sse_stream).delete(mcp_session_delete))
+        .route(
+            "/mcp",
+            post(mcp_jsonrpc)
+                .get(mcp_sse_stream)
+                .delete(mcp_session_delete),
+        )
+        // Incoming Webhooks (extern → Plankton)
+        .route(
+            "/webhook/projects/:slug/tasks/:task_id/move",
+            post(incoming_move_task),
+        )
         // Docs & Skill
         .route("/docs", get(docs_page))
         .route("/skill.md", get(skill_md))

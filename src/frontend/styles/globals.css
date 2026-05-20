@@ -169,11 +169,17 @@ body[data-theme="light"] {
   .Vue-Toastification__toast.plankton-toast.Vue-Toastification__toast--info { border-left: 3px solid var(--color-accent); }
   .Vue-Toastification__close-button.plankton-toast { color: var(--color-text-dim); }
   .Vue-Toastification__progress-bar { background: var(--color-accent) !important; }
-  .toast-confirm-msg { margin-bottom: 10px; font-size: 13px; }
+  .toast-confirm { min-width: 240px; }
+  .toast-confirm-msg { margin-bottom: 10px; font-size: 13px; font-weight: 500; }
+  .toast-prompt-field { margin-bottom: 10px; }
+  .toast-prompt-input { width: 100%; box-sizing: border-box; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); font-family: var(--font-sans); font-size: 13px; padding: 6px 10px; outline: none; transition: border-color 0.15s; }
+  .toast-prompt-input:focus { border-color: var(--color-accent); }
   .toast-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
-  .toast-confirm-yes, .toast-confirm-no { padding: 4px 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border); font-size: 12px; font-family: var(--font-mono); cursor: pointer; transition: all 0.15s; }
+  .toast-confirm-yes, .toast-confirm-no, .toast-prompt-ok { padding: 5px 14px; border-radius: var(--radius-md); border: 1px solid var(--color-border); font-size: 12px; font-family: var(--font-mono); cursor: pointer; transition: all 0.15s; }
   .toast-confirm-yes { background: var(--color-danger); color: #fff; border-color: var(--color-danger); }
   .toast-confirm-yes:hover { opacity: 0.85; }
+  .toast-prompt-ok { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+  .toast-prompt-ok:hover { opacity: 0.85; }
   .toast-confirm-no { background: var(--color-surface-2); color: var(--color-text); }
   .toast-confirm-no:hover { background: var(--color-border); }
 

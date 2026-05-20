@@ -4,6 +4,7 @@ use axum::{http::StatusCode, response::IntoResponse, Json};
 
 /// Einheitlicher Fehlertyp für alle API-Handler.
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
 pub enum ApiError {
     #[error("Not found: {0}")]
     NotFound(String),

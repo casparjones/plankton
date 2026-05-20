@@ -633,12 +633,26 @@ test.describe('Sidebar Suche & Sortierung', () => {
     if (!loggedIn) { test.skip(); return }
 
     await page.waitForSelector('aside.sidebar', { timeout: 15000 })
+    await dismissPasswordChangeModal(page)
 
-    // Suchfeld muss vorhanden sein
+    // Auf Mobile: Sidebar erst über Hamburger-Button öffnen
+    const hamburger = page.locator('.sidebar-toggle')
+    if (await hamburger.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await hamburger.click()
+      await page.waitForTimeout(200)
+    }
+
+    // Suchfeld ist im DOM vorhanden, aber standardmäßig hidden (toggle-Verhalten)
     const searchInput = page.locator('#sidebar-search-input')
-    await expect(searchInput).toBeVisible({ timeout: 5000 })
+    await expect(searchInput).toBeAttached({ timeout: 5000 })
 
-    // Sort-Button/-Toggle muss vorhanden sein
+    // Such-Button (🔍) klicken um das Suchfeld einzublenden
+    const searchToggleBtn = page.locator('#sidebar-search-sort button').first()
+    await expect(searchToggleBtn).toBeVisible({ timeout: 5000 })
+    await searchToggleBtn.click()
+    await expect(searchInput).toBeVisible({ timeout: 3000 })
+
+    // Sort-Button/-Toggle muss vorhanden und sichtbar sein
     const sortToggle = page.locator('[data-sort-toggle]')
     await expect(sortToggle).toBeVisible({ timeout: 5000 })
 
@@ -652,8 +666,20 @@ test.describe('Sidebar Suche & Sortierung', () => {
     await page.waitForSelector('#project-list', { timeout: 15000 })
     await dismissPasswordChangeModal(page)
 
+    // Auf Mobile: Sidebar erst über Hamburger-Button öffnen
+    const hamburger = page.locator('.sidebar-toggle')
+    if (await hamburger.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await hamburger.click()
+      await page.waitForTimeout(200)
+    }
+
+    // Suchfeld ist standardmäßig hidden – Such-Button klicken um es einzublenden
+    const searchToggleBtn = page.locator('#sidebar-search-sort button').first()
+    await expect(searchToggleBtn).toBeVisible({ timeout: 5000 })
+    await searchToggleBtn.click()
+
     const searchInput = page.locator('#sidebar-search-input')
-    await expect(searchInput).toBeVisible({ timeout: 5000 })
+    await expect(searchInput).toBeVisible({ timeout: 3000 })
 
     // Anzahl Projekte vor der Suche merken
     const projectsBefore = await page.locator('#project-list .project-item').count()
@@ -693,11 +719,18 @@ test.describe('Sidebar Suche & Sortierung', () => {
     await page.waitForSelector('#project-list', { timeout: 15000 })
     await dismissPasswordChangeModal(page)
 
+    // Auf Mobile: Sidebar erst über Hamburger-Button öffnen
+    const hamburger = page.locator('.sidebar-toggle')
+    if (await hamburger.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await hamburger.click()
+      await page.waitForTimeout(200)
+    }
+
     const sortToggle = page.locator('[data-sort-toggle]')
     await expect(sortToggle).toBeVisible({ timeout: 5000 })
 
     // Sort-Toggle öffnen
-    await sortToggle.click()
+    await sortToggle.click({ force: true })
     await page.waitForTimeout(200)
 
     // Sort-Option "alphabetisch A-Z" klicken
@@ -725,11 +758,18 @@ test.describe('Sidebar Suche & Sortierung', () => {
     await page.waitForSelector('#project-list', { timeout: 15000 })
     await dismissPasswordChangeModal(page)
 
+    // Auf Mobile: Sidebar erst über Hamburger-Button öffnen
+    const hamburger = page.locator('.sidebar-toggle')
+    if (await hamburger.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await hamburger.click()
+      await page.waitForTimeout(200)
+    }
+
     const sortToggle = page.locator('[data-sort-toggle]')
     await expect(sortToggle).toBeVisible({ timeout: 5000 })
 
     // Toggle öffnen und Alpha-Sort wählen
-    await sortToggle.click()
+    await sortToggle.click({ force: true })
     await page.waitForTimeout(200)
 
     const sortAZ = page.locator('[data-sort-option="alpha-asc"]')

@@ -175,7 +175,10 @@ impl DataStore {
     // ------------------------------------------------------------------
 
     fn tokens_root(&self) -> PathBuf {
-        PathBuf::from("data/tokens")
+        match self {
+            DataStore::File(f) => f.root.join("tokens"),
+            DataStore::Couch(_) => PathBuf::from("data/tokens"),
+        }
     }
 
     fn token_path(&self, id: &str) -> PathBuf {
@@ -192,7 +195,12 @@ impl DataStore {
         let mut tokens = Vec::new();
         let mut dir = tokio::fs::read_dir(self.tokens_root()).await?;
         while let Some(entry) = dir.next_entry().await? {
-            if entry.path().extension().map(|e| e == "json").unwrap_or(false) {
+            if entry
+                .path()
+                .extension()
+                .map(|e| e == "json")
+                .unwrap_or(false)
+            {
                 let data = tokio::fs::read_to_string(entry.path()).await?;
                 let token: AgentToken = serde_json::from_str(&data)?;
                 tokens.push(token);
@@ -208,12 +216,23 @@ impl DataStore {
         Ok(serde_json::from_str(&data)?)
     }
 
+    /// Sucht einen aktiven Token anhand seines Klartext-Secrets (SHA-256-Vergleich).
     pub async fn get_token_by_value(&self, token_value: &str) -> Result<AgentToken, ApiError> {
+        use crate::models::auth::verify_token_secret;
         let tokens = self.list_tokens().await?;
         tokens
             .into_iter()
-            .find(|t| t.token == token_value && t.active)
+            .find(|t| t.active && verify_token_secret(token_value, &t.token_hash))
             .ok_or_else(|| ApiError::NotFound("Token not found or inactive".into()))
+    }
+
+    /// Aktualisiert `last_used` eines Tokens auf den aktuellen Zeitstempel.
+    pub async fn touch_token(&self, id: &str) -> Result<(), ApiError> {
+        if let Ok(mut token) = self.get_token(id).await {
+            token.last_used = Some(chrono::Utc::now().to_rfc3339());
+            self.update_token(token).await?;
+        }
+        Ok(())
     }
 
     pub async fn create_token(&self, token: AgentToken) -> Result<AgentToken, ApiError> {
@@ -240,10 +259,18 @@ impl DataStore {
     // OAuth-Persistence (Codes, Clients, Refresh Tokens)
     // ------------------------------------------------------------------
 
-    fn oauth_root(&self) -> PathBuf { PathBuf::from("data/oauth") }
-    fn oauth_codes_root(&self) -> PathBuf { self.oauth_root().join("codes") }
-    fn oauth_clients_root(&self) -> PathBuf { self.oauth_root().join("clients") }
-    fn oauth_refresh_root(&self) -> PathBuf { self.oauth_root().join("refresh") }
+    fn oauth_root(&self) -> PathBuf {
+        PathBuf::from("data/oauth")
+    }
+    fn oauth_codes_root(&self) -> PathBuf {
+        self.oauth_root().join("codes")
+    }
+    fn oauth_clients_root(&self) -> PathBuf {
+        self.oauth_root().join("clients")
+    }
+    fn oauth_refresh_root(&self) -> PathBuf {
+        self.oauth_root().join("refresh")
+    }
 
     pub async fn ensure_oauth_dirs(&self) -> Result<(), ApiError> {
         tokio::fs::create_dir_all(self.oauth_codes_root()).await?;
@@ -262,7 +289,8 @@ impl DataStore {
 
     pub async fn take_oauth_code(&self, code: &str) -> Result<OAuthAuthCode, ApiError> {
         let path = self.oauth_codes_root().join(format!("{code}.json"));
-        let data = tokio::fs::read_to_string(&path).await
+        let data = tokio::fs::read_to_string(&path)
+            .await
             .map_err(|_| ApiError::BadRequest("Invalid or expired code".into()))?;
         let auth_code: OAuthAuthCode = serde_json::from_str(&data)?;
         // Einmalig: Datei löschen
@@ -273,14 +301,18 @@ impl DataStore {
     // OAuth Clients
     pub async fn save_oauth_client(&self, client: &OAuthClient) -> Result<(), ApiError> {
         self.ensure_oauth_dirs().await?;
-        let path = self.oauth_clients_root().join(format!("{}.json", client.client_id));
+        let path = self
+            .oauth_clients_root()
+            .join(format!("{}.json", client.client_id));
         tokio::fs::write(path, serde_json::to_string_pretty(client)?).await?;
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn get_oauth_client(&self, client_id: &str) -> Result<OAuthClient, ApiError> {
         let path = self.oauth_clients_root().join(format!("{client_id}.json"));
-        let data = tokio::fs::read_to_string(path).await
+        let data = tokio::fs::read_to_string(path)
+            .await
             .map_err(|_| ApiError::NotFound("OAuth client not found".into()))?;
         Ok(serde_json::from_str(&data)?)
     }
@@ -290,7 +322,12 @@ impl DataStore {
         let mut clients = Vec::new();
         let mut dir = tokio::fs::read_dir(self.oauth_clients_root()).await?;
         while let Some(entry) = dir.next_entry().await? {
-            if entry.path().extension().map(|e| e == "json").unwrap_or(false) {
+            if entry
+                .path()
+                .extension()
+                .map(|e| e == "json")
+                .unwrap_or(false)
+            {
                 if let Ok(data) = tokio::fs::read_to_string(entry.path()).await {
                     if let Ok(client) = serde_json::from_str(&data) {
                         clients.push(client);
@@ -304,14 +341,17 @@ impl DataStore {
     // OAuth Refresh Tokens
     pub async fn save_refresh_token(&self, token: &OAuthRefreshToken) -> Result<(), ApiError> {
         self.ensure_oauth_dirs().await?;
-        let path = self.oauth_refresh_root().join(format!("{}.json", token.token));
+        let path = self
+            .oauth_refresh_root()
+            .join(format!("{}.json", token.token));
         tokio::fs::write(path, serde_json::to_string_pretty(token)?).await?;
         Ok(())
     }
 
     pub async fn take_refresh_token(&self, token: &str) -> Result<OAuthRefreshToken, ApiError> {
         let path = self.oauth_refresh_root().join(format!("{token}.json"));
-        let data = tokio::fs::read_to_string(&path).await
+        let data = tokio::fs::read_to_string(&path)
+            .await
             .map_err(|_| ApiError::BadRequest("Invalid refresh token".into()))?;
         let refresh: OAuthRefreshToken = serde_json::from_str(&data)?;
         let _ = tokio::fs::remove_file(path).await;

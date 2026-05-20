@@ -14,7 +14,10 @@ use crate::state::AppState;
 
 /// Caller-Identität aus Headers auflösen (JWT oder Agent-Token).
 /// Gibt Err(Unauthorized) zurück wenn kein gültiger Token gefunden wird.
-async fn resolve_caller(headers: &axum::http::HeaderMap, state: &AppState) -> Result<String, ApiError> {
+async fn resolve_caller(
+    headers: &axum::http::HeaderMap,
+    state: &AppState,
+) -> Result<String, ApiError> {
     if let Some(t) = extract_token_from_headers(headers) {
         if let Ok(claims) = validate_jwt(&t, &state.jwt_secret) {
             return Ok(claims.display_name);
@@ -43,10 +46,12 @@ pub async fn import_tasks(
     let user_name = resolve_caller(&headers, &state).await?;
 
     let now = Utc::now().to_rfc3339();
-    let today = Local::now().format("%Y-%m-%d %H:%M").to_string();
+    let _today = Local::now().format("%Y-%m-%d %H:%M").to_string();
 
     // Find default column (TODO slug or first non-hidden)
-    let default_col_id = project.columns.iter()
+    let default_col_id = project
+        .columns
+        .iter()
         .find(|c| c.slug == "TODO")
         .or_else(|| project.columns.iter().find(|c| !c.hidden))
         .map(|c| c.id.clone())
@@ -69,7 +74,10 @@ pub async fn import_tasks(
 
         // Validate points range
         if task.points < 0 || task.points > 100 {
-            errors.push(format!("Task #{} \"{}\": points must be 0-100, got {}", idx, task.title, task.points));
+            errors.push(format!(
+                "Task #{} \"{}\": points must be 0-100, got {}",
+                idx, task.title, task.points
+            ));
             skipped += 1;
             continue;
         }
@@ -82,21 +90,30 @@ pub async fn import_tasks(
             } else {
                 // Fallback auf TODO statt Fehler
                 task.column_id = default_col_id.clone();
-                warnings.push(format!("Task #{} \"{}\": column_slug '{}' unbekannt, verwende TODO", idx, task.title, task.column_slug));
+                warnings.push(format!(
+                    "Task #{} \"{}\": column_slug '{}' unbekannt, verwende TODO",
+                    idx, task.title, task.column_slug
+                ));
             }
         }
         task.column_slug.clear();
 
         // Unbekannte column_id → Fallback auf TODO
         if !task.column_id.is_empty() && !project.columns.iter().any(|c| c.id == task.column_id) {
-            warnings.push(format!("Task #{} \"{}\": column_id '{}' unbekannt, verwende TODO", idx, task.title, task.column_id));
+            warnings.push(format!(
+                "Task #{} \"{}\": column_id '{}' unbekannt, verwende TODO",
+                idx, task.title, task.column_id
+            ));
             task.column_id = default_col_id.clone();
         }
 
         // Keine Spalte angegeben → Fallback auf TODO
         if task.column_id.is_empty() {
             task.column_id = default_col_id.clone();
-            warnings.push(format!("Task #{} \"{}\": keine Spalte angegeben, verwende TODO", idx, task.title));
+            warnings.push(format!(
+                "Task #{} \"{}\": keine Spalte angegeben, verwende TODO",
+                idx, task.title
+            ));
         }
 
         // Auto-set fields
@@ -107,7 +124,10 @@ pub async fn import_tasks(
 
         if task.creator.is_empty() {
             task.creator = user_name.clone();
-            warnings.push(format!("Task #{} \"{}\": creator auto-set to {}", idx, task.title, user_name));
+            warnings.push(format!(
+                "Task #{} \"{}\": creator auto-set to {}",
+                idx, task.title, user_name
+            ));
         }
 
         // Log entry
@@ -122,7 +142,12 @@ pub async fn import_tasks(
         publish_update(&state, &id).await;
     }
 
-    Ok(Json(ImportResponse { imported, warnings, errors, skipped }))
+    Ok(Json(ImportResponse {
+        imported,
+        warnings,
+        errors,
+        skipped,
+    }))
 }
 
 /// POST /api/projects/:id/tasks – Neue Aufgabe anlegen.
@@ -143,7 +168,10 @@ pub async fn create_task(
         if let Some(col) = project.columns.iter().find(|c| c.slug == slug) {
             task.column_id = col.id.clone();
         } else {
-            return Err(ApiError::BadRequest(format!("Unknown column_slug: {}", task.column_slug)));
+            return Err(ApiError::BadRequest(format!(
+                "Unknown column_slug: {}",
+                task.column_slug
+            )));
         }
     }
     task.column_slug.clear();
@@ -161,8 +189,32 @@ pub async fn create_task(
         }
     }
     project.tasks.push(task.clone());
+    let webhook_url = project.webhook_url.clone();
+    let project_slug = project.slug.clone();
     let updated = state.store.put_project(project).await?;
-    publish_event(&state, &id, "task_created", serde_json::to_value(&task).unwrap_or_default()).await;
+    publish_event(
+        &state,
+        &id,
+        "task_created",
+        serde_json::to_value(&task).unwrap_or_default(),
+    )
+    .await;
+    // Outgoing Webhook: task.created
+    crate::services::webhook_service::dispatch_webhook(
+        state.http_client.clone(),
+        webhook_url,
+        crate::services::webhook_service::WebhookEvent {
+            event: "task.created".to_string(),
+            project: project_slug,
+            task: crate::services::webhook_service::WebhookTaskInfo {
+                id: task.id.clone(),
+                title: task.title.clone(),
+                column: task.column_id.clone(),
+                worker: task.worker.clone(),
+            },
+            ts: chrono::Utc::now().to_rfc3339(),
+        },
+    );
     Ok(Json(updated))
 }
 
@@ -174,14 +226,17 @@ pub async fn update_task(
 ) -> Result<Json<ProjectDoc>, ApiError> {
     let mut project = state.store.resolve_project(&id).await?;
     // Resolve task_id (could be slug) to real ID
-    let real_task_id = project.tasks.iter()
+    let real_task_id = project
+        .tasks
+        .iter()
         .find(|t| t.id == task_id || t.slug == task_id)
         .map(|t| t.id.clone())
         .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
     // Pre-compute new slug if title is changing
-    let new_slug = req.title.as_ref().map(|title| {
-        unique_task_slug(title, &project.tasks, &real_task_id)
-    });
+    let new_slug = req
+        .title
+        .as_ref()
+        .map(|title| unique_task_slug(title, &project.tasks, &real_task_id));
     if let Some(task) = project.tasks.iter_mut().find(|t| t.id == real_task_id) {
         if let Some(title) = req.title {
             task.slug = new_slug.unwrap();
@@ -235,7 +290,13 @@ pub async fn update_task(
     let task_data = project.tasks.iter().find(|t| t.id == real_task_id).cloned();
     let updated = state.store.put_project(project).await?;
     if let Some(t) = task_data {
-        publish_event(&state, &id, "task_updated", serde_json::to_value(&t).unwrap_or_default()).await;
+        publish_event(
+            &state,
+            &id,
+            "task_updated",
+            serde_json::to_value(&t).unwrap_or_default(),
+        )
+        .await;
     }
     Ok(Json(updated))
 }
@@ -246,7 +307,9 @@ pub async fn delete_task(
     Path((id, task_id)): Path<(String, String)>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
     let mut project = state.store.resolve_project(&id).await?;
-    let real_task_id = project.tasks.iter()
+    let real_task_id = project
+        .tasks
+        .iter()
         .find(|t| t.id == task_id || t.slug == task_id)
         .map(|t| t.id.clone())
         .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
@@ -261,8 +324,50 @@ pub async fn delete_task(
     }
     project.tasks.retain(|t| t.id != real_task_id);
     let updated = state.store.put_project(project).await?;
-    publish_event(&state, &id, "task_deleted", serde_json::json!({ "task_id": task_id })).await;
+    publish_event(
+        &state,
+        &id,
+        "task_deleted",
+        serde_json::json!({ "task_id": task_id }),
+    )
+    .await;
     Ok(Json(updated))
+}
+
+/// POST /api/projects/:id/tasks/:task_id/comment – Kommentar zu einer Aufgabe hinzufügen.
+pub async fn add_comment(
+    State(state): State<AppState>,
+    Path((id, task_id)): Path<(String, String)>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let text = req["text"]
+        .as_str()
+        .ok_or_else(|| ApiError::BadRequest("text is required".into()))?;
+    let user_name = resolve_caller(&headers, &state).await?;
+    let mut project = state.store.resolve_project(&id).await?;
+    let real_task_id = project
+        .tasks
+        .iter()
+        .find(|t| t.id == task_id || t.slug == task_id)
+        .map(|t| t.id.clone())
+        .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
+    if let Some(task) = project.tasks.iter_mut().find(|t| t.id == real_task_id) {
+        task.comments.push(log_entry(&user_name, text));
+        task.updated_at = Utc::now().to_rfc3339();
+    }
+    let task_data = project.tasks.iter().find(|t| t.id == real_task_id).cloned();
+    state.store.put_project(project).await?;
+    if let Some(t) = task_data {
+        publish_event(
+            &state,
+            &id,
+            "task_updated",
+            serde_json::to_value(&t).unwrap_or_default(),
+        )
+        .await;
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 /// POST /api/projects/:id/tasks/:task_id/move – Aufgabe in eine andere Spalte verschieben.
@@ -275,28 +380,39 @@ pub async fn move_task(
     let mut project = state.store.resolve_project(&id).await?;
     let user_name = resolve_caller(&headers, &state).await?;
     let column_name = |col_id: &str| -> String {
-        project.columns.iter()
+        project
+            .columns
+            .iter()
             .find(|c| c.id == col_id)
             .map(|c| c.title.clone())
             .unwrap_or_else(|| col_id.to_string())
     };
-    let real_task_id = project.tasks.iter()
+    let real_task_id = project
+        .tasks
+        .iter()
         .find(|t| t.id == task_id || t.slug == task_id)
         .map(|t| t.id.clone())
         .ok_or_else(|| ApiError::NotFound("Task not found".into()))?;
     // Blocked-Check: Task darf nicht auf Done verschoben werden, wenn Blocker offen sind.
-    let done_col_id = project.columns.iter().find(|c| c.title == "Done").map(|c| c.id.clone());
+    let done_col_id = project
+        .columns
+        .iter()
+        .find(|c| c.title == "Done")
+        .map(|c| c.id.clone());
     if let Some(ref done_id) = done_col_id {
         if &req.column_id == done_id {
             if let Some(task) = project.tasks.iter().find(|t| t.id == real_task_id) {
-                let open_blockers: Vec<&str> = task.blocked_by.iter()
+                let open_blockers: Vec<&str> = task
+                    .blocked_by
+                    .iter()
                     .filter_map(|bid| project.tasks.iter().find(|t| t.id == *bid))
                     .filter(|t| Some(&t.column_id) != done_col_id.as_ref())
                     .map(|t| t.title.as_str())
                     .collect();
                 if !open_blockers.is_empty() {
                     return Err(ApiError::BadRequest(format!(
-                        "BLOCKED_BY:{}", open_blockers.join(", ")
+                        "BLOCKED_BY:{}",
+                        open_blockers.join(", ")
                     )));
                 }
             }
@@ -304,18 +420,44 @@ pub async fn move_task(
     }
     if let Some(task) = project.tasks.iter_mut().find(|t| t.id == real_task_id) {
         let old_col = task.column_id.clone();
-        let old_name = column_name(&old_col);
+        let _old_name = column_name(&old_col);
         let new_name = column_name(&req.column_id);
         task.previous_row = old_col;
         task.column_id = req.column_id;
         task.order = req.order.unwrap_or(task.order);
         task.updated_at = Utc::now().to_rfc3339();
-        task.logs.push(log_entry(&user_name, &format!("→ {}", new_name)));
+        task.logs
+            .push(log_entry(&user_name, &format!("→ {}", new_name)));
     }
     let task_data = project.tasks.iter().find(|t| t.id == real_task_id).cloned();
+    let webhook_url = project.webhook_url.clone();
+    let project_slug = project.slug.clone();
     state.store.put_project(project).await?;
-    if let Some(t) = task_data {
-        publish_event(&state, &id, "task_moved", serde_json::to_value(&t).unwrap_or_default()).await;
+    if let Some(ref t) = task_data {
+        publish_event(
+            &state,
+            &id,
+            "task_moved",
+            serde_json::to_value(t).unwrap_or_default(),
+        )
+        .await;
+        // Outgoing Webhook: task.moved
+        let col_title = t.column_id.clone(); // column_id enthält jetzt die neue Spalten-ID
+        crate::services::webhook_service::dispatch_webhook(
+            state.http_client.clone(),
+            webhook_url,
+            crate::services::webhook_service::WebhookEvent {
+                event: "task.moved".to_string(),
+                project: project_slug,
+                task: crate::services::webhook_service::WebhookTaskInfo {
+                    id: t.id.clone(),
+                    title: t.title.clone(),
+                    column: col_title,
+                    worker: t.worker.clone(),
+                },
+                ts: chrono::Utc::now().to_rfc3339(),
+            },
+        );
     }
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -329,7 +471,11 @@ pub async fn reorder_tasks(
     let mut project = state.store.resolve_project(&id).await?;
     let mut reordered = 0;
     for (i, tid) in req.task_ids.iter().enumerate() {
-        if let Some(task) = project.tasks.iter_mut().find(|t| (t.id == *tid || t.slug == *tid) && t.column_id == req.column_id) {
+        if let Some(task) = project
+            .tasks
+            .iter_mut()
+            .find(|t| (t.id == *tid || t.slug == *tid) && t.column_id == req.column_id)
+        {
             task.order = i as i32;
             task.updated_at = Utc::now().to_rfc3339();
             reordered += 1;
@@ -337,7 +483,9 @@ pub async fn reorder_tasks(
     }
     state.store.put_project(project).await?;
     publish_update(&state, &id).await;
-    Ok(Json(serde_json::json!({ "ok": true, "reordered": reordered })))
+    Ok(Json(
+        serde_json::json!({ "ok": true, "reordered": reordered }),
+    ))
 }
 
 /// POST /api/projects/:id/tasks/batch-move – Mehrere Tasks auf einmal verschieben.
@@ -350,19 +498,26 @@ pub async fn batch_move_tasks(
     let mut project = state.store.resolve_project(&id).await?;
     let user_name = resolve_caller(&headers, &state).await?;
     // Blocked-Check: keine blockierten Tasks auf Done verschieben.
-    let done_col_id = project.columns.iter().find(|c| c.title == "Done").map(|c| c.id.clone());
+    let done_col_id = project
+        .columns
+        .iter()
+        .find(|c| c.title == "Done")
+        .map(|c| c.id.clone());
     if let Some(ref done_id) = done_col_id {
         for m in &req.moves {
             if &m.column_id == done_id {
                 if let Some(task) = project.tasks.iter().find(|t| t.id == m.task_id) {
-                    let open_blockers: Vec<&str> = task.blocked_by.iter()
+                    let open_blockers: Vec<&str> = task
+                        .blocked_by
+                        .iter()
                         .filter_map(|bid| project.tasks.iter().find(|t| t.id == *bid))
                         .filter(|t| Some(&t.column_id) != done_col_id.as_ref())
                         .map(|t| t.title.as_str())
                         .collect();
                     if !open_blockers.is_empty() {
                         return Err(ApiError::BadRequest(format!(
-                            "BLOCKED_BY:{}", open_blockers.join(", ")
+                            "BLOCKED_BY:{}",
+                            open_blockers.join(", ")
                         )));
                     }
                 }
@@ -370,7 +525,9 @@ pub async fn batch_move_tasks(
         }
     }
     let column_name = |col_id: &str| -> String {
-        project.columns.iter()
+        project
+            .columns
+            .iter()
             .find(|c| c.id == col_id)
             .map(|c| c.title.clone())
             .unwrap_or_else(|| col_id.to_string())
@@ -380,7 +537,8 @@ pub async fn batch_move_tasks(
             if task.column_id != m.column_id {
                 let new_name = column_name(&m.column_id);
                 task.previous_row = task.column_id.clone();
-                task.logs.push(log_entry(&user_name, &format!("→ {}", new_name)));
+                task.logs
+                    .push(log_entry(&user_name, &format!("→ {}", new_name)));
             }
             task.column_id = m.column_id.clone();
             task.order = m.order;
@@ -389,5 +547,7 @@ pub async fn batch_move_tasks(
     }
     state.store.put_project(project).await?;
     publish_update(&state, &id).await;
-    Ok(Json(serde_json::json!({ "ok": true, "moved": req.moves.len() })))
+    Ok(Json(
+        serde_json::json!({ "ok": true, "moved": req.moves.len() }),
+    ))
 }

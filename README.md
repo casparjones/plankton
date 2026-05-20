@@ -52,6 +52,31 @@ Plankton lässt sich als MCP-Connector in claude.ai einbinden:
 
 Claude.ai erkennt automatisch die OAuth-Endpoints via Discovery (RFC 8414 + RFC 9728).
 
+**Beispiel-Prompts nach der Verbindung:**
+
+```
+Gib mir eine Übersicht des Plankton-Boards.
+```
+```
+Erstell eine neue Task "Login-Bug fixen" mit Story Points 3.
+```
+```
+Zeig mir die aktuelle Review-Queue.
+```
+
+**Vollständiger Setup-Guide:** [docs/claude-ai-setup.md](docs/claude-ai-setup.md) — OAuth-Flow, alle MCP-Tools, Rollen, Beispiel-Prompts und Fehlerbehebung.
+
+### OAuth-Scopes
+
+| Scope | Beschreibung |
+|-------|-------------|
+| *(kein expliziter Scope)* | Zugriff entspricht der Rolle des eingeloggten Users |
+| `developer` | Tasks lesen/schreiben, zur Review einreichen, kommentieren |
+| `tester` | Tasks lesen, Review-Queue, genehmigen/ablehnen |
+| `admin` | Vollzugriff auf alle Tools inkl. `delete_task` |
+
+Die Rolle wird beim Login festgelegt und im JWT-Token kodiert. Im Admin-Panel (`/admin`) können Rollen angepasst werden.
+
 ## MCP Tools
 
 | Tool | Beschreibung |

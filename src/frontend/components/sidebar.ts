@@ -4,7 +4,8 @@
 import Sortable from 'sortablejs';
 import api from '../api';
 import { state } from '../state';
-import { openProject, deleteProject, loadProjects } from '../services/project-service';
+import { openProject, deleteProject, loadProjects, createProject } from '../services/project-service';
+import { toastPrompt } from '../toast';
 import { toast, toastConfirm } from '../toast';
 import { t } from '../i18n';
 import type { ProjectDoc } from '../types';
@@ -79,57 +80,66 @@ function setSort(mode: SortMode): void {
   renderProjectList();
 }
 
+let searchVisible = false;
+
 function createSidebarHeader(): HTMLDivElement {
   const container = document.createElement('div');
   container.className = 'sidebar-search-sort px-3 pt-2 pb-1.5 border-b border-border sticky top-0 bg-surface z-10';
   container.id = 'sidebar-search-sort';
 
-  // Suchfeld
-  const searchWrap = document.createElement('div');
-  searchWrap.className = 'relative mb-1.5';
+  // Icon-Button-Zeile: + Projekt links, Search+Sort rechts
+  const iconRow = document.createElement('div');
+  iconRow.className = 'flex items-center justify-between mb-1';
 
-  const searchInput = document.createElement('input');
-  searchInput.type = 'text';
-  searchInput.id = 'sidebar-search-input';
-  searchInput.placeholder = t('sidebar.searchPlaceholder');
-  searchInput.value = currentSearch;
-  searchInput.autocomplete = 'off';
-  searchInput.className = 'w-full bg-surface-2 border border-border rounded-md text-text font-sans text-[12px] px-2.5 py-1.5 pr-7 outline-none transition-colors focus:border-accent placeholder:text-text-dim';
-  searchInput.addEventListener('input', () => {
-    currentSearch = searchInput.value;
-    renderProjectList();
+  // + Projekt Button (links)
+  const newProjectBtn = document.createElement('button');
+  newProjectBtn.id = 'new-project-btn';
+  newProjectBtn.className = 'bg-transparent border border-border rounded-md text-text-dim cursor-pointer font-sans text-[11px] px-2 h-7 flex items-center gap-1 leading-none transition-all hover:border-accent hover:text-accent';
+  newProjectBtn.textContent = t('sidebar.newProject') || '+ Projekt';
+  newProjectBtn.addEventListener('click', async () => {
+    const name = await toastPrompt(t('sidebar.newProject') || '+ Projekt', t('sidebar.projectPlaceholder') || 'Projektname…');
+    if (name) createProject(name);
   });
-  searchInput.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
+  iconRow.appendChild(newProjectBtn);
+
+  // Rechte Icon-Gruppe: Search + Sort
+  const rightBtns = document.createElement('div');
+  rightBtns.className = 'flex items-center gap-1';
+
+  // Such-Button
+  const searchToggleBtn = document.createElement('button');
+  searchToggleBtn.className = 'bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm w-7 h-7 flex items-center justify-center leading-none transition-all hover:border-accent hover:text-accent';
+  searchToggleBtn.innerHTML = '&#128269;';
+  searchToggleBtn.title = t('sidebar.searchPlaceholder') || 'Suche';
+  searchToggleBtn.addEventListener('click', (e: Event) => {
+    e.stopPropagation();
+    searchVisible = !searchVisible;
+    const wrap = document.getElementById('sidebar-search-wrap');
+    if (wrap) {
+      wrap.style.display = searchVisible ? 'block' : 'none';
+    }
+    if (searchVisible) {
+      const input = document.getElementById('sidebar-search-input') as HTMLInputElement | null;
+      if (input) { input.focus(); }
+    } else {
+      // Suche schließen = Suchtext löschen
       currentSearch = '';
-      searchInput.value = '';
+      const input = document.getElementById('sidebar-search-input') as HTMLInputElement | null;
+      if (input) input.value = '';
       renderProjectList();
     }
   });
-  searchWrap.appendChild(searchInput);
+  rightBtns.appendChild(searchToggleBtn);
 
-  // Clear-Button im Suchfeld
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'absolute right-1.5 top-1/2 -translate-y-1/2 text-text-dim text-xs bg-transparent border-none cursor-pointer hover:text-text leading-none p-0.5';
-  clearBtn.textContent = '×';
-  clearBtn.title = 'Suche zurücksetzen';
-  clearBtn.style.display = currentSearch ? 'block' : 'none';
-  clearBtn.addEventListener('click', () => {
-    currentSearch = '';
-    searchInput.value = '';
-    renderProjectList();
-  });
-  searchWrap.appendChild(clearBtn);
-  container.appendChild(searchWrap);
-
-  // Sort-Zeile
+  // Sort-Button (Icon)
   const sortRow = document.createElement('div');
   sortRow.className = 'relative';
 
   const sortToggleBtn = document.createElement('button');
   sortToggleBtn.setAttribute('data-sort-toggle', '');
-  sortToggleBtn.className = 'w-full flex items-center justify-between gap-1 bg-surface-2 border border-border rounded-md text-text-dim font-sans text-[11px] px-2.5 py-1 cursor-pointer transition-colors hover:border-accent hover:text-accent';
-  sortToggleBtn.innerHTML = `<span class="font-mono uppercase tracking-wide text-[10px]">${t('sidebar.sortLabel')}</span><span class="sort-mode-label text-text truncate">${sortModeLabel(currentSort)}</span><span class="ml-auto opacity-60">▾</span>`;
+  sortToggleBtn.className = 'bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm w-7 h-7 flex items-center justify-center leading-none transition-all hover:border-accent hover:text-accent';
+  sortToggleBtn.innerHTML = '&#8597;';
+  sortToggleBtn.title = t('sidebar.sortLabel') || 'Sortierung';
 
   sortToggleBtn.addEventListener('click', (e: Event) => {
     e.stopPropagation();
@@ -144,7 +154,7 @@ function createSidebarHeader(): HTMLDivElement {
   // Sort-Dropdown
   const sortDropdown = document.createElement('div');
   sortDropdown.id = 'sidebar-sort-dropdown';
-  sortDropdown.className = 'absolute left-0 right-0 top-full mt-0.5 bg-surface border border-border rounded-md shadow-[0_4px_16px_rgba(0,0,0,0.3)] z-50 py-0.5';
+  sortDropdown.className = 'absolute left-0 top-full mt-0.5 bg-surface border border-border rounded-md shadow-[0_4px_16px_rgba(0,0,0,0.3)] z-50 py-0.5 min-w-[160px]';
   sortDropdown.style.display = 'none';
 
   const sortModes: SortMode[] = ['custom', 'alpha-asc', 'alpha-desc', 'updated-desc', 'updated-asc', 'task-count'];
@@ -163,7 +173,52 @@ function createSidebarHeader(): HTMLDivElement {
     sortDropdown.appendChild(item);
   }
   sortRow.appendChild(sortDropdown);
-  container.appendChild(sortRow);
+  rightBtns.appendChild(sortRow);
+  iconRow.appendChild(rightBtns);
+  container.appendChild(iconRow);
+
+  // Suchfeld (standardmäßig verborgen)
+  const searchWrap = document.createElement('div');
+  searchWrap.id = 'sidebar-search-wrap';
+  searchWrap.className = 'relative mb-1';
+  searchWrap.style.display = searchVisible ? 'block' : 'none';
+
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.id = 'sidebar-search-input';
+  searchInput.placeholder = t('sidebar.searchPlaceholder');
+  searchInput.value = currentSearch;
+  searchInput.autocomplete = 'off';
+  searchInput.className = 'w-full bg-surface-2 border border-border rounded-md text-text font-sans text-[12px] px-2.5 py-1.5 pr-7 outline-none transition-colors focus:border-accent placeholder:text-text-dim';
+  searchInput.addEventListener('input', () => {
+    currentSearch = searchInput.value;
+    renderProjectList();
+  });
+  searchInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      currentSearch = '';
+      searchInput.value = '';
+      searchVisible = false;
+      const wrap = document.getElementById('sidebar-search-wrap');
+      if (wrap) wrap.style.display = 'none';
+      renderProjectList();
+    }
+  });
+  searchWrap.appendChild(searchInput);
+
+  // Clear-Button im Suchfeld
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'absolute right-1.5 top-1/2 -translate-y-1/2 text-text-dim text-xs bg-transparent border-none cursor-pointer hover:text-text leading-none p-0.5';
+  clearBtn.textContent = '×';
+  clearBtn.title = 'Suche zurücksetzen';
+  clearBtn.style.display = currentSearch ? 'block' : 'none';
+  clearBtn.addEventListener('click', () => {
+    currentSearch = '';
+    searchInput.value = '';
+    renderProjectList();
+  });
+  searchWrap.appendChild(clearBtn);
+  container.appendChild(searchWrap);
 
   // Dropdown schließen bei Klick außerhalb
   document.addEventListener('click', () => {
@@ -288,12 +343,8 @@ export function renderProjectList(): void {
   const visibleProjects = sortProjects(filterProjects(state.projects));
 
   // Clear-Button-Sichtbarkeit aktualisieren
-  const clearBtn = document.querySelector('#sidebar-search-sort .absolute') as HTMLElement | null;
+  const clearBtn = document.querySelector('#sidebar-search-wrap .absolute') as HTMLElement | null;
   if (clearBtn) clearBtn.style.display = currentSearch ? 'block' : 'none';
-
-  // Sort-Label aktualisieren
-  const sortLabel = document.querySelector('#sidebar-search-sort .sort-mode-label') as HTMLElement | null;
-  if (sortLabel) sortLabel.textContent = sortModeLabel(currentSort);
 
   // Drag & Drop nur bei Custom-Sortierung
   const dragEnabled = currentSort === 'custom';
@@ -335,6 +386,37 @@ export function renderProjectList(): void {
     const projects = groups.get(keys[0] || UNASSIGNED) || visibleProjects;
     for (const p of projects) {
       list.appendChild(createProjectItem(p));
+    }
+    // SortableJS für flache Liste (nur bei Custom-Sortierung)
+    if (dragEnabled) {
+      const flatSortable = Sortable.create(list as HTMLElement, {
+        group: 'sidebar-projects',
+        animation: 150,
+        delay: 400,
+        delayOnTouchOnly: true,
+        touchStartThreshold: 5,
+        draggable: '.project-item',
+        ghostClass: 'sidebar-drag-ghost',
+        async onEnd() {
+          const allItems = list.querySelectorAll<HTMLElement>('.project-item[data-id]');
+          const ids = Array.from(allItems).map(el => el.dataset.id!).filter(Boolean);
+          if (ids.length === 0) return;
+          const idIndex = new Map(ids.map((id, i) => [id, i]));
+          state.projects.sort((a, b) => {
+            const ai = idIndex.get(a._id) ?? Number.MAX_SAFE_INTEGER;
+            const bi = idIndex.get(b._id) ?? Number.MAX_SAFE_INTEGER;
+            return ai - bi;
+          });
+          try {
+            await api.post('/api/projects/reorder', { ids });
+            toast.success(t('sidebar.reorderSaved') || 'Reihenfolge gespeichert', { timeout: 1500 });
+          } catch (err) {
+            console.error('Reorder projects failed:', err);
+            toast.error('Reihenfolge konnte nicht gespeichert werden');
+          }
+        },
+      });
+      sortableInstances.push(flatSortable);
     }
     return;
   }
@@ -397,6 +479,28 @@ export function renderProjectList(): void {
         const targetOwner = (evt.to as HTMLElement).dataset.owner;
         if (projectId && targetOwner) {
           reassignOwner(projectId, targetOwner === UNASSIGNED ? null : targetOwner);
+        }
+      },
+      async onEnd() {
+        if (!dragEnabled) return;
+        // Alle sichtbaren Projekt-Items in ihrer neuen DOM-Reihenfolge auslesen
+        const allItems = document.querySelectorAll<HTMLElement>('#project-list .project-item[data-id]');
+        const ids = Array.from(allItems).map(el => el.dataset.id!).filter(Boolean);
+        if (ids.length === 0) return;
+        // Optimistisch: state.projects entsprechend umsortieren
+        const idIndex = new Map(ids.map((id, i) => [id, i]));
+        state.projects.sort((a, b) => {
+          const ai = idIndex.get(a._id) ?? Number.MAX_SAFE_INTEGER;
+          const bi = idIndex.get(b._id) ?? Number.MAX_SAFE_INTEGER;
+          return ai - bi;
+        });
+        // Neue Reihenfolge ans Backend senden
+        try {
+          await api.post('/api/projects/reorder', { ids });
+          toast.success(t('sidebar.reorderSaved') || 'Reihenfolge gespeichert', { timeout: 1500 });
+        } catch (err) {
+          console.error('Reorder projects failed:', err);
+          toast.error('Reihenfolge konnte nicht gespeichert werden');
         }
       },
     });

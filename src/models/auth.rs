@@ -71,16 +71,38 @@ pub struct ResetPasswordRequest {
     pub password: String,
 }
 
+/// Scope eines Agent-Tokens: global (für alle Nutzer) oder personal (nur Ersteller).
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TokenScope {
+    #[default]
+    Global,
+    Personal,
+}
+
 /// Ein Agent-Token für API-Zugriff ohne Login.
+/// Das `token_hash` Feld enthält SHA-256-Hash des Secrets.
+/// Das Klartextgeheimnis wird **nur beim Erstellen** zurückgegeben.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AgentToken {
     pub id: String,
     pub name: String,
-    pub token: String,
+    /// SHA-256-Hash des Token-Secrets (hex-kodiert). Kein Klartext gespeichert.
+    pub token_hash: String,
     pub role: String,
     #[serde(default = "default_true")]
     pub active: bool,
     pub created_at: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub creator: String,
+    #[serde(default)]
+    pub last_used: Option<String>,
+    #[serde(default)]
+    pub scope: TokenScope,
+    #[serde(default)]
+    pub expires_at: Option<String>,
 }
 
 /// Anfrage zum Erstellen eines Agent-Tokens.
@@ -88,6 +110,12 @@ pub struct AgentToken {
 pub struct CreateTokenRequest {
     pub name: String,
     pub role: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub scope: Option<TokenScope>,
+    #[serde(default)]
+    pub expires_at: Option<String>,
 }
 
 /// Anfrage zum Aktualisieren eines Agent-Tokens.
@@ -96,6 +124,20 @@ pub struct UpdateTokenRequest {
     pub name: Option<String>,
     pub role: Option<String>,
     pub active: Option<bool>,
+    pub description: Option<String>,
+}
+
+/// Hasht ein Token-Secret mit SHA-256 (hex-kodiert).
+pub fn hash_token_secret(secret: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(secret.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+/// Verifiziert ein Token-Secret gegen seinen SHA-256-Hash.
+pub fn verify_token_secret(secret: &str, hash: &str) -> bool {
+    hash_token_secret(secret) == hash
 }
 
 /// Status einer CLI-Login-Session (Device Flow).
@@ -150,7 +192,9 @@ pub struct OAuthClient {
     pub created_at: String,
 }
 
-fn default_auth_method() -> String { "client_secret_post".to_string() }
+fn default_auth_method() -> String {
+    "client_secret_post".to_string()
+}
 
 /// OAuth 2.0 Authorization Code (kurzlebig, einmalig einlösbar).
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -196,6 +240,7 @@ pub struct OAuthAuthorizeRequest {
 
 /// OAuth 2.0 Token Request (POST body).
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct OAuthTokenRequest {
     pub grant_type: String,
     #[serde(default)]
@@ -218,4 +263,109 @@ pub fn generate_oauth_code() -> String {
     let mut rng = rand::thread_rng();
     let bytes: [u8; 32] = rng.gen();
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Failing tests: müssen zunächst rot sein ---
+
+    #[test]
+    fn test_hash_token_secret_produces_hex_sha256() {
+        // SHA-256("plk_test") soll ein 64-Zeichen langer Hex-String sein
+        let secret = "plk_test";
+        let hash = hash_token_secret(secret);
+        assert_eq!(hash.len(), 64, "SHA-256 hex muss 64 Zeichen lang sein");
+        assert!(
+            hash.chars().all(|c| c.is_ascii_hexdigit()),
+            "Nur Hex-Zeichen erwartet"
+        );
+    }
+
+    #[test]
+    fn test_verify_token_secret_correct() {
+        let secret = generate_agent_token();
+        let hash = hash_token_secret(&secret);
+        assert!(
+            verify_token_secret(&secret, &hash),
+            "Korrekt: Secret passt zum Hash"
+        );
+    }
+
+    #[test]
+    fn test_verify_token_secret_wrong() {
+        let hash = hash_token_secret("plk_correct");
+        assert!(
+            !verify_token_secret("plk_wrong", &hash),
+            "Falsch: anderes Secret darf nicht passen"
+        );
+    }
+
+    #[test]
+    fn test_agent_token_no_plaintext_in_struct() {
+        // AgentToken soll token_hash haben, kein token (Klartext)
+        let token = AgentToken {
+            id: "id1".to_string(),
+            name: "test".to_string(),
+            token_hash: hash_token_secret("plk_secret"),
+            role: "user".to_string(),
+            active: true,
+            created_at: "2026-01-01".to_string(),
+            description: "Beschreibung".to_string(),
+            creator: "admin".to_string(),
+            last_used: None,
+            scope: TokenScope::Global,
+            expires_at: None,
+        };
+        // JSON soll kein "token" Klartext-Feld enthalten, nur token_hash
+        let json = serde_json::to_string(&token).unwrap();
+        assert!(json.contains("token_hash"), "token_hash muss im JSON sein");
+        assert!(
+            !json.contains("\"token\":"),
+            "Kein Klartext-token Feld im JSON"
+        );
+    }
+
+    #[test]
+    fn test_token_scope_default_is_global() {
+        let scope = TokenScope::default();
+        assert_eq!(scope, TokenScope::Global);
+    }
+
+    #[test]
+    fn test_hash_is_deterministic() {
+        // Gleicher Input → gleicher Hash (SHA-256 ist deterministisch)
+        let secret = "plk_deterministic";
+        assert_eq!(hash_token_secret(secret), hash_token_secret(secret));
+    }
+
+    #[test]
+    fn test_different_secrets_different_hashes() {
+        let h1 = hash_token_secret("plk_aaa");
+        let h2 = hash_token_secret("plk_bbb");
+        assert_ne!(
+            h1, h2,
+            "Verschiedene Secrets müssen verschiedene Hashes ergeben"
+        );
+    }
+
+    #[test]
+    fn test_create_token_request_has_description_and_scope() {
+        // CreateTokenRequest soll description und scope akzeptieren
+        let json = r#"{"name":"CI","role":"user","description":"For CI/CD","scope":"global"}"#;
+        let req: CreateTokenRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.name, "CI");
+        assert_eq!(req.description, "For CI/CD");
+        assert_eq!(req.scope, Some(TokenScope::Global));
+    }
+
+    #[test]
+    fn test_create_token_request_minimal() {
+        // Ohne description/scope soll es defaulten
+        let json = r#"{"name":"CI","role":"user"}"#;
+        let req: CreateTokenRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.description, "");
+        assert!(req.scope.is_none());
+    }
 }

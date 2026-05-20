@@ -1,13 +1,13 @@
 // Projekt-Hilfsfunktionen: Default-Projekt, SSE-Updates, Archivierung, Bootstrap.
 
-use chrono::{Local, Utc};
+use chrono::Utc;
 use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::models::*;
+use crate::services::auth_service::hash_password;
 use crate::state::AppState;
 use crate::store::DataStore;
-use crate::services::auth_service::hash_password;
 
 /// SSE-Update an alle Listener eines Projekts senden und ggf. Git-Sync auslösen.
 /// Sendet ein generisches "project_update" Event (Full-Refetch).
@@ -17,14 +17,23 @@ pub async fn publish_update(state: &AppState, project_id: &str) {
 
 /// Granulares SSE-Event senden. Format: `{"event":"<type>","data":<payload>}`
 /// Akzeptiert sowohl UUID als auch Slug als project_id.
-pub async fn publish_event(state: &AppState, project_id: &str, event_type: &str, data: serde_json::Value) {
+pub async fn publish_event(
+    state: &AppState,
+    project_id: &str,
+    event_type: &str,
+    data: serde_json::Value,
+) {
     let events = state.events.lock().await;
     // Versuche erst direkt, dann per aufgelöster ID (Slug → UUID).
     let found = if events.contains_key(project_id) {
         Some(project_id.to_string())
     } else {
         // Slug → UUID auflösen
-        state.store.resolve_project_id(project_id).await.ok()
+        state
+            .store
+            .resolve_project_id(project_id)
+            .await
+            .ok()
             .filter(|real_id| events.contains_key(real_id.as_str()))
     };
     if let Some(ref key) = found {
@@ -43,6 +52,7 @@ pub async fn publish_event(state: &AppState, project_id: &str, event_type: &str,
 }
 
 /// Löst einen asynchronen Git-Sync aus (fire-and-forget).
+#[allow(dead_code)]
 pub fn trigger_git_sync(state: AppState, project_id: String) {
     tokio::spawn(async move {
         // Projekt laden und prüfen ob Git aktiviert ist
@@ -118,6 +128,8 @@ pub fn default_project(title: String) -> ProjectDoc {
         users: vec![],
         tasks: vec![],
         git: None,
+        webhook_url: None,
+        order: 0,
     }
 }
 
@@ -128,10 +140,14 @@ pub async fn archive_old_tasks(store: &DataStore) -> Result<(), ApiError> {
     let cutoff = Utc::now() - chrono::Duration::days(14);
 
     for mut project in projects {
-        let done_col_id = project.columns.iter()
+        let done_col_id = project
+            .columns
+            .iter()
             .find(|c| c.title == "Done")
             .map(|c| c.id.clone());
-        let archive_col_id = project.columns.iter()
+        let archive_col_id = project
+            .columns
+            .iter()
             .find(|c| c.title == "_archive")
             .map(|c| c.id.clone());
 
@@ -152,7 +168,8 @@ pub async fn archive_old_tasks(store: &DataStore) -> Result<(), ApiError> {
                     task.previous_row = task.column_id.clone();
                     task.column_id = archive_id.clone();
                     task.updated_at = Utc::now().to_rfc3339();
-                    task.logs.push(crate::models::log_entry("system", "auto-archived"));
+                    task.logs
+                        .push(crate::models::log_entry("system", "auto-archived"));
                     changed = true;
                 }
             }

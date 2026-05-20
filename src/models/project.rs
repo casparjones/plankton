@@ -25,6 +25,12 @@ pub struct ProjectDoc {
     /// Optionale Git-Repository-Konfiguration für automatische Synchronisation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub git: Option<GitConfig>,
+    /// Optionale Webhook-URL für ausgehende Events (task.moved, task.commented, etc.).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webhook_url: Option<String>,
+    /// Reihenfolge des Projekts in der Sidebar (aufsteigend, 0-basiert).
+    #[serde(default)]
+    pub order: i32,
 }
 
 /// Git-Repository-Konfiguration für ein Projekt.
@@ -49,8 +55,12 @@ pub struct GitConfig {
     pub last_error: Option<String>,
 }
 
-fn default_branch() -> String { "main".to_string() }
-fn default_path() -> String { "plankton.json".to_string() }
+fn default_branch() -> String {
+    "main".to_string()
+}
+fn default_path() -> String {
+    "plankton.json".to_string()
+}
 
 /// Eine Spalte im Kanban-Board.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -107,7 +117,9 @@ pub fn project_slugify(title: &str) -> String {
     let mut prev_hyphen = true; // start true to trim leading hyphens
     for c in s.chars() {
         if c == '-' {
-            if !prev_hyphen { result.push('-'); }
+            if !prev_hyphen {
+                result.push('-');
+            }
             prev_hyphen = true;
         } else {
             result.push(c);
@@ -115,7 +127,9 @@ pub fn project_slugify(title: &str) -> String {
         }
     }
     // Trim trailing hyphen
-    if result.ends_with('-') { result.pop(); }
+    if result.ends_with('-') {
+        result.pop();
+    }
     // Truncate to 60 chars on word boundary
     if result.len() > 60 {
         if let Some(pos) = result[..60].rfind('-') {
@@ -130,7 +144,8 @@ pub fn project_slugify(title: &str) -> String {
 /// Generiert einen eindeutigen Task-Slug innerhalb einer Task-Liste.
 pub fn unique_task_slug(title: &str, existing_tasks: &[Task], exclude_id: &str) -> String {
     let base = project_slugify(title);
-    let existing: Vec<&str> = existing_tasks.iter()
+    let existing: Vec<&str> = existing_tasks
+        .iter()
         .filter(|t| t.id != exclude_id)
         .map(|t| t.slug.as_str())
         .collect();
@@ -202,7 +217,10 @@ pub struct Task {
     pub subtask_ids: Vec<String>,
 }
 
-fn default_task_type() -> String { "task".to_string() }
+#[allow(dead_code)]
+fn default_task_type() -> String {
+    "task".to_string()
+}
 
 /// Erzeugt einen strukturierten Log-Eintrag.
 pub fn log_entry(user: &str, msg: &str) -> serde_json::Value {

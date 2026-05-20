@@ -46,11 +46,20 @@ pub async fn update_column(
     let mut new_slug = slugify(&column.title);
     let base_slug = new_slug.clone();
     let mut counter = 1;
-    while project.columns.iter().any(|c| c.id != column_id && c.slug == new_slug) {
+    while project
+        .columns
+        .iter()
+        .any(|c| c.id != column_id && c.slug == new_slug)
+    {
         new_slug = format!("{}_{}", base_slug, counter);
         counter += 1;
     }
-    let was_locked = project.columns.iter().find(|c| c.id == column_id).map(|c| c.locked).unwrap_or(false);
+    let was_locked = project
+        .columns
+        .iter()
+        .find(|c| c.id == column_id)
+        .map(|c| c.locked)
+        .unwrap_or(false);
     if let Some(existing) = project.columns.iter_mut().find(|c| c.id == column_id) {
         let mut col = column;
         col.slug = new_slug;
@@ -68,8 +77,14 @@ pub async fn delete_column(
     Path((id, column_id)): Path<(String, String)>,
 ) -> Result<Json<ProjectDoc>, ApiError> {
     let mut project = state.store.resolve_project(&id).await?;
-    if project.columns.iter().any(|c| c.id == column_id && c.locked) {
-        return Err(ApiError::BadRequest("Locked columns cannot be deleted".into()));
+    if project
+        .columns
+        .iter()
+        .any(|c| c.id == column_id && c.locked)
+    {
+        return Err(ApiError::BadRequest(
+            "Locked columns cannot be deleted".into(),
+        ));
     }
     project.columns.retain(|c| c.id != column_id);
     project.tasks.retain(|t| t.column_id != column_id);

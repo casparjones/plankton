@@ -7,6 +7,10 @@ import { createApp } from 'vue'
 import Toast from 'vue-toastification'
 import App from './App.vue'
 
+// Global state bridge für Tests und Debugging
+import { state } from './state'
+;(window as any).__state = state
+
 const app = createApp(App)
 app.use(Toast, {
   position: 'bottom-right',

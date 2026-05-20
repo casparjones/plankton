@@ -70,46 +70,46 @@ pub async fn request_logger(req: Request, next: Next) -> Response {
 /// Gibt das Startup-Banner und die Routen-Tabelle im Terminal aus.
 pub fn print_startup_banner(port: &str) {
     let routes: &[(&str, &str)] = &[
-        ("POST",   "/auth/login"),
-        ("POST",   "/auth/logout"),
-        ("GET",    "/auth/me"),
-        ("POST",   "/auth/change-password"),
-        ("GET",    "/api/projects"),
-        ("POST",   "/api/projects"),
-        ("GET",    "/api/projects/:id"),
-        ("PUT",    "/api/projects/:id"),
+        ("POST", "/auth/login"),
+        ("POST", "/auth/logout"),
+        ("GET", "/auth/me"),
+        ("POST", "/auth/change-password"),
+        ("GET", "/api/projects"),
+        ("POST", "/api/projects"),
+        ("GET", "/api/projects/:id"),
+        ("PUT", "/api/projects/:id"),
         ("DELETE", "/api/projects/:id"),
-        ("POST",   "/api/projects/:id/tasks"),
-        ("PUT",    "/api/projects/:id/tasks/:task_id"),
+        ("POST", "/api/projects/:id/tasks"),
+        ("PUT", "/api/projects/:id/tasks/:task_id"),
         ("DELETE", "/api/projects/:id/tasks/:task_id"),
-        ("POST",   "/api/projects/:id/tasks/:task_id/move"),
-        ("POST",   "/api/projects/:id/columns"),
-        ("PUT",    "/api/projects/:id/columns/:column_id"),
+        ("POST", "/api/projects/:id/tasks/:task_id/move"),
+        ("POST", "/api/projects/:id/columns"),
+        ("PUT", "/api/projects/:id/columns/:column_id"),
         ("DELETE", "/api/projects/:id/columns/:column_id"),
-        ("POST",   "/api/projects/:id/users"),
-        ("PUT",    "/api/projects/:id/users/:user_id"),
+        ("POST", "/api/projects/:id/users"),
+        ("PUT", "/api/projects/:id/users/:user_id"),
         ("DELETE", "/api/projects/:id/users/:user_id"),
-        ("GET",    "/api/projects/:id/events"),
-        ("GET",    "/api/admin/users"),
-        ("POST",   "/api/admin/users"),
-        ("PUT",    "/api/admin/users/:id"),
+        ("GET", "/api/projects/:id/events"),
+        ("GET", "/api/admin/users"),
+        ("POST", "/api/admin/users"),
+        ("PUT", "/api/admin/users/:id"),
         ("DELETE", "/api/admin/users/:id"),
-        ("PUT",    "/api/admin/users/:id/password"),
-        ("GET",    "/api/admin/tokens"),
-        ("POST",   "/api/admin/tokens"),
-        ("PUT",    "/api/admin/tokens/:id"),
+        ("PUT", "/api/admin/users/:id/password"),
+        ("GET", "/api/admin/tokens"),
+        ("POST", "/api/admin/tokens"),
+        ("PUT", "/api/admin/tokens/:id"),
         ("DELETE", "/api/admin/tokens/:id"),
-        ("GET",    "/mcp/tools"),
-        ("POST",   "/mcp/call"),
-        ("POST",   "/mcp (JSON-RPC 2.0)"),
-        ("GET",    "/docs"),
-        ("GET",    "/skill.md"),
-        ("GET",    "/install"),
-        ("GET",    "/cli/plankton"),
-        ("GET",    "/cli-login"),
-        ("POST",   "/auth/cli-init"),
-        ("GET",    "/auth/cli-poll/:id"),
-        ("POST",   "/auth/cli-approve"),
+        ("GET", "/mcp/tools"),
+        ("POST", "/mcp/call"),
+        ("POST", "/mcp (JSON-RPC 2.0)"),
+        ("GET", "/docs"),
+        ("GET", "/skill.md"),
+        ("GET", "/install"),
+        ("GET", "/cli/plankton"),
+        ("GET", "/cli-login"),
+        ("POST", "/auth/cli-init"),
+        ("GET", "/auth/cli-poll/:id"),
+        ("POST", "/auth/cli-approve"),
     ];
 
     println!();
@@ -125,11 +125,7 @@ pub fn print_startup_banner(port: &str) {
 }
 
 /// Auth-Guard Middleware: Prüft JWT oder Agent-Token für geschützte Routen.
-pub async fn auth_guard(
-    State(state): State<AppState>,
-    mut req: Request,
-    next: Next,
-) -> Response {
+pub async fn auth_guard(State(state): State<AppState>, mut req: Request, next: Next) -> Response {
     let path = req.uri().path().to_string();
 
     // Öffentliche Pfade: /auth/*, /docs, OAuth-Endpoints und statische Dateien.
@@ -179,6 +175,12 @@ pub async fn auth_guard(
                 )
                     .into_response();
             }
+            // last_used aktualisieren (fire & forget)
+            let store = state.store.clone();
+            let token_id = agent_token.id.clone();
+            tokio::spawn(async move {
+                let _ = store.touch_token(&token_id).await;
+            });
             let claims = Claims {
                 sub: agent_token.id.clone(),
                 username: agent_token.name.clone(),

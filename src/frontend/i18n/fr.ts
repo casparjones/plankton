@@ -37,6 +37,8 @@ export default {
     sortUpdatedDesc: 'Modifié récemment',
     sortUpdatedAsc: 'Les plus anciens',
     sortTaskCount: 'Nombre de tâches',
+    newProject: '+ Projet',
+    reorderSaved: 'Ordre sauvegardé',
   },
 
   board: {

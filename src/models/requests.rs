@@ -90,6 +90,7 @@ pub struct ToolDef {
 
 /// JSON-RPC 2.0 Request
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct JsonRpcRequest {
     pub jsonrpc: Option<String>,
     pub method: String,
