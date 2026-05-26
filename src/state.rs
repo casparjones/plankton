@@ -1,7 +1,7 @@
 // Zentraler Anwendungs-State.
 
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{broadcast, Mutex, RwLock};
 
 use crate::models::{CliSession, OAuthAuthCode, OAuthClient, OAuthRefreshToken};
 use crate::store::DataStore;
@@ -33,6 +33,10 @@ pub struct AppState {
     pub write_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
     /// HTTP-Client für ausgehende Webhooks (wiederverwendet Connection-Pool).
     pub http_client: Client,
+    /// Zeitpunkt des letzten erfolgreichen Maintenance-Job-Laufs.
+    pub last_maintenance_run: Arc<RwLock<Option<chrono::DateTime<chrono::Utc>>>>,
+    /// Zeitpunkt des Server-Starts (für Next-Run-Berechnung vor erstem Job).
+    pub started_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl AppState {

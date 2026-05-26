@@ -130,44 +130,88 @@ pub fn default_project(title: String) -> ProjectDoc {
         git: None,
         webhook_url: None,
         order: 0,
+        r#type: None,
+        done_expire: None,
+        archive_delete: None,
+        pinned: None,
     }
 }
 
 /// Prüft alle Projekte und verschiebt Tasks, die ≥14 Tage in "Done" liegen,
 /// in die versteckte "_archive"-Spalte.
+///
+/// Deprecated: Wird durch `run_maintenance_job` ersetzt, bleibt für Rückwärtskompatibilität.
+#[allow(dead_code)]
 pub async fn archive_old_tasks(store: &DataStore) -> Result<(), ApiError> {
+    run_maintenance_job(store).await
+}
+
+/// Stündlicher Wartungs-Job: Auto-Archivierung und Auto-Delete.
+///
+/// Phase 1 – Done → Archiv:
+/// Für jedes Projekt mit `doneExpire != -1`:
+///   Tasks in Done-Spalten, deren `column_entered_at` älter als `doneExpire` Tage ist,
+///   werden in die `_archive`-Spalte verschoben.
+///
+/// Phase 2 – Archiv → Löschen:
+/// Für jedes Projekt mit `archiveDelete != -1`:
+///   Tasks in `_archive`-Spalten, deren `column_entered_at` älter als `archiveDelete` Tage ist,
+///   werden gelöscht.
+///
+/// Fehler pro Task werden isoliert – ein Fehler stoppt nicht den gesamten Job.
+pub async fn run_maintenance_job(store: &DataStore) -> Result<(), ApiError> {
     let projects = store.list_projects().await?;
-    let cutoff = Utc::now() - chrono::Duration::days(14);
+    let now = Utc::now();
 
     for mut project in projects {
-        let done_col_id = project
-            .columns
-            .iter()
-            .find(|c| c.title == "Done")
-            .map(|c| c.id.clone());
-        let archive_col_id = project
-            .columns
-            .iter()
-            .find(|c| c.title == "_archive")
-            .map(|c| c.id.clone());
+        let project_id = project.id.clone();
+        let done_expire = project.done_expire();
+        let archive_delete = project.archive_delete();
 
-        let (done_id, archive_id) = match (done_col_id, archive_col_id) {
-            (Some(d), Some(a)) => (d, a),
-            _ => continue,
-        };
+        // Spalten-IDs ermitteln
+        let archive_col_ids: Vec<String> = project
+            .columns
+            .iter()
+            .filter(|c| c.title == "_archive")
+            .map(|c| c.id.clone())
+            .collect();
+
+        // Done-Spalten: Titel enthält "Done" (case-insensitive), aber kein "_archive"
+        let done_col_ids: Vec<String> = project
+            .columns
+            .iter()
+            .filter(|c| c.title.to_lowercase().contains("done") && !c.title.starts_with('_'))
+            .map(|c| c.id.clone())
+            .collect();
 
         let mut changed = false;
-        for task in &mut project.tasks {
-            if task.column_id != done_id {
-                continue;
-            }
-            let updated = chrono::DateTime::parse_from_rfc3339(&task.updated_at)
-                .map(|dt| dt.with_timezone(&Utc));
-            if let Ok(dt) = updated {
-                if dt < cutoff {
+
+        // --- Phase 1: Done → Archiv ---
+        if done_expire != -1 && !archive_col_ids.is_empty() {
+            let archive_id = archive_col_ids[0].clone();
+            let cutoff = now - chrono::Duration::days(done_expire as i64);
+
+            for task in &mut project.tasks {
+                if !done_col_ids.contains(&task.column_id) {
+                    continue;
+                }
+                // Effektiven Timestamp ermitteln: column_entered_at, sonst updated_at
+                let effective_ts = task.column_entered_at.unwrap_or_else(|| {
+                    chrono::DateTime::parse_from_rfc3339(&task.updated_at)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or(now)
+                });
+                if effective_ts <= cutoff {
+                    tracing::info!(
+                        task_id = %task.id,
+                        project_id = %project_id,
+                        action = "auto-archived",
+                        "Maintenance-Job: Task archiviert"
+                    );
                     task.previous_row = task.column_id.clone();
                     task.column_id = archive_id.clone();
-                    task.updated_at = Utc::now().to_rfc3339();
+                    task.updated_at = now.to_rfc3339();
+                    task.column_entered_at = Some(now);
                     task.logs
                         .push(crate::models::log_entry("system", "auto-archived"));
                     changed = true;
@@ -175,9 +219,52 @@ pub async fn archive_old_tasks(store: &DataStore) -> Result<(), ApiError> {
             }
         }
 
+        // --- Phase 2: Archiv → Löschen ---
+        if archive_delete != -1 && !archive_col_ids.is_empty() {
+            let cutoff = now - chrono::Duration::days(archive_delete as i64);
+            let mut to_delete: Vec<String> = Vec::new();
+
+            for task in &project.tasks {
+                if !archive_col_ids.contains(&task.column_id) {
+                    continue;
+                }
+                let effective_ts = task.column_entered_at.unwrap_or_else(|| {
+                    chrono::DateTime::parse_from_rfc3339(&task.updated_at)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or(now)
+                });
+                if effective_ts <= cutoff {
+                    tracing::info!(
+                        task_id = %task.id,
+                        project_id = %project_id,
+                        action = "auto-deleted",
+                        "Maintenance-Job: Task gelöscht"
+                    );
+                    to_delete.push(task.id.clone());
+                }
+            }
+
+            if !to_delete.is_empty() {
+                // Relationen aufräumen
+                for tid in &to_delete {
+                    for task in &mut project.tasks {
+                        task.blocks.retain(|id| id != tid);
+                        task.blocked_by.retain(|id| id != tid);
+                        task.subtask_ids.retain(|id| id != tid);
+                        if &task.parent_id == tid {
+                            task.parent_id.clear();
+                        }
+                    }
+                }
+                project.tasks.retain(|t| !to_delete.contains(&t.id));
+                changed = true;
+            }
+        }
+
         if changed {
-            store.put_project(project).await?;
-            tracing::info!("Archivierung: Tasks in Projekt verschoben");
+            if let Err(e) = store.put_project(project).await {
+                tracing::error!(project_id = %project_id, error = %e, "Maintenance-Job: Fehler beim Speichern");
+            }
         }
     }
     Ok(())

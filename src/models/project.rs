@@ -1,5 +1,6 @@
 // Datenmodelle für Projekte, Spalten, Nutzer und Aufgaben.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Repräsentiert ein vollständiges Kanban-Projekt als flaches Dokument.
@@ -31,6 +32,83 @@ pub struct ProjectDoc {
     /// Reihenfolge des Projekts in der Sidebar (aufsteigend, 0-basiert).
     #[serde(default)]
     pub order: i32,
+    /// Board-Typ: "kanban" (Standard) oder "list".
+    /// Wird als `type` serialisiert. Default/Fallback: "kanban".
+    /// Beim Deserialisieren darf das Feld fehlen (bestehende Projekte bleiben kompatibel).
+    #[serde(rename = "type", default, serialize_with = "serialize_project_type")]
+    pub r#type: Option<String>,
+    /// Tage bis Tasks aus Done ins Archiv verschoben werden.
+    /// Default: 10. -1 = deaktiviert. Fehlendes Feld → Default beim Lesen.
+    #[serde(
+        rename = "doneExpire",
+        default,
+        serialize_with = "serialize_done_expire"
+    )]
+    pub done_expire: Option<i32>,
+    /// Tage bis archivierte Tasks gelöscht werden.
+    /// Default: 90. -1 = deaktiviert. Fehlendes Feld → Default beim Lesen.
+    #[serde(
+        rename = "archiveDelete",
+        default,
+        serialize_with = "serialize_archive_delete"
+    )]
+    pub archive_delete: Option<i32>,
+    /// Board in der Move-To-Board-Auswahl oben anpinnen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned: Option<bool>,
+}
+
+impl ProjectDoc {
+    /// Gibt den effektiven Board-Typ zurück.
+    /// Fallback: "kanban" wenn das Feld fehlt (`None`) oder leer ist.
+    pub fn project_type(&self) -> &str {
+        match self.r#type.as_deref() {
+            Some(t) if !t.is_empty() => t,
+            _ => "kanban",
+        }
+    }
+
+    /// Gibt die effektiven Tage zurück, nach denen Done-Tasks archiviert werden.
+    /// Fallback: 10 wenn das Feld fehlt (`None`).
+    #[allow(dead_code)]
+    pub fn done_expire(&self) -> i32 {
+        self.done_expire.unwrap_or(10)
+    }
+
+    /// Gibt die effektiven Tage zurück, nach denen archivierte Tasks gelöscht werden.
+    /// Fallback: 90 wenn das Feld fehlt (`None`).
+    #[allow(dead_code)]
+    pub fn archive_delete(&self) -> i32 {
+        self.archive_delete.unwrap_or(90)
+    }
+}
+
+/// Serialisiert das `type`-Feld: immer ausgeben, Fallback auf "kanban".
+fn serialize_project_type<S>(value: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let s = match value.as_deref() {
+        Some(t) if !t.is_empty() => t,
+        _ => "kanban",
+    };
+    serializer.serialize_str(s)
+}
+
+/// Serialisiert `doneExpire`: immer ausgeben, Fallback auf 10.
+fn serialize_done_expire<S>(value: &Option<i32>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_i32(value.unwrap_or(10))
+}
+
+/// Serialisiert `archiveDelete`: immer ausgeben, Fallback auf 90.
+fn serialize_archive_delete<S>(value: &Option<i32>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_i32(value.unwrap_or(90))
 }
 
 /// Git-Repository-Konfiguration für ein Projekt.
@@ -204,6 +282,11 @@ pub struct Task {
     pub comments: Vec<serde_json::Value>,
     pub created_at: String,
     pub updated_at: String,
+    /// Zeitstempel, wann der Task zuletzt die Spalte gewechselt hat.
+    /// Optional für Rückwärtskompatibilität – fehlt bei Tasks die vor diesem Feature erstellt wurden.
+    /// Fallback: `updated_at` (Best-Effort).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column_entered_at: Option<DateTime<Utc>>,
     /// Task-Typ: "task" (Standard), "epic" oder "job".
     pub task_type: String,
     /// IDs der Tasks, die dieser Task blockiert.
@@ -251,6 +334,7 @@ impl Default for Task {
             comments: vec![],
             created_at: String::new(),
             updated_at: String::new(),
+            column_entered_at: None,
             task_type: "task".to_string(),
             blocks: vec![],
             blocked_by: vec![],

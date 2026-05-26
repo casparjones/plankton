@@ -5,22 +5,42 @@
 // ============================================================
 
 #[cfg(test)]
+mod auto_archive_job_test;
+#[cfg(test)]
 mod blocking_test;
 #[cfg(test)]
 mod burndown_test;
 #[cfg(test)]
 mod cli_write_test;
+#[cfg(test)]
+mod column_entered_at_http_test;
+#[cfg(test)]
+mod column_entered_at_test;
 mod config;
 mod controllers;
+#[cfg(test)]
+mod done_expire_http_test;
+#[cfg(test)]
+mod done_expire_test;
 mod error;
+#[cfg(test)]
+mod maintenance_job_integration_test;
 #[cfg(test)]
 mod mcp_compat_test;
 mod middleware;
 mod models;
 #[cfg(test)]
+mod move_task_to_project_http_test;
+#[cfg(test)]
+mod move_task_to_project_test;
+#[cfg(test)]
 mod optimistic_locking_test;
 #[cfg(test)]
 mod project_reorder_test;
+#[cfg(test)]
+mod project_type_http_test;
+#[cfg(test)]
+mod project_type_test;
 mod services;
 #[cfg(test)]
 mod slug_dedup_test;
@@ -117,21 +137,32 @@ async fn main() -> anyhow::Result<()> {
         oauth_refresh_tokens: Arc::new(Mutex::new(HashMap::new())),
         write_locks: Arc::new(Mutex::new(HashMap::new())),
         http_client: Client::new(),
+        last_maintenance_run: Arc::new(tokio::sync::RwLock::new(None)),
+        started_at: chrono::Utc::now(),
     };
 
     // Users-Verzeichnis sicherstellen und Default-Admin anlegen.
     state.store.ensure_users_dir().await?;
     ensure_default_admin(&state.store).await?;
 
-    // Background-Task: Archivierung von Tasks die ≥14 Tage in "Done" liegen.
+    // Background-Task: Stündlicher Wartungs-Job (Auto-Archivierung + Auto-Delete).
     {
-        let archive_store = state.store.clone();
+        let maintenance_store = state.store.clone();
+        let last_run = state.last_maintenance_run.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(86400));
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
             loop {
                 interval.tick().await;
-                if let Err(e) = archive_old_tasks(&archive_store).await {
-                    tracing::error!("Archivierungs-Fehler: {e}");
+                match crate::services::project_service::run_maintenance_job(&maintenance_store)
+                    .await
+                {
+                    Ok(()) => {
+                        let mut w = last_run.write().await;
+                        *w = Some(chrono::Utc::now());
+                    }
+                    Err(e) => {
+                        tracing::error!("Maintenance-Job Fehler: {e}");
+                    }
                 }
             }
         });
@@ -257,6 +288,7 @@ async fn main() -> anyhow::Result<()> {
             "/api/admin/tokens/:token_id",
             put(admin_update_token).delete(admin_delete_token),
         )
+        .route("/api/admin/system-status", get(admin_system_status))
         .route(
             "/api/admin/oauth-clients",
             get(admin_list_oauth_clients).post(admin_create_oauth_client),

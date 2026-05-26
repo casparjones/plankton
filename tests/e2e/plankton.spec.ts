@@ -50,9 +50,16 @@ async function tryLogin(page: Page): Promise<boolean> {
   await page.locator('button[type="submit"]').click()
 
   // Warte auf Board-Laden oder Fehler
+  // Akzeptiert sowohl Kanban-Boards (.kanban-column) als auch List-Boards (.list-board)
   try {
-    await page.waitForSelector('.kanban-column, #board .kanban-column', { timeout: 10000 })
-    return true
+    await page.waitForSelector('.kanban-column, #board .kanban-column, .list-board, #board', { timeout: 10000 })
+    // Zusätzlich prüfen: #board vorhanden → Login erfolgreich
+    const boardVisible = await page.locator('#board').isVisible().catch(() => false)
+    if (boardVisible) return true
+    // Wenn nur #board da ist aber kein Board-Content → trotzdem erfolgreich (leeres Board)
+    const hasKanban = await page.locator('.kanban-column').count().catch(() => 0)
+    const hasListBoard = await page.locator('.list-board').count().catch(() => 0)
+    return hasKanban > 0 || hasListBoard > 0 || boardVisible
   } catch {
     // Login fehlgeschlagen – prüfe ob Fehlermeldung sichtbar
     const errorVisible = await page.locator('[class*="text-"][class*="#ff"]').isVisible().catch(() => false)
@@ -139,6 +146,90 @@ test.describe('Smoke Tests', () => {
     // Wenn keine Items: Board ist trotzdem OK (leer)
     const itemCount = await items.count()
     console.log(`Gefundene Projekte in Sidebar: ${itemCount}`)
+  })
+
+})
+
+// ─── LIST-BOARD TESTS ────────────────────────────────────────────────────────
+
+test.describe('List-Board Rendering', () => {
+
+  /**
+   * Prüft dass ein Projekt mit type="list" das List-Board rendert:
+   * - .list-board ist vorhanden
+   * - .list-board-column ist vorhanden (eine Spalte)
+   * - .kanban-column ist NICHT vorhanden (kein Kanban-Multi-Spalten-Layout)
+   * - kein "Spalte hinzufügen"-Button sichtbar (.add-column-btn)
+   *
+   * Dieser Test manipuliert den Frontend-State direkt (ohne echtes Backend),
+   * um ein List-Projekt zu simulieren.
+   */
+  test('06 – List-Board: rendert eine Spalte ohne Kanban-Spalten', async ({ page }) => {
+    const loggedIn = await tryLogin(page)
+    if (!loggedIn) { test.skip(); return }
+    await dismissPasswordChangeModal(page)
+
+    // Warte auf Board-Laden
+    await page.waitForSelector('#board', { timeout: 15000 })
+
+    // Simuliere ein List-Projekt via window.__state (globaler Vue-State)
+    await page.evaluate(() => {
+      // @ts-ignore
+      const s = window.__state
+      if (!s || !s.project) return
+      // type auf "list" setzen
+      s.project.type = 'list'
+    })
+
+    // Kurz warten damit Vue re-rendert
+    await page.waitForTimeout(300)
+
+    // List-Board muss erscheinen
+    const listBoard = page.locator('.list-board')
+    await expect(listBoard).toBeVisible({ timeout: 5000 })
+
+    // List-Board-Spalte (eine Spalte) muss vorhanden sein
+    const listColumn = page.locator('.list-board-column')
+    await expect(listColumn).toBeVisible({ timeout: 3000 })
+
+    // Kanban-Columns dürfen NICHT gerendert werden
+    const kanbanCols = page.locator('.kanban-column')
+    await expect(kanbanCols).toHaveCount(0)
+
+    // Kein "Spalte hinzufügen"-Button
+    const addColBtn = page.locator('.add-column-btn')
+    await expect(addColBtn).toHaveCount(0)
+  })
+
+  /**
+   * Prüft dass ein Projekt mit type="kanban" (Standard) das normale
+   * Kanban-Board rendert (keine List-Board-Elemente).
+   */
+  test('07 – Kanban-Board: bleibt unverändert bei type="kanban"', async ({ page }) => {
+    const loggedIn = await tryLogin(page)
+    if (!loggedIn) { test.skip(); return }
+    await dismissPasswordChangeModal(page)
+
+    await page.waitForSelector('#board', { timeout: 15000 })
+
+    // Stelle sicher dass type="kanban" gesetzt ist (Standard)
+    await page.evaluate(() => {
+      // @ts-ignore
+      const s = window.__state
+      if (!s || !s.project) return
+      s.project.type = 'kanban'
+    })
+
+    await page.waitForTimeout(300)
+
+    // Kanban-Spalten müssen vorhanden sein
+    const columns = page.locator('.kanban-column')
+    const count = await columns.count()
+    expect(count).toBeGreaterThan(0)
+
+    // List-Board darf NICHT gerendert werden
+    const listBoard = page.locator('.list-board')
+    await expect(listBoard).toHaveCount(0)
   })
 
 })
@@ -647,7 +738,7 @@ test.describe('Sidebar Suche & Sortierung', () => {
     await expect(searchInput).toBeAttached({ timeout: 5000 })
 
     // Such-Button (🔍) klicken um das Suchfeld einzublenden
-    const searchToggleBtn = page.locator('#sidebar-search-sort button').first()
+    const searchToggleBtn = page.locator('#sidebar-search-toggle')
     await expect(searchToggleBtn).toBeVisible({ timeout: 5000 })
     await searchToggleBtn.click()
     await expect(searchInput).toBeVisible({ timeout: 3000 })
@@ -674,7 +765,7 @@ test.describe('Sidebar Suche & Sortierung', () => {
     }
 
     // Suchfeld ist standardmäßig hidden – Such-Button klicken um es einzublenden
-    const searchToggleBtn = page.locator('#sidebar-search-sort button').first()
+    const searchToggleBtn = page.locator('#sidebar-search-toggle')
     await expect(searchToggleBtn).toBeVisible({ timeout: 5000 })
     await searchToggleBtn.click()
 
@@ -787,6 +878,213 @@ test.describe('Sidebar Suche & Sortierung', () => {
 
 })
 
+// ─── LIST-BOARD ARCHIVE BUTTON TESTS ────────────────────────────────────────
+
+test.describe('List-Board Archive-Button', () => {
+
+  /**
+   * Prüft dass im List-Board jede Task-Karte einen Archive-Button (.task-archive-btn) hat.
+   * Der Button muss sichtbar sein, sobald das List-Board eine Task enthält.
+   */
+  test('40 – List-Board: Archive-Button ist pro Task sichtbar', async ({ page }) => {
+    const loggedIn = await tryLogin(page)
+    if (!loggedIn) { test.skip(); return }
+    await dismissPasswordChangeModal(page)
+
+    await page.waitForSelector('#board', { timeout: 15000 })
+
+    // Simuliere ein List-Projekt mit einem Task
+    await page.evaluate(() => {
+      // @ts-ignore
+      const s = window.__state
+      if (!s || !s.project) return
+      s.project.type = 'list'
+      // Stelle sicher dass mindestens ein Task in der ersten sichtbaren Spalte existiert
+      const visibleCol = s.project.columns
+        .filter((c: any) => !c.hidden)
+        .sort((a: any, b: any) => a.order - b.order)[0]
+      if (!visibleCol) return
+      const tasksInCol = s.project.tasks.filter((t: any) => t.column_id === visibleCol.id)
+      if (tasksInCol.length === 0) {
+        // Dummy-Task injizieren
+        s.project.tasks.push({
+          id: 'test-archive-task-1',
+          title: 'Test Archive Task',
+          column_id: visibleCol.id,
+          order: 0,
+          task_type: 'task',
+          description: '',
+          labels: [],
+          worker: '',
+          blocked_by: [],
+          blocks: [],
+          subtask_ids: [],
+          comments: [],
+          logs: [],
+          points: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          slug: 'test-archive-task-1',
+          creator: 'admin',
+          parent_id: null,
+        })
+      }
+    })
+
+    await page.waitForTimeout(400)
+
+    // List-Board muss sichtbar sein
+    const listBoard = page.locator('.list-board')
+    await expect(listBoard).toBeVisible({ timeout: 5000 })
+
+    // Archive-Button muss pro Task-Karte vorhanden sein
+    const archiveBtns = page.locator('.task-archive-btn')
+    const btnCount = await archiveBtns.count()
+    console.log(`Gefundene Archive-Buttons: ${btnCount}`)
+    expect(btnCount).toBeGreaterThan(0)
+
+    await page.screenshot({ path: '/tmp/plankton-list-archive-btn.png' })
+  })
+
+  /**
+   * Prüft dass der Archive-Button im Kanban-Board NICHT vorhanden ist.
+   */
+  test('41 – Kanban-Board: kein Archive-Button sichtbar', async ({ page }) => {
+    const loggedIn = await tryLogin(page)
+    if (!loggedIn) { test.skip(); return }
+    await dismissPasswordChangeModal(page)
+
+    await page.waitForSelector('#board', { timeout: 15000 })
+
+    // Sicherstellen dass Kanban-Modus aktiv ist
+    await page.evaluate(() => {
+      // @ts-ignore
+      const s = window.__state
+      if (!s || !s.project) return
+      s.project.type = 'kanban'
+    })
+
+    await page.waitForTimeout(300)
+
+    // Kanban-Board muss sichtbar sein
+    const kanbanCols = page.locator('.kanban-column')
+    const colCount = await kanbanCols.count()
+    if (colCount === 0) { test.skip(); return }
+
+    // Kein Archive-Button im Kanban-Board
+    const archiveBtns = page.locator('.task-archive-btn')
+    const btnCount = await archiveBtns.count()
+    console.log(`Archive-Buttons im Kanban-Board: ${btnCount}`)
+    expect(btnCount).toBe(0)
+
+    await page.screenshot({ path: '/tmp/plankton-kanban-no-archive-btn.png' })
+  })
+
+  /**
+   * Prüft dass Klick auf Archive-Button den Task reaktiv aus der Liste entfernt.
+   */
+  test('42 – List-Board: Archive-Button-Klick entfernt Task reaktiv', async ({ page }) => {
+    const loggedIn = await tryLogin(page)
+    if (!loggedIn) { test.skip(); return }
+    await dismissPasswordChangeModal(page)
+
+    await page.waitForSelector('#board', { timeout: 15000 })
+
+    // Simuliere List-Projekt mit einem Task (archivierbar ohne echten API-Call)
+    await page.evaluate(() => {
+      // @ts-ignore
+      const s = window.__state
+      if (!s || !s.project) return
+      s.project.type = 'list'
+
+      const visibleCol = s.project.columns
+        .filter((c: any) => !c.hidden)
+        .sort((a: any, b: any) => a.order - b.order)[0]
+      if (!visibleCol) return
+
+      // Task hinzufügen falls nötig
+      const existing = s.project.tasks.filter((t: any) => t.column_id === visibleCol.id)
+      if (existing.length === 0) {
+        s.project.tasks.push({
+          id: 'test-archive-task-2',
+          title: 'Archive Me',
+          column_id: visibleCol.id,
+          order: 0,
+          task_type: 'task',
+          description: '',
+          labels: [],
+          worker: '',
+          blocked_by: [],
+          blocks: [],
+          subtask_ids: [],
+          comments: [],
+          logs: [],
+          points: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          slug: 'archive-me',
+          creator: 'admin',
+          parent_id: null,
+        })
+      }
+
+      // _archive-Spalte hinzufügen falls nicht vorhanden
+      const hasArchive = s.project.columns.some((c: any) => c.title === '_archive')
+      if (!hasArchive) {
+        s.project.columns.push({
+          id: 'test-archive-col',
+          title: '_archive',
+          order: 99,
+          color: '#444',
+          hidden: true,
+          slug: '_archive',
+          locked: false,
+        })
+      }
+
+      // Mock des API-Calls: fetch überschreiben
+      const origFetch = window.fetch.bind(window)
+      ;(window as any).__origFetch = origFetch
+      ;(window as any).__archiveApiCalled = false
+      window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/move') && init?.method === 'POST') {
+          ;(window as any).__archiveApiCalled = true
+          // Simuliere Erfolg
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return origFetch(input, init)
+      }
+    })
+
+    await page.waitForTimeout(400)
+
+    const listBoard = page.locator('.list-board')
+    await expect(listBoard).toBeVisible({ timeout: 5000 })
+
+    // Anzahl Tasks vor Archivierung
+    const tasksBefore = await page.locator('.list-item').count()
+    console.log(`Tasks vor Archivierung: ${tasksBefore}`)
+    if (tasksBefore === 0) { test.skip(); return }
+
+    // Archive-Button des ersten Tasks klicken
+    const firstArchiveBtn = page.locator('.task-archive-btn').first()
+    await expect(firstArchiveBtn).toBeVisible({ timeout: 3000 })
+    await firstArchiveBtn.click({ force: true })
+
+    // Task sollte nach kurzer Zeit aus der Liste verschwunden sein
+    await page.waitForTimeout(500)
+
+    const tasksAfter = await page.locator('.list-item').count()
+    console.log(`Tasks nach Archivierung: ${tasksAfter}`)
+
+    expect(tasksAfter).toBeLessThan(tasksBefore)
+
+    await page.screenshot({ path: '/tmp/plankton-list-after-archive.png' })
+  })
+
+})
+
 // ─── REGRESSION TESTS ───────────────────────────────────────────────────────
 
 test.describe('Regression Tests', () => {
@@ -885,6 +1183,111 @@ test.describe('Regression Tests', () => {
     // Sollte 401 (nicht eingeloggt) oder 400/404 (ungültige ID) zurückgeben
     expect(response.status()).toBeGreaterThanOrEqual(400)
     expect(response.status()).toBeLessThan(600)
+  })
+
+  test('20 – Project Settings: 3-Tab-Layout (Details / Users / JSON)', async ({ page }) => {
+    const loggedIn = await tryLogin(page)
+    if (!loggedIn) { test.skip(); return }
+
+    await dismissPasswordChangeModal(page)
+
+    // Projekt-Menü öffnen
+    await page.locator('#project-menu-btn').click()
+    await page.waitForTimeout(300)
+
+    // "Projekt editieren" wählen
+    const editBtn = page.locator('[data-action="edit"]')
+    await editBtn.waitFor({ timeout: 5000 })
+    await editBtn.click()
+
+    // Projekt-Modal muss offen sein
+    const modal = page.locator('#project-modal')
+    await modal.waitFor({ timeout: 5000 })
+    await expect(modal).toBeVisible()
+
+    // Alle drei Tabs müssen existieren
+    await expect(page.locator('[data-proj-tab="details"]')).toBeVisible()
+    await expect(page.locator('[data-proj-tab="users"]')).toBeVisible()
+    await expect(page.locator('[data-proj-tab="json"]')).toBeVisible()
+
+    // Tab 1 – Details: Felder prüfen
+    await page.locator('[data-proj-tab="details"]').click()
+    await expect(page.locator('#proj-field-id')).toBeVisible()
+    await expect(page.locator('#proj-field-title')).toBeVisible()
+    await expect(page.locator('#proj-field-type')).toBeVisible()
+    await expect(page.locator('#proj-field-slug')).toBeVisible()
+    await expect(page.locator('#proj-field-owner')).toBeVisible()
+
+    // Das id-Feld muss readonly sein
+    const idReadonly = await page.locator('#proj-field-id').getAttribute('readonly')
+    expect(idReadonly).not.toBeNull()
+
+    // Tab 2 – Users
+    await page.locator('[data-proj-tab="users"]').click()
+    await expect(page.locator('#proj-users-tab')).toBeVisible()
+
+    // Tab 3 – JSON: JSON-Tree oder Raw-Textarea muss existieren
+    await page.locator('[data-proj-tab="json"]').click()
+    await expect(page.locator('#proj-json-tab')).toBeVisible()
+    // Toggle-Button muss vorhanden sein
+    await expect(page.locator('#proj-view-toggle')).toBeVisible()
+    // Entweder JSON-Tree oder Textarea muss sichtbar sein
+    const treeVisible = await page.locator('#proj-json-tree').isVisible().catch(() => false)
+    const textareaVisible = await page.locator('#proj-modal-json').isVisible().catch(() => false)
+    expect(treeVisible || textareaVisible).toBeTruthy()
+  })
+
+  test('21 – Project Settings: doneExpire + archiveDelete im Details-Tab', async ({ page }) => {
+    const loggedIn = await tryLogin(page)
+    if (!loggedIn) { test.skip(); return }
+
+    await dismissPasswordChangeModal(page)
+
+    // Projekt-Menü öffnen
+    await page.locator('#project-menu-btn').click()
+    await page.waitForTimeout(300)
+
+    // "Projekt editieren" wählen
+    const editBtn = page.locator('[data-action="edit"]')
+    await editBtn.waitFor({ timeout: 5000 })
+    await editBtn.click()
+
+    // Projekt-Modal muss offen sein
+    const modal = page.locator('#project-modal')
+    await modal.waitFor({ timeout: 5000 })
+    await expect(modal).toBeVisible()
+
+    // Details-Tab aktivieren
+    await page.locator('[data-proj-tab="details"]').click()
+
+    // Beide Felder müssen im Details-Tab sichtbar sein
+    await expect(page.locator('#proj-field-done-expire')).toBeVisible()
+    await expect(page.locator('#proj-field-archive-delete')).toBeVisible()
+
+    // doneExpire-Wert ändern und speichern
+    const doneExpireInput = page.locator('#proj-field-done-expire')
+    await doneExpireInput.fill('7')
+
+    // archiveDelete-Wert ändern
+    const archiveDeleteInput = page.locator('#proj-field-archive-delete')
+    await archiveDeleteInput.fill('60')
+
+    // Speichern
+    await page.locator('#proj-details-save').click()
+    await page.waitForTimeout(500)
+
+    // Modal muss nach dem Speichern geschlossen sein
+    await expect(modal).not.toBeVisible()
+
+    // Erneut öffnen und persistierten Wert prüfen
+    await page.locator('#project-menu-btn').click()
+    await page.waitForTimeout(300)
+    await page.locator('[data-action="edit"]').click()
+    await modal.waitFor({ timeout: 5000 })
+    await page.locator('[data-proj-tab="details"]').click()
+
+    await expect(page.locator('#proj-field-done-expire')).toHaveValue('7')
+    await expect(page.locator('#proj-field-archive-delete')).toHaveValue('60')
   })
 
 })

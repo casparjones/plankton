@@ -9,7 +9,7 @@ interface AdminState {
   users: AuthUser[];
   editingUser: AuthUser | null;
   tokens: AgentToken[];
-  tab: 'users' | 'tokens';
+  tab: 'users' | 'tokens' | 'system';
 }
 
 let adminState: AdminState = { users: [], editingUser: null, tokens: [], tab: 'users' };
@@ -30,6 +30,7 @@ export async function openAdminModal(): Promise<void> {
   document.getElementById('admin-user-list')!.style.display = '';
   document.getElementById('admin-list-actions')!.style.display = '';
   document.getElementById('admin-token-section')!.style.display = 'none';
+  document.getElementById('admin-system-section')!.style.display = 'none';
   document.getElementById('admin-modal')!.classList.add('open');
 }
 
@@ -39,22 +40,21 @@ function updateAdminTabs(): void {
   });
 }
 
-export async function switchAdminTab(tab: 'users' | 'tokens'): Promise<void> {
+export async function switchAdminTab(tab: 'users' | 'tokens' | 'system'): Promise<void> {
   adminState.tab = tab;
   updateAdminTabs();
-  if (tab === 'users') {
-    document.getElementById('admin-user-list')!.style.display = '';
-    document.getElementById('admin-list-actions')!.style.display = '';
-    document.getElementById('admin-user-form')!.style.display = 'none';
-    document.getElementById('admin-token-section')!.style.display = 'none';
-    renderAdminUserList();
-  } else if (tab === 'tokens') {
-    document.getElementById('admin-user-list')!.style.display = 'none';
-    document.getElementById('admin-list-actions')!.style.display = 'none';
-    document.getElementById('admin-user-form')!.style.display = 'none';
-    document.getElementById('admin-token-section')!.style.display = '';
-    await loadTokens();
-  }
+  const showEl = (id: string, show: boolean) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = show ? '' : 'none';
+  };
+  showEl('admin-user-list', tab === 'users');
+  showEl('admin-list-actions', tab === 'users');
+  showEl('admin-user-form', false);
+  showEl('admin-token-section', tab === 'tokens');
+  showEl('admin-system-section', tab === 'system');
+  if (tab === 'users') renderAdminUserList();
+  else if (tab === 'tokens') await loadTokens();
+  else if (tab === 'system') await loadSystemStatus();
 }
 
 async function loadTokens(): Promise<void> {
@@ -187,6 +187,51 @@ export async function handleTokenAction(action: string, tid: string): Promise<vo
       body: JSON.stringify({ active: !token.active }),
     });
     await loadTokens();
+  }
+}
+
+async function loadSystemStatus(): Promise<void> {
+  const el = document.getElementById('admin-system-content');
+  if (!el) return;
+  el.innerHTML = `<span class="text-text-dim text-xs font-mono">${t('admin.systemLoading')}</span>`;
+  try {
+    const r = await fetch('/api/admin/system-status');
+    if (!r.ok) throw new Error(String(r.status));
+    const data = await r.json();
+    const fmt = (iso: string | null) => {
+      if (!iso) return t('admin.systemNever');
+      const d = new Date(iso);
+      return d.toLocaleString();
+    };
+    const now = Date.now();
+    const nextMs = new Date(data.next_maintenance_run).getTime();
+    const diffSec = Math.max(0, Math.round((nextMs - now) / 1000));
+    const h = Math.floor(diffSec / 3600);
+    const m = Math.floor((diffSec % 3600) / 60);
+    const s = diffSec % 60;
+    const countdown = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    el.innerHTML = `
+      <div class="flex flex-col gap-2 text-[13px] font-mono">
+        <div class="flex items-center gap-3">
+          <span class="text-text-dim uppercase text-xs tracking-wide w-36">${t('admin.systemLastRun')}</span>
+          <span class="text-text">${fmt(data.last_maintenance_run)}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-text-dim uppercase text-xs tracking-wide w-36">${t('admin.systemNextRun')}</span>
+          <span class="text-text">${fmt(data.next_maintenance_run)}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-text-dim uppercase text-xs tracking-wide w-36">${t('admin.systemCountdown')}</span>
+          <span class="text-accent font-semibold tabular-nums">${countdown}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-text-dim uppercase text-xs tracking-wide w-36">${t('admin.systemInterval')}</span>
+          <span class="text-text">${data.interval_seconds / 60} min</span>
+        </div>
+      </div>
+    `;
+  } catch {
+    el.innerHTML = `<span class="text-[#ff6b6b] text-xs font-mono">${t('admin.systemError')}</span>`;
   }
 }
 

@@ -137,6 +137,15 @@ function editTask(): void {
   emit('edit', t)
 }
 
+/** Öffnet das MoveToBoardOverlay für den aktuellen Task. */
+function openMoveToBoard(): void {
+  if (!task.value) return
+  const fn = (window as any).__openMoveToBoardOverlay
+  if (typeof fn === 'function') {
+    fn(task.value.id)
+  }
+}
+
 const mcpLinkCopied = ref(false)
 
 function copyMcpLink(): void {
@@ -307,6 +316,12 @@ defineExpose({ open, close })
             <button class="bg-surface-2 border border-border text-text-dim font-mono rounded-md px-3.5 py-1.5 text-xs cursor-pointer transition-all hover:border-accent hover:text-accent" @click="copyMcpLink" :title="mcpLinkCopied ? t('copied') : t('taskDetail.mcpLinkTitle')">
               {{ mcpLinkCopied ? '✓ ' + t('taskDetail.mcpLinkCopied') : t('taskDetail.mcpLink') }}
             </button>
+            <button
+              v-if="task"
+              class="bg-surface-2 border border-border text-text-dim font-mono rounded-md px-3.5 py-1.5 text-xs cursor-pointer transition-all hover:border-accent hover:text-accent"
+              :title="t('moveToBoard.title')"
+              @click="openMoveToBoard"
+            >&#8644; {{ t('moveToBoard.title') }}</button>
             <button class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity" @click="editTask">{{ t('edit') }}</button>
           </div>
           <div class="flex flex-col gap-2">

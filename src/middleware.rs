@@ -99,6 +99,7 @@ pub fn print_startup_banner(port: &str) {
         ("POST", "/api/admin/tokens"),
         ("PUT", "/api/admin/tokens/:id"),
         ("DELETE", "/api/admin/tokens/:id"),
+        ("GET", "/api/admin/system-status"),
         ("GET", "/mcp/tools"),
         ("POST", "/mcp/call"),
         ("POST", "/mcp (JSON-RPC 2.0)"),

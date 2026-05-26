@@ -283,23 +283,190 @@ function downloadFile(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
-// === Bestehende Funktionen (unverändert) ===
+// === Tab-Navigation für Project Settings ===
+
+/** Initialisiert die Tab-Navigation im Project-Settings-Modal. */
+export function initProjectSettingsTabs(): void {
+  const modal = document.getElementById('project-modal');
+  if (!modal) return;
+
+  modal.addEventListener('click', (e: Event) => {
+    const tab = (e.target as HTMLElement).closest<HTMLElement>('[data-proj-tab]');
+    if (!tab) return;
+    const tabName = tab.dataset.projTab!;
+    switchProjectTab(tabName);
+  });
+}
+
+function switchProjectTab(tabName: string): void {
+  // Tab-Buttons umschalten.
+  document.querySelectorAll('.proj-settings-tab').forEach(btn => {
+    btn.classList.toggle('proj-settings-tab-active', (btn as HTMLElement).dataset.projTab === tabName);
+  });
+  // Tab-Inhalte umschalten.
+  document.querySelectorAll('.proj-settings-tab-content').forEach(content => {
+    (content as HTMLElement).classList.add('hidden');
+  });
+  document.getElementById(`proj-${tabName}-tab`)?.classList.remove('hidden');
+}
+
+// === Bestehende Funktionen (angepasst) ===
 
 export async function openProjectMenu(): Promise<void> {
   if (!state.project) return;
   const project = await api.get<ProjectDoc>(`/api/projects/${state.project._id}?include_archived=true`);
-  (document.getElementById('proj-modal-title') as HTMLInputElement).value = project.title || '';
+
+  // Tab 1: Details befüllen.
+  (document.getElementById('proj-field-id') as HTMLInputElement).value = project._id || '';
+  (document.getElementById('proj-field-title') as HTMLInputElement).value = project.title || '';
+  (document.getElementById('proj-field-slug') as HTMLInputElement).value = project.slug || '';
+  (document.getElementById('proj-field-owner') as HTMLInputElement).value = project.owner || '';
+
+  // Type-Dropdown: Option "list" deaktivieren wenn mehr als eine Spalte.
+  const typeSelect = document.getElementById('proj-field-type') as HTMLSelectElement;
+  typeSelect.value = project.type || 'kanban';
+  const visibleCols = (project.columns || []).filter(c => !c.hidden);
+  const listOption = typeSelect.querySelector('option[value="list"]') as HTMLOptionElement | null;
+  const tooltip = document.getElementById('proj-type-tooltip');
+  if (listOption) {
+    const canSwitchToList = visibleCols.length <= 1 || (project.type === 'list');
+    listOption.disabled = !canSwitchToList;
+    if (tooltip) {
+      tooltip.classList.toggle('hidden', canSwitchToList);
+    }
+  }
+  typeSelect.addEventListener('mouseover', () => {
+    if (listOption?.disabled && tooltip) tooltip.classList.remove('hidden');
+  });
+  typeSelect.addEventListener('mouseout', () => {
+    if (tooltip) tooltip.classList.add('hidden');
+  });
+
+  // Pinned-Checkbox befüllen.
+  (document.getElementById('proj-field-pinned') as HTMLInputElement).checked = !!project.pinned;
+  // Automatisierungs-Felder befüllen (Defaults: 10 / 90 wenn nicht gesetzt).
+  (document.getElementById('proj-field-done-expire') as HTMLInputElement).value =
+    project.doneExpire != null ? String(project.doneExpire) : '10';
+  (document.getElementById('proj-field-archive-delete') as HTMLInputElement).value =
+    project.archiveDelete != null ? String(project.archiveDelete) : '90';
+
+  // Tab 2: Users befüllen.
+  renderUserList(project.users || []);
+
+  // Tab 3: JSON befüllen.
   (document.getElementById('proj-modal-json') as HTMLTextAreaElement).value = JSON.stringify(project, null, 2);
   renderJsonTree(project, document.getElementById('proj-json-tree')!);
   document.getElementById('proj-json-tree')!.style.display = '';
   (document.getElementById('proj-modal-json') as HTMLTextAreaElement).style.display = 'none';
   const toggleBtn = document.getElementById('proj-view-toggle')!;
   toggleBtn.textContent = 'Raw JSON';
+
+  // Immer mit Details-Tab starten.
+  switchProjectTab('details');
+
   document.getElementById('project-modal')!.classList.add('open');
+}
+
+/** Rendert die Nutzerliste im Users-Tab. */
+function renderUserList(users: { id: string; name: string; avatar: string; role: string }[]): void {
+  const list = document.getElementById('proj-user-list')!;
+  const placeholder = document.getElementById('proj-users-placeholder')!;
+  if (users.length === 0) {
+    list.innerHTML = '';
+    placeholder.style.display = '';
+    return;
+  }
+  placeholder.style.display = 'none';
+  list.innerHTML = users.map(u => `
+    <div class="flex items-center gap-2 px-2 py-1 bg-surface-2 border border-border rounded-md text-sm" data-user-id="${escapeHtml(u.id)}">
+      <span class="flex-1 text-text">${escapeHtml(u.name || u.id)}</span>
+      <span class="text-text-dim text-xs font-mono">${escapeHtml(u.role || '')}</span>
+      <button class="proj-user-remove bg-transparent border-none text-text-dim cursor-pointer text-base px-1 hover:text-danger" title="Nutzer entfernen" data-user-id="${escapeHtml(u.id)}">&#10005;</button>
+    </div>
+  `).join('');
+
+  // Remove-Buttons.
+  list.querySelectorAll('.proj-user-remove').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const userId = (btn as HTMLElement).dataset.userId!;
+      await removeProjectUser(userId);
+    });
+  });
+
+  // Plus-Button verdrahten (nur einmal).
+  const addBtn = document.getElementById('proj-user-add');
+  if (addBtn && !addBtn.dataset.wired) {
+    addBtn.dataset.wired = '1';
+    addBtn.addEventListener('click', addProjectUser);
+  }
 }
 
 export function closeProjectMenu(): void {
   document.getElementById('project-modal')!.classList.remove('open');
+}
+
+/** Speichert die Details-Tab-Felder (id/readonly, title, type, slug, owner). */
+export async function saveProjectDetails(): Promise<void> {
+  if (!state.project) return;
+  const project = await api.get<ProjectDoc>(`/api/projects/${state.project._id}?include_archived=true`);
+
+  project.title = (document.getElementById('proj-field-title') as HTMLInputElement).value.trim() || project.title;
+  project.slug = (document.getElementById('proj-field-slug') as HTMLInputElement).value.trim() || project.slug;
+  project.owner = (document.getElementById('proj-field-owner') as HTMLInputElement).value.trim() || null;
+  project.type = (document.getElementById('proj-field-type') as HTMLSelectElement).value;
+  project.pinned = (document.getElementById('proj-field-pinned') as HTMLInputElement).checked || undefined;
+
+  const doneExpireRaw = (document.getElementById('proj-field-done-expire') as HTMLInputElement).value.trim();
+  project.doneExpire = doneExpireRaw !== '' ? parseInt(doneExpireRaw, 10) : null;
+  const archiveDeleteRaw = (document.getElementById('proj-field-archive-delete') as HTMLInputElement).value.trim();
+  project.archiveDelete = archiveDeleteRaw !== '' ? parseInt(archiveDeleteRaw, 10) : null;
+
+  try {
+    state.project = await api.put<ProjectDoc>(`/api/projects/${state.project._id}`, project);
+    await loadProjects();
+    closeProjectMenu();
+    renderBoard();
+    updateProjectTitle();
+  } catch (err: any) {
+    alert('Fehler beim Speichern: ' + err.message);
+  }
+}
+
+/** Fügt einen Nutzer zum Projekt hinzu (aus dem Users-Tab). */
+async function addProjectUser(): Promise<void> {
+  if (!state.project) return;
+  const input = document.getElementById('proj-user-input') as HTMLInputElement;
+  const name = input.value.trim();
+  if (!name) return;
+
+  const project = await api.get<ProjectDoc>(`/api/projects/${state.project._id}?include_archived=true`);
+  const users = project.users || [];
+  users.push({ id: crypto.randomUUID(), name, avatar: '', role: 'member' });
+  project.users = users;
+
+  try {
+    state.project = await api.put<ProjectDoc>(`/api/projects/${state.project._id}`, project);
+    input.value = '';
+    renderUserList(state.project.users || []);
+    await loadProjects();
+  } catch (err: any) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+/** Entfernt einen Nutzer aus dem Projekt. */
+async function removeProjectUser(userId: string): Promise<void> {
+  if (!state.project) return;
+  const project = await api.get<ProjectDoc>(`/api/projects/${state.project._id}?include_archived=true`);
+  project.users = (project.users || []).filter(u => u.id !== userId);
+
+  try {
+    state.project = await api.put<ProjectDoc>(`/api/projects/${state.project._id}`, project);
+    renderUserList(state.project.users || []);
+    await loadProjects();
+  } catch (err: any) {
+    alert('Fehler: ' + err.message);
+  }
 }
 
 export async function copyProjectJson(): Promise<void> {
@@ -339,7 +506,6 @@ export async function importProjectJson(): Promise<void> {
 export async function saveProjectJson(): Promise<void> {
   if (!state.project) return;
   const textarea = document.getElementById('proj-modal-json') as HTMLTextAreaElement;
-  const titleInput = document.getElementById('proj-modal-title') as HTMLInputElement;
   const text = textarea.value.trim();
   if (!text) return;
 
@@ -350,9 +516,6 @@ export async function saveProjectJson(): Promise<void> {
     alert('Ungültiges JSON');
     return;
   }
-
-  const newTitle = titleInput.value.trim();
-  if (newTitle) data.title = newTitle;
 
   data._id = state.project._id;
   data._rev = state.project._rev;
@@ -370,9 +533,11 @@ export async function saveProjectJson(): Promise<void> {
   }
 }
 
+/** @deprecated Titel-Speicherung erfolgt jetzt über saveProjectDetails() (Tab 1). */
 export async function saveProjectTitle(): Promise<void> {
   if (!state.project) return;
-  const titleInput = document.getElementById('proj-modal-title') as HTMLInputElement;
+  const titleInput = document.getElementById('proj-field-title') as HTMLInputElement;
+  if (!titleInput) return;
   const newTitle = titleInput.value.trim();
   if (newTitle && newTitle !== state.project.title) {
     await renameProject(state.project._id, newTitle);

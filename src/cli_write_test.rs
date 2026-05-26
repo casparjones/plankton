@@ -114,6 +114,9 @@ mod tests {
             }],
             git: None,
             order: 0,
+            r#type: None,
+            done_expire: None,
+            archive_delete: None,
         }
     }
 

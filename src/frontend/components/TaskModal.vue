@@ -204,6 +204,17 @@ function onOverlayClick(e: Event): void {
   if (e.target === e.currentTarget) close()
 }
 
+/** Öffnet das MoveToBoardOverlay für den aktuellen Task und schließt das Edit-Modal. */
+function openMoveToBoard(): void {
+  if (!editingTask.value) return
+  const taskId = editingTask.value.id
+  close()
+  const fn = (window as any).__openMoveToBoardOverlay
+  if (typeof fn === 'function') {
+    fn(taskId)
+  }
+}
+
 // Globale Funktionen für Legacy-Kompatibilität (KanbanBoard.vue, AppLayout.vue)
 // @ts-ignore
 window.__openNewTaskModal = openNew
@@ -216,7 +227,7 @@ defineExpose({ openNew, openEdit, close })
 </script>
 
 <template>
-  <div v-if="isOpen" class="fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] flex items-center justify-center" @click="onOverlayClick">
+  <div v-if="isOpen" data-testid="task-modal" class="fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] flex items-center justify-center" @click="onOverlayClick">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] max-h-[90dvh] overflow-y-auto p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ isNew ? t('taskModal.newTask') : t('taskModal.editTask') }}</span>
@@ -356,6 +367,13 @@ defineExpose({ openNew, openEdit, close })
         </div>
       </div>
       <div class="flex gap-2 justify-end mt-1">
+        <button
+          v-if="!isNew"
+          data-testid="task-modal-move-to-board-btn"
+          class="bg-surface-2 border border-border text-text-dim font-mono rounded-md px-3.5 py-1.5 text-xs cursor-pointer transition-all hover:border-accent hover:text-accent mr-auto"
+          :title="t('moveToBoard.title')"
+          @click="openMoveToBoard"
+        >&#8644; {{ t('moveToBoard.title') }}</button>
         <button class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity" @click="save">{{ t('save') }}</button>
         <button v-if="!isNew" class="bg-transparent border border-danger text-danger rounded-md px-5 py-2 text-[13px] cursor-pointer hover:bg-danger/10 transition-colors" @click="handleDelete">{{ t('delete') }}</button>
       </div>

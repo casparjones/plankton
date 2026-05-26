@@ -71,6 +71,8 @@ export default {
     restored: '"{title}" restored',
     archivedAt: 'Archived',
     error: 'Error loading archive',
+    archiveTask: 'Archive task',
+    archived: '"{title}" archived',
   },
 
   // ─── Bulk actions ───
@@ -149,6 +151,25 @@ export default {
     editProject: 'Edit project',
     importAsNew: 'Import as new project',
     rawJson: 'Raw JSON',
+    tabDetails: 'Details',
+    tabAutomation: 'Automation',
+    tabUsers: 'Users',
+    fieldId: 'ID',
+    fieldType: 'Type',
+    typeKanban: 'Kanban',
+    typeList: 'List',
+    typeTooltip: 'Only possible if the board has one column',
+    fieldSlug: 'Slug',
+    fieldOwner: 'Owner',
+    noUsers: 'No users assigned yet',
+    userPlaceholder: 'Name or email…',
+    pinnedLabel: 'Pin board',
+    pinnedHint: '— appears at the top of the board selector',
+    automationSection: 'Automation',
+    doneExpireLabel: 'Auto-archive tasks from Done',
+    doneExpireHint: 'Tasks that have been in a Done column for X days will be automatically archived. -1 disables this.',
+    archiveDeleteLabel: 'Auto-delete archived tasks',
+    archiveDeleteHint: 'Archived tasks older than X days will be automatically and permanently deleted. -1 disables this.',
   },
 
   // ─── Git ───
@@ -225,6 +246,16 @@ export default {
     newPasswordPrompt: 'New password:',
     passwordReset: 'Password has been reset',
     tokenName: 'Token name...',
+    system: 'System',
+    systemTitle: 'Maintenance Job',
+    systemLastRun: 'Last run',
+    systemNextRun: 'Next run',
+    systemCountdown: 'In',
+    systemInterval: 'Interval',
+    systemNever: 'Not yet run',
+    systemLoading: 'Loading...',
+    systemError: 'Error loading status',
+    systemRefresh: 'Refresh',
   },
 
   // ─── Password Modal ───
@@ -263,6 +294,17 @@ export default {
     importBtn: 'Import',
     supervisorPrompt: 'Supervisor Prompt',
     copyPrompt: 'Copy prompt',
+  },
+
+  // ─── Move to Board ───
+  moveToBoard: {
+    title: 'Move task to another board',
+    searchPlaceholder: 'Search boards…',
+    loading: 'Loading boards…',
+    empty: 'No board found',
+    success: '"{board}" – task moved successfully',
+    errorLoading: 'Error loading boards',
+    errorMoving: 'Error moving task',
   },
 
   // ─── Drag & Drop ───

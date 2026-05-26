@@ -35,12 +35,16 @@ fn all_tools() -> Vec<ToolDef> {
             "type": "object",
             "properties": { "title": { "type": "string", "description": "Project title" } }
         })) },
-        ToolDef { name: "update_project", description: "Update project metadata (title, owner)", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+        ToolDef { name: "update_project", description: "Update project metadata (title, owner, type, doneExpire, archiveDelete, pinned)", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
             "type": "object", "required": ["project_id"],
             "properties": {
                 "project_id": { "type": "string", "description": "Project ID or slug" },
                 "title": { "type": "string", "description": "New project title" },
-                "owner": { "type": "string", "description": "Project owner (username/display_name)" }
+                "owner": { "type": "string", "description": "Project owner (username/display_name)" },
+                "type": { "type": "string", "enum": ["kanban", "list"], "description": "Board type: 'kanban' (default) or 'list'" },
+                "done_expire": { "type": "integer", "description": "Days until Done tasks are archived. Default: 10. -1 = disabled." },
+                "archive_delete": { "type": "integer", "description": "Days until archived tasks are deleted. Default: 90. -1 = disabled." },
+                "pinned": { "type": "boolean", "description": "Pin this board at the top of the Move-to-Board selector." }
             }
         })) },
         ToolDef { name: "list_epics", description: "List columns as epics with task counts", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
@@ -140,6 +144,14 @@ fn all_tools() -> Vec<ToolDef> {
                 "points": { "type": "number", "description": "Story points" },
                 "column_id": { "type": "string", "description": "Target column (default: first column)" },
                 "parent_id": { "type": "string", "description": "Parent epic ID for subtasks" }
+            }
+        })) },
+        ToolDef { name: "move_task_to_project", description: "Move a task from one project to another. Column mapping: the task lands in the column with the same name in the target project, or in the first column (order=0) if no match. Relations, comments, and logs are preserved. Returns the new task_id and column_id in the target project.", roles: Some(&["manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["task_id", "source_project_id", "target_project_id"],
+            "properties": {
+                "task_id": { "type": "string", "description": "ID of the task to move" },
+                "source_project_id": { "type": "string", "description": "ID of the source project" },
+                "target_project_id": { "type": "string", "description": "ID of the target project (must be different from source)" }
             }
         })) },
     ]
@@ -849,6 +861,24 @@ async fn execute_tool(
                     Some(new_owner.to_string())
                 };
             }
+            if let Some(new_type) = args["type"].as_str() {
+                // Nur bekannte Werte akzeptieren; unbekannte werden auf den Default "kanban" normalisiert.
+                let normalized = match new_type {
+                    "list" => Some("list".to_string()),
+                    _ if new_type.is_empty() => None,
+                    _ => Some(project.project_type().to_string()),
+                };
+                project.r#type = normalized;
+            }
+            if let Some(done_expire) = args["done_expire"].as_i64() {
+                project.done_expire = Some(done_expire as i32);
+            }
+            if let Some(archive_delete) = args["archive_delete"].as_i64() {
+                project.archive_delete = Some(archive_delete as i32);
+            }
+            if let Some(pinned) = args["pinned"].as_bool() {
+                project.pinned = Some(pinned);
+            }
             let updated = state.store.put_project(project).await?;
             publish_update(state, &real_id).await;
             Ok(serde_json::to_value(&updated)?)
@@ -1025,7 +1055,9 @@ async fn execute_tool(
                 if let Some(order) = args["order"].as_i64() {
                     task.order = order as i32;
                 }
-                task.updated_at = Utc::now().to_rfc3339();
+                let now = Utc::now();
+                task.updated_at = now.to_rfc3339();
+                task.column_entered_at = Some(now);
                 task.logs
                     .push(log_entry(caller, &format!("→ {}", new_name)));
             }
@@ -1231,8 +1263,12 @@ async fn execute_tool(
                 if let Some(ref testing_id) = testing_col {
                     task.previous_row = task.column_id.clone();
                     task.column_id = testing_id.clone();
+                    let now = Utc::now();
+                    task.updated_at = now.to_rfc3339();
+                    task.column_entered_at = Some(now);
+                } else {
+                    task.updated_at = Utc::now().to_rfc3339();
                 }
-                task.updated_at = Utc::now().to_rfc3339();
                 task.logs
                     .push(log_entry(caller, "submitted for review → Testing"));
             } else {
@@ -1300,8 +1336,12 @@ async fn execute_tool(
                 if let Some(ref done_id) = done_col {
                     task.previous_row = task.column_id.clone();
                     task.column_id = done_id.clone();
+                    let now = Utc::now();
+                    task.updated_at = now.to_rfc3339();
+                    task.column_entered_at = Some(now);
+                } else {
+                    task.updated_at = Utc::now().to_rfc3339();
                 }
-                task.updated_at = Utc::now().to_rfc3339();
                 task.logs.push(log_entry(caller, "✓ approved"));
             } else {
                 return Err(ApiError::NotFound("Task not found".into()));
@@ -1327,8 +1367,12 @@ async fn execute_tool(
                 if !task.previous_row.is_empty() {
                     let prev = task.previous_row.clone();
                     task.column_id = prev;
+                    let now = Utc::now();
+                    task.updated_at = now.to_rfc3339();
+                    task.column_entered_at = Some(now);
+                } else {
+                    task.updated_at = Utc::now().to_rfc3339();
                 }
-                task.updated_at = Utc::now().to_rfc3339();
                 task.comments.push(log_entry(caller, comment));
                 task.logs
                     .push(log_entry(caller, &format!("✗ rejected: {}", comment)));
@@ -1588,6 +1632,117 @@ async fn execute_tool(
             )
             .await;
             Ok(serde_json::to_value(&task)?)
+        }
+        "move_task_to_project" => {
+            let task_id = args["task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
+            let source_project_id = args["source_project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("source_project_id missing".into()))?;
+            let target_project_id = args["target_project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("target_project_id missing".into()))?;
+
+            // Guard: Kein Verschieben ins selbe Projekt
+            if source_project_id == target_project_id {
+                return Err(ApiError::BadRequest(
+                    "Cannot move task to the same project".into(),
+                ));
+            }
+
+            // Write-Locks für beide Projekte (immer in sortierter Reihenfolge um Deadlocks zu vermeiden)
+            let (first_id, second_id) = if source_project_id < target_project_id {
+                (source_project_id, target_project_id)
+            } else {
+                (target_project_id, source_project_id)
+            };
+            let lock1 = state.get_project_write_lock(first_id).await;
+            let _guard1 = lock1.lock().await;
+            let lock2 = state.get_project_write_lock(second_id).await;
+            let _guard2 = lock2.lock().await;
+
+            // Projekte laden
+            let mut src_project = state.store.get_project(source_project_id).await?;
+            let mut dst_project = state.store.get_project(target_project_id).await?;
+
+            // Ziel-Projekt muss mindestens eine Spalte haben
+            if dst_project.columns.is_empty() {
+                return Err(ApiError::BadRequest("Target project has no columns".into()));
+            }
+
+            // Task aus Quellprojekt holen
+            let task_pos = src_project
+                .tasks
+                .iter()
+                .position(|t| t.id == task_id)
+                .ok_or_else(|| ApiError::NotFound("Task not found in source project".into()))?;
+            let task = src_project.tasks.remove(task_pos);
+
+            // Spaltenname des Tasks im Quellprojekt bestimmen
+            let src_col_title = src_project
+                .columns
+                .iter()
+                .find(|c| c.id == task.column_id)
+                .map(|c| c.title.clone())
+                .unwrap_or_default();
+
+            // Spalten-Mapping: gleicher Name im Zielprojekt suchen,
+            // Fallback: erste Spalte (order=0)
+            let target_col_id = dst_project
+                .columns
+                .iter()
+                .find(|c| c.title == src_col_title)
+                .or_else(|| dst_project.columns.iter().min_by_key(|c| c.order))
+                .map(|c| c.id.clone())
+                .expect("target project has at least one column (checked above)");
+
+            // Task mit neuer project_id und column_id anlegen
+            let new_task_id = Uuid::new_v4().to_string();
+            let mut moved_task = task.clone();
+            moved_task.id = new_task_id.clone();
+            moved_task.column_id = target_col_id.clone();
+            moved_task.previous_row = String::new();
+            let now = Utc::now();
+            moved_task.updated_at = now.to_rfc3339();
+            moved_task.column_entered_at = Some(now);
+            moved_task.logs.push(log_entry(
+                caller,
+                &format!(
+                    "moved from project '{}' → '{}'",
+                    src_project.title, dst_project.title
+                ),
+            ));
+
+            // Task im Zielprojekt hinzufügen
+            dst_project.tasks.push(moved_task);
+
+            // Beide Projekte speichern
+            state.store.put_project(src_project.clone()).await?;
+            state.store.put_project(dst_project.clone()).await?;
+
+            // SSE-Events publizieren
+            publish_event(
+                state,
+                source_project_id,
+                "task_deleted",
+                serde_json::json!({ "task_id": task_id }),
+            )
+            .await;
+            publish_event(
+                state,
+                target_project_id,
+                "task_created",
+                serde_json::json!({ "task_id": new_task_id }),
+            )
+            .await;
+
+            Ok(serde_json::json!({
+                "task_id": new_task_id,
+                "column_id": target_col_id,
+                "source_project_id": source_project_id,
+                "target_project_id": target_project_id,
+            }))
         }
         _ => Err(ApiError::BadRequest(format!("unknown tool: {tool}"))),
     }

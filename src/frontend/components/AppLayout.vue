@@ -5,9 +5,11 @@
 
 import { ref, onMounted, computed } from 'vue'
 import KanbanBoard from './KanbanBoard.vue'
+import ListBoard from './ListBoard.vue'
 import TaskModal from './TaskModal.vue'
 import TaskDetail from './TaskDetail.vue'
 import ArchivePanel from './ArchivePanel.vue'
+import MoveToBoardOverlay from './MoveToBoardOverlay.vue'
 import DashboardContainer from './DashboardContainer.vue'
 import StatusCountsWidget from './StatusCountsWidget.vue'
 import VelocityWidget from './VelocityWidget.vue'
@@ -24,7 +26,7 @@ import { updateBulkBar, bulkDeleteSelected } from '../components/bulk-actions'
 // @ts-ignore
 import { closeColumnModal, saveColumnModal, selectColor } from '../components/column-modal'
 // @ts-ignore
-import { openProjectDropdown, closeProjectMenu, copyProjectJson, importProjectJson, saveProjectJson, saveProjectTitle, closePromptModal, initPromptTabs, closeCliModal, initCliModal } from '../components/project-menu'
+import { openProjectDropdown, closeProjectMenu, copyProjectJson, importProjectJson, saveProjectJson, saveProjectDetails, initProjectSettingsTabs, closePromptModal, initPromptTabs, closeCliModal, initCliModal } from '../components/project-menu'
 // @ts-ignore
 import { toggleJsonView } from '../components/json-view'
 // @ts-ignore
@@ -48,6 +50,7 @@ const props = defineProps<{
 const taskModalRef = ref<InstanceType<typeof TaskModal> | null>(null)
 const taskDetailRef = ref<InstanceType<typeof TaskDetail> | null>(null)
 const archivePanelRef = ref<InstanceType<typeof ArchivePanel> | null>(null)
+const moveToBoardRef = ref<InstanceType<typeof MoveToBoardOverlay> | null>(null)
 
 const boardInfoCopied = ref(false)
 const notificationsEnabled = ref(notificationService.isEnabled())
@@ -118,10 +121,11 @@ onMounted(() => {
   document.getElementById('proj-modal-copy')?.addEventListener('click', copyProjectJson)
   document.getElementById('proj-modal-import')?.addEventListener('click', importProjectJson)
   document.getElementById('proj-modal-save')?.addEventListener('click', saveProjectJson)
-  document.getElementById('proj-modal-title')?.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Enter') saveProjectTitle()
-  })
+  document.getElementById('proj-details-save')?.addEventListener('click', saveProjectDetails)
+  document.getElementById('proj-automation-save')?.addEventListener('click', saveProjectDetails)
   document.getElementById('proj-view-toggle')?.addEventListener('click', toggleJsonView)
+  // Tab-Navigation für Project Settings.
+  initProjectSettingsTabs()
 
   // Prompt-Modal (Tabs + Events).
   initPromptTabs()
@@ -143,9 +147,10 @@ onMounted(() => {
   document.getElementById('admin-form-save')?.addEventListener('click', saveAdminForm)
   document.getElementById('admin-form-cancel')?.addEventListener('click', () => openAdminModal())
   document.querySelectorAll('.admin-tab').forEach((tab: Element) => {
-    tab.addEventListener('click', () => switchAdminTab((tab as HTMLElement).dataset.tab))
+    tab.addEventListener('click', () => switchAdminTab((tab as HTMLElement).dataset.tab as 'users' | 'tokens' | 'system'))
   })
   document.getElementById('admin-create-token-btn')?.addEventListener('click', createToken)
+  document.getElementById('admin-system-refresh-btn')?.addEventListener('click', () => switchAdminTab('system'))
   document.getElementById('admin-token-list')?.addEventListener('click', async (e: Event) => {
     const btn = (e.target as HTMLElement).closest('[data-token-action]') as HTMLElement | null
     if (!btn) return
@@ -274,7 +279,8 @@ onMounted(() => {
         </template>
       </DashboardContainer>
       <div id="board" class="flex-1 overflow-x-auto overflow-y-hidden p-5 px-6">
-        <KanbanBoard />
+        <ListBoard v-if="state.project?.type === 'list'" />
+        <KanbanBoard v-else />
       </div>
     </main>
   </div>
@@ -283,6 +289,7 @@ onMounted(() => {
   <TaskModal ref="taskModalRef" />
   <TaskDetail ref="taskDetailRef" @edit="onEditFromDetail" />
   <ArchivePanel ref="archivePanelRef" />
+  <MoveToBoardOverlay ref="moveToBoardRef" />
 
   <!-- Spalten-Modal (Legacy) -->
   <div id="column-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
@@ -305,27 +312,107 @@ onMounted(() => {
     </div>
   </div>
 
-  <!-- Projekt-Modal (Legacy) -->
+  <!-- Projekt-Modal (3 Tabs: Details / Users / JSON) -->
   <div id="project-modal" class="modal-overlay fixed inset-0 bg-black/70 backdrop-blur-[2px] z-[1000] items-center justify-center">
     <div class="bg-surface border border-border rounded-lg shadow-[0_16px_48px_rgba(0,0,0,0.5)] flex flex-col gap-3.5 max-w-[1000px] p-6 w-[90%]">
       <div class="flex items-center justify-between">
         <span class="font-mono text-[13px] font-semibold tracking-wide uppercase text-text-dim">{{ t('project.project') }}</span>
         <button class="bg-transparent border-none text-text-dim cursor-pointer text-base px-1.5 py-0.5 hover:text-text" id="proj-modal-close">&#10005;</button>
       </div>
-      <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">{{ t('project.projectName') }}
-        <input id="proj-modal-title" type="text" :placeholder="t('project.projectName') + '…'" autocomplete="one-time-code" name="project-title-edit"
-          class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
-      </label>
-      <div class="flex items-center justify-between">
-        <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">JSON</span>
-        <button id="proj-view-toggle" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">{{ t('project.rawJson') }}</button>
+      <!-- Tab-Leiste -->
+      <div class="flex gap-1 border-b border-border pb-2">
+        <button class="proj-settings-tab proj-settings-tab-active bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-proj-tab="details">{{ t('project.tabDetails') }}</button>
+        <button class="proj-settings-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-proj-tab="automation">{{ t('project.tabAutomation') }}</button>
+        <button class="proj-settings-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-proj-tab="users">{{ t('project.tabUsers') }}</button>
+        <button class="proj-settings-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-proj-tab="json">JSON</button>
       </div>
-      <div id="proj-json-tree" class="json-tree"></div>
-      <textarea id="proj-modal-json" class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-3 resize-y w-full outline-none transition-colors focus:border-accent" rows="20" spellcheck="false" style="display:none"></textarea>
-      <div class="flex gap-2 justify-end mt-1">
-        <button id="proj-modal-copy" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">{{ t('copyToClipboard') }}</button>
-        <button id="proj-modal-save" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">{{ t('save') }}</button>
-        <button id="proj-modal-import" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">{{ t('project.importAsNew') }}</button>
+
+      <!-- Tab 1: Details (2-Spalten-Grid) -->
+      <div id="proj-details-tab" class="proj-settings-tab-content flex flex-col gap-4">
+        <div class="grid grid-cols-2 gap-x-5 gap-y-3.5">
+          <!-- Spalte 1 -->
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">{{ t('project.projectName') }}
+            <input id="proj-field-title" type="text" :placeholder="t('project.projectName') + '…'" autocomplete="one-time-code" name="project-title-edit"
+              class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
+          </label>
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">{{ t('project.fieldSlug') }}
+            <input id="proj-field-slug" type="text" :placeholder="t('project.fieldSlug') + '…'"
+              class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
+          </label>
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">{{ t('project.fieldOwner') }}
+            <input id="proj-field-owner" type="text" :placeholder="t('project.fieldOwner') + '…'"
+              class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
+          </label>
+          <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">{{ t('project.fieldType') }}
+            <div class="relative">
+              <select id="proj-field-type"
+                class="w-full bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                <option value="kanban">{{ t('project.typeKanban') }}</option>
+                <option value="list">{{ t('project.typeList') }}</option>
+              </select>
+              <span id="proj-type-tooltip" class="hidden absolute left-0 top-full mt-1 z-50 bg-surface border border-border text-text-dim text-xs rounded-md px-2 py-1 shadow-lg whitespace-nowrap">{{ t('project.typeTooltip') }}</span>
+            </div>
+          </label>
+          <!-- ID: volle Breite -->
+          <label class="col-span-2 flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">{{ t('project.fieldId') }}
+            <input id="proj-field-id" type="text" readonly
+              class="bg-surface-2 border border-border rounded-md text-text-dim font-mono text-xs px-3 py-2 outline-none cursor-default select-all" />
+          </label>
+        </div>
+
+        <!-- Pinned -->
+        <label class="flex items-center gap-2.5 cursor-pointer">
+          <input id="proj-field-pinned" type="checkbox" class="w-4 h-4 accent-accent cursor-pointer" />
+          <span class="text-xs text-text font-sans">{{ t('project.pinnedLabel') }}</span>
+          <span class="text-[11px] text-text-dim font-sans">{{ t('project.pinnedHint') }}</span>
+        </label>
+
+        <div class="flex gap-2 justify-end mt-1">
+          <button id="proj-details-save" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">{{ t('save') }}</button>
+        </div>
+      </div>
+
+      <!-- Tab 2: Automation -->
+      <div id="proj-automation-tab" class="proj-settings-tab-content hidden flex flex-col gap-3.5">
+        <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">{{ t('project.doneExpireLabel') }}
+          <input id="proj-field-done-expire" type="number" placeholder="10"
+            class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
+          <span class="text-[11px] text-text-dim font-sans normal-case tracking-normal leading-relaxed">{{ t('project.doneExpireHint') }}</span>
+        </label>
+        <label class="flex flex-col gap-1.5 text-xs text-text-dim font-mono uppercase tracking-wide">{{ t('project.archiveDeleteLabel') }}
+          <input id="proj-field-archive-delete" type="number" placeholder="90"
+            class="bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
+          <span class="text-[11px] text-text-dim font-sans normal-case tracking-normal leading-relaxed">{{ t('project.archiveDeleteHint') }}</span>
+        </label>
+        <div class="flex gap-2 justify-end mt-1">
+          <button id="proj-automation-save" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">{{ t('save') }}</button>
+        </div>
+      </div>
+
+      <!-- Tab 2: Users -->
+      <div id="proj-users-tab" class="proj-settings-tab-content hidden flex flex-col gap-3.5">
+        <div id="proj-user-list" class="flex flex-col gap-1.5"></div>
+        <div id="proj-users-placeholder" class="text-sm text-text-dim py-2">{{ t('project.noUsers') }}</div>
+        <div class="flex gap-2 mt-1">
+          <input id="proj-user-input" type="text" :placeholder="t('project.userPlaceholder')"
+            class="flex-1 bg-surface-2 border border-border rounded-md text-text font-sans text-sm px-3 py-2 outline-none transition-colors focus:border-accent" />
+          <button id="proj-user-add" class="bg-accent border-none text-white font-semibold rounded-md px-4 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">+</button>
+        </div>
+      </div>
+
+      <!-- Tab 3: JSON -->
+      <div id="proj-json-tab" class="proj-settings-tab-content hidden flex flex-col gap-3.5">
+        <div class="flex items-center justify-between">
+          <span class="font-mono text-[10px] text-text-dim uppercase tracking-wide">JSON</span>
+          <button id="proj-view-toggle" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">{{ t('project.rawJson') }}</button>
+        </div>
+        <div id="proj-json-tree" class="json-tree"></div>
+        <textarea id="proj-modal-json" class="bg-surface-2 border border-border rounded-md text-text font-mono text-xs leading-relaxed p-3 resize-y w-full outline-none transition-colors focus:border-accent" rows="20" spellcheck="false" style="display:none"></textarea>
+        <div class="flex gap-2 justify-end mt-1">
+          <button id="proj-modal-copy" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">{{ t('copyToClipboard') }}</button>
+          <button id="proj-modal-save" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">{{ t('save') }}</button>
+          <button id="proj-modal-import" class="bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-sm px-2 py-0.5 transition-colors hover:bg-accent">{{ t('project.importAsNew') }}</button>
+        </div>
       </div>
     </div>
   </div>
@@ -492,6 +579,7 @@ curl -fsSL .../install | bash    # CLI aktualisieren</pre>
       <div class="admin-tabs flex gap-1 border-b border-border pb-2">
         <button class="admin-tab admin-tab-active bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-tab="users">{{ t('admin.users') }}</button>
         <button class="admin-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-tab="tokens">{{ t('admin.tokens') }}</button>
+        <button class="admin-tab bg-transparent border border-border rounded-t-md text-text-dim cursor-pointer font-mono text-xs px-3.5 py-1.5 uppercase tracking-wide transition-all hover:text-text" data-tab="system">{{ t('admin.system') }}</button>
       </div>
       <div id="admin-user-list" class="admin-user-list flex flex-col gap-1.5 max-h-[400px] overflow-y-auto"></div>
       <div id="admin-user-form" class="flex flex-col gap-3" style="display:none">
@@ -524,6 +612,14 @@ curl -fsSL .../install | bash    # CLI aktualisieren</pre>
           <button id="admin-create-token-btn" class="bg-accent border-none text-white font-semibold rounded-md px-5 py-2 text-[13px] cursor-pointer hover:opacity-85 transition-opacity">{{ t('create') }} Token</button>
         </div>
         <pre id="admin-token-result" class="bg-surface-2 border border-accent rounded-md text-accent font-mono text-xs p-2.5 break-all mt-2 select-all" style="display:none"></pre>
+      </div>
+      <div id="admin-system-section" style="display:none">
+        <h3 class="font-mono text-xs uppercase tracking-wide text-text-dim mb-3">{{ t('admin.systemTitle') }}</h3>
+        <div id="admin-system-content" class="bg-surface-2 border border-border rounded-md p-4"></div>
+        <button
+          class="mt-3 bg-accent-dim border border-accent rounded-md text-text cursor-pointer text-[13px] px-4 py-1.5 transition-colors hover:bg-accent font-mono"
+          id="admin-system-refresh-btn"
+        >&#8635; {{ t('admin.systemRefresh') }}</button>
       </div>
     </div>
   </div>

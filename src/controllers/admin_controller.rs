@@ -241,3 +241,25 @@ pub async fn admin_delete_token(
     state.store.delete_token(&token_id).await?;
     Ok(Json(serde_json::json!({"ok": true})))
 }
+
+// ---- System-Status ----
+
+/// GET /api/admin/system-status – Maintenance-Job Status (letzter/nächster Lauf).
+pub async fn admin_system_status(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    const INTERVAL_SECS: i64 = 3600;
+
+    let last_run = *state.last_maintenance_run.read().await;
+
+    let next_run = match last_run {
+        Some(last) => last + chrono::Duration::seconds(INTERVAL_SECS),
+        None => state.started_at + chrono::Duration::seconds(INTERVAL_SECS),
+    };
+
+    Ok(Json(serde_json::json!({
+        "last_maintenance_run": last_run.map(|t| t.to_rfc3339()),
+        "next_maintenance_run": next_run.to_rfc3339(),
+        "interval_seconds": INTERVAL_SECS,
+    })))
+}

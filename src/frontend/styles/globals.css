@@ -253,6 +253,7 @@ body[data-theme="light"] {
   .prompt-output-content { display: none; }
   .prompt-output-content.prompt-tab-visible { display: block; }
   .admin-tab-active { color: var(--color-accent) !important; border-color: var(--color-accent) !important; border-bottom-color: var(--color-surface) !important; }
+  .proj-settings-tab-active { color: var(--color-accent) !important; border-color: var(--color-accent) !important; border-bottom-color: var(--color-surface) !important; }
 
   /* Prompt tokens */
   .prompt-token-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: 12px; }

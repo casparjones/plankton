@@ -16,6 +16,14 @@ export interface ProjectDoc {
   git?: GitConfig | null
   /** Reihenfolge des Projekts in der Sidebar (aufsteigend, 0-basiert). */
   order?: number
+  /** Board-Typ: "kanban" (Standard) oder "list". */
+  type?: string
+  /** Im Move-to-Board-Overlay oben anpinnen. */
+  pinned?: boolean
+  /** Tage bis Tasks aus Done-Spalten automatisch archiviert werden. -1 = deaktiviert. Default: 10. */
+  doneExpire?: number | null
+  /** Tage bis archivierte Tasks automatisch gelöscht werden. -1 = deaktiviert. Default: 90. */
+  archiveDelete?: number | null
 }
 
 /** Git-Repository-Konfiguration für ein Projekt. */

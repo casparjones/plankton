@@ -66,6 +66,8 @@ export default {
     restored: '"{title}" restaurada',
     archivedAt: 'Archivado',
     error: 'Error al cargar el archivo',
+    archiveTask: 'Archivar tarea',
+    archived: '"{title}" archivada',
   },
 
   bulk: {
@@ -138,6 +140,25 @@ export default {
     editProject: 'Editar proyecto',
     importAsNew: 'Importar como nuevo proyecto',
     rawJson: 'JSON sin formato',
+    tabDetails: 'Detalles',
+    tabAutomation: 'Automatización',
+    tabUsers: 'Usuarios',
+    fieldId: 'ID',
+    fieldType: 'Tipo',
+    typeKanban: 'Kanban',
+    typeList: 'Lista',
+    typeTooltip: 'Solo posible si el tablero tiene una columna',
+    fieldSlug: 'Slug',
+    fieldOwner: 'Propietario',
+    noUsers: 'Aún no hay usuarios asignados',
+    userPlaceholder: 'Nombre o correo…',
+    pinnedLabel: 'Fijar tablero',
+    pinnedHint: '— aparece en la parte superior del selector',
+    automationSection: 'Automatización',
+    doneExpireLabel: 'Archivar tareas de Done automáticamente',
+    doneExpireHint: 'Las tareas que llevan X días en una columna Done se archivarán automáticamente. -1 desactiva esto.',
+    archiveDeleteLabel: 'Eliminar tareas archivadas automáticamente',
+    archiveDeleteHint: 'Las tareas archivadas con más de X días se eliminarán automáticamente. -1 desactiva esto.',
   },
 
   git: {
@@ -211,6 +232,16 @@ export default {
     newPasswordPrompt: 'Nueva contraseña:',
     passwordReset: 'Contraseña restablecida',
     tokenName: 'Nombre del token...',
+    system: 'Sistema',
+    systemTitle: 'Trabajo de mantenimiento',
+    systemLastRun: 'Última ejecución',
+    systemNextRun: 'Próxima ejecución',
+    systemCountdown: 'En',
+    systemInterval: 'Intervalo',
+    systemNever: 'Aún no ejecutado',
+    systemLoading: 'Cargando...',
+    systemError: 'Error al cargar',
+    systemRefresh: 'Actualizar',
   },
 
   passwordModal: {
@@ -246,6 +277,16 @@ export default {
     importBtn: 'Importar',
     supervisorPrompt: 'Prompt supervisor',
     copyPrompt: 'Copiar prompt',
+  },
+
+  moveToBoard: {
+    title: 'Mover tarea a otro tablero',
+    searchPlaceholder: 'Buscar tablero…',
+    loading: 'Cargando tableros…',
+    empty: 'No se encontró ningún tablero',
+    success: '"{board}" – tarea movida con éxito',
+    errorLoading: 'Error al cargar los tableros',
+    errorMoving: 'Error al mover la tarea',
   },
 
   drag: {

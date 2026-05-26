@@ -425,7 +425,9 @@ pub async fn move_task(
         task.previous_row = old_col;
         task.column_id = req.column_id;
         task.order = req.order.unwrap_or(task.order);
-        task.updated_at = Utc::now().to_rfc3339();
+        let now = Utc::now();
+        task.updated_at = now.to_rfc3339();
+        task.column_entered_at = Some(now);
         task.logs
             .push(log_entry(&user_name, &format!("→ {}", new_name)));
     }
@@ -539,10 +541,14 @@ pub async fn batch_move_tasks(
                 task.previous_row = task.column_id.clone();
                 task.logs
                     .push(log_entry(&user_name, &format!("→ {}", new_name)));
+                let now = Utc::now();
+                task.updated_at = now.to_rfc3339();
+                task.column_entered_at = Some(now);
+            } else {
+                task.updated_at = Utc::now().to_rfc3339();
             }
             task.column_id = m.column_id.clone();
             task.order = m.order;
-            task.updated_at = Utc::now().to_rfc3339();
         }
     }
     state.store.put_project(project).await?;

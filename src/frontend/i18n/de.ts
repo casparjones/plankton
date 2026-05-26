@@ -66,6 +66,8 @@ export default {
     restored: '"{title}" wiederhergestellt',
     archivedAt: 'Archiviert',
     error: 'Fehler beim Laden des Archivs',
+    archiveTask: 'Task archivieren',
+    archived: '"{title}" archiviert',
   },
 
   bulk: {
@@ -138,6 +140,25 @@ export default {
     editProject: 'Projekt editieren',
     importAsNew: 'Als neues Projekt importieren',
     rawJson: 'Raw JSON',
+    tabDetails: 'Details',
+    tabAutomation: 'Automation',
+    tabUsers: 'Nutzer',
+    fieldId: 'ID',
+    fieldType: 'Typ',
+    typeKanban: 'Kanban',
+    typeList: 'Liste',
+    typeTooltip: 'Nur möglich wenn das Board eine Spalte hat',
+    fieldSlug: 'Slug',
+    fieldOwner: 'Eigentümer',
+    noUsers: 'Noch keine Nutzer zugewiesen',
+    userPlaceholder: 'Name oder E-Mail…',
+    pinnedLabel: 'Board anpinnen',
+    pinnedHint: '— erscheint oben in der Board-Auswahl',
+    automationSection: 'Automatisierung',
+    doneExpireLabel: 'Tasks aus Done automatisch archivieren',
+    doneExpireHint: 'Tasks die seit X Tagen in einer Done-Spalte liegen werden automatisch archiviert. -1 deaktiviert diese Automatik.',
+    archiveDeleteLabel: 'Archivierte Tasks automatisch löschen',
+    archiveDeleteHint: 'Archivierte Tasks die älter als X Tage sind werden automatisch und unwiderruflich gelöscht. -1 deaktiviert diese Automatik.',
   },
 
   git: {
@@ -211,6 +232,16 @@ export default {
     newPasswordPrompt: 'Neues Passwort:',
     passwordReset: 'Passwort zurückgesetzt',
     tokenName: 'Token-Name...',
+    system: 'System',
+    systemTitle: 'Wartungs-Job',
+    systemLastRun: 'Letzter Lauf',
+    systemNextRun: 'Nächster Lauf',
+    systemCountdown: 'In',
+    systemInterval: 'Intervall',
+    systemNever: 'Noch nicht gelaufen',
+    systemLoading: 'Lade...',
+    systemError: 'Fehler beim Laden',
+    systemRefresh: 'Aktualisieren',
   },
 
   passwordModal: {
@@ -246,6 +277,16 @@ export default {
     importBtn: 'Importieren',
     supervisorPrompt: 'Supervisor Prompt',
     copyPrompt: 'Prompt kopieren',
+  },
+
+  moveToBoard: {
+    title: 'Task auf anderes Board verschieben',
+    searchPlaceholder: 'Board suchen…',
+    loading: 'Boards laden…',
+    empty: 'Kein Board gefunden',
+    success: '"{board}" – Task erfolgreich verschoben',
+    errorLoading: 'Fehler beim Laden der Boards',
+    errorMoving: 'Fehler beim Verschieben des Tasks',
   },
 
   drag: {

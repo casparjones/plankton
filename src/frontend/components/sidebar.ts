@@ -108,6 +108,7 @@ function createSidebarHeader(): HTMLDivElement {
 
   // Such-Button
   const searchToggleBtn = document.createElement('button');
+  searchToggleBtn.id = 'sidebar-search-toggle';
   searchToggleBtn.className = 'bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-sm w-7 h-7 flex items-center justify-center leading-none transition-all hover:border-accent hover:text-accent';
   searchToggleBtn.innerHTML = '&#128269;';
   searchToggleBtn.title = t('sidebar.searchPlaceholder') || 'Suche';

@@ -66,6 +66,8 @@ export default {
     restored: '"{title}" restauré',
     archivedAt: 'Archivé',
     error: 'Erreur lors du chargement',
+    archiveTask: 'Archiver la tâche',
+    archived: '"{title}" archivé',
   },
 
   bulk: {
@@ -138,6 +140,25 @@ export default {
     editProject: 'Modifier le projet',
     importAsNew: 'Importer comme nouveau projet',
     rawJson: 'JSON brut',
+    tabDetails: 'Détails',
+    tabAutomation: 'Automatisation',
+    tabUsers: 'Utilisateurs',
+    fieldId: 'ID',
+    fieldType: 'Type',
+    typeKanban: 'Kanban',
+    typeList: 'Liste',
+    typeTooltip: 'Seulement possible si le tableau a une colonne',
+    fieldSlug: 'Slug',
+    fieldOwner: 'Propriétaire',
+    noUsers: 'Aucun utilisateur assigné',
+    userPlaceholder: 'Nom ou e-mail…',
+    pinnedLabel: 'Épingler le tableau',
+    pinnedHint: '— apparaît en haut du sélecteur',
+    automationSection: 'Automatisation',
+    doneExpireLabel: 'Archiver automatiquement les tâches de Done',
+    doneExpireHint: 'Les tâches restant X jours dans une colonne Done sont archivées automatiquement. -1 désactive cela.',
+    archiveDeleteLabel: 'Supprimer automatiquement les tâches archivées',
+    archiveDeleteHint: 'Les tâches archivées de plus de X jours sont supprimées automatiquement et définitivement. -1 désactive cela.',
   },
 
   git: {
@@ -211,6 +232,16 @@ export default {
     newPasswordPrompt: 'Nouveau mot de passe :',
     passwordReset: 'Mot de passe réinitialisé',
     tokenName: 'Nom du token...',
+    system: 'Système',
+    systemTitle: 'Tâche de maintenance',
+    systemLastRun: 'Dernière exécution',
+    systemNextRun: 'Prochaine exécution',
+    systemCountdown: 'Dans',
+    systemInterval: 'Intervalle',
+    systemNever: 'Pas encore exécuté',
+    systemLoading: 'Chargement...',
+    systemError: 'Erreur de chargement',
+    systemRefresh: 'Actualiser',
   },
 
   passwordModal: {
@@ -246,6 +277,16 @@ export default {
     importBtn: 'Importer',
     supervisorPrompt: 'Prompt superviseur',
     copyPrompt: 'Copier le prompt',
+  },
+
+  moveToBoard: {
+    title: 'Déplacer la tâche vers un autre tableau',
+    searchPlaceholder: 'Rechercher un tableau…',
+    loading: 'Chargement des tableaux…',
+    empty: 'Aucun tableau trouvé',
+    success: '"{board}" – tâche déplacée avec succès',
+    errorLoading: 'Erreur lors du chargement des tableaux',
+    errorMoving: 'Erreur lors du déplacement de la tâche',
   },
 
   drag: {
