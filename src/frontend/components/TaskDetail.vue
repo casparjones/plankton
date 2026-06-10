@@ -2,6 +2,7 @@
 // Task-Detail: Nur-Lesen-Ansicht eines Tasks mit allen Informationen.
 import { ref, computed, watch, nextTick } from 'vue'
 import { marked } from 'marked'
+import hljs from 'highlight.js'
 import type { Task, AttachmentRef } from '../types'
 
 import { t } from '../i18n'
@@ -260,14 +261,34 @@ async function deleteAttachment(att: AttachmentRef) {
 // ── Attachment Viewer ─────────────────────────────────────────────────────────
 
 const viewerAtt = ref<AttachmentRef | null>(null)
-const viewerText = ref<string | null>(null)
-const viewerMarkdown = ref<string | null>(null)
+const viewerHtml = ref<string | null>(null)   // highlighted code or rendered markdown
 const viewerLoading = ref(false)
 const viewerEl = ref<HTMLElement | null>(null)
+const viewerLang = ref('')
 
 watch(viewerAtt, (val) => {
   if (val) nextTick(() => viewerEl.value?.focus())
 })
+
+/** Sprachname aus Dateiendung ableiten (für highlight.js). */
+function langFromFilename(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  const map: Record<string, string> = {
+    rs: 'rust', ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
+    vue: 'xml', py: 'python', go: 'go', rb: 'ruby', java: 'java', kt: 'kotlin',
+    swift: 'swift', cpp: 'cpp', c: 'c', cs: 'csharp', php: 'php',
+    sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'bash',
+    yaml: 'yaml', yml: 'yaml', toml: 'ini', json: 'json', json5: 'json',
+    xml: 'xml', html: 'html', htm: 'html', css: 'css', scss: 'scss', less: 'less',
+    sql: 'sql', graphql: 'graphql', gql: 'graphql',
+    dockerfile: 'dockerfile', makefile: 'makefile',
+    tf: 'hcl', hcl: 'hcl', lua: 'lua', r: 'r', dart: 'dart',
+    ex: 'elixir', exs: 'elixir', hs: 'haskell', clj: 'clojure',
+    md: 'markdown', markdown: 'markdown', txt: 'plaintext',
+    proto: 'protobuf', svelte: 'xml', astro: 'xml',
+  }
+  return map[ext] ?? 'plaintext'
+}
 
 function isImage(att: AttachmentRef): boolean {
   return att.mime_type.startsWith('image/')
@@ -277,41 +298,53 @@ function isPdf(att: AttachmentRef): boolean {
   return att.mime_type === 'application/pdf'
 }
 
-function isViewableText(att: AttachmentRef): boolean {
+function isViewable(att: AttachmentRef): boolean {
+  if (isImage(att) || isPdf(att)) return true
   const m = att.mime_type
-  return m.startsWith('text/') ||
-    ['application/json', 'application/xml', 'application/javascript',
-     'application/typescript', 'application/x-yaml', 'application/yaml'].some(p => m.startsWith(p))
+  if (m.startsWith('text/')) return true
+  if (['application/json','application/xml','application/javascript',
+       'application/typescript','application/x-yaml','application/yaml',
+       'application/graphql'].some(p => m.startsWith(p))) return true
+  return !!att.filename.match(/\.(md|markdown|txt|rs|ts|tsx|js|jsx|vue|svelte|astro|py|go|rb|java|kt|swift|cpp|c|cs|php|sh|bash|zsh|fish|yaml|yml|toml|json|json5|xml|html|htm|css|scss|less|sql|graphql|gql|dockerfile|makefile|tf|hcl|lua|r|dart|ex|exs|hs|clj|proto)$/i)
 }
 
 async function openViewer(att: AttachmentRef): Promise<void> {
   viewerAtt.value = att
-  viewerText.value = null
-  viewerMarkdown.value = null
+  viewerHtml.value = null
+  viewerLang.value = ''
   if (isImage(att) || isPdf(att)) return
-  if (isViewableText(att) || att.filename.match(/\.(md|markdown|txt|rs|ts|js|vue|py|go|sh|yaml|yml|toml|json|xml|html|css|sql|dockerfile)$/i)) {
-    viewerLoading.value = true
-    try {
-      const url = `/api/projects/${state.project?._id}/tasks/${task.value?.id}/attachments/${att.id}`
-      const res = await fetch(url)
-      const content = await res.text()
-      if (att.filename.match(/\.(md|markdown)$/i)) {
-        viewerMarkdown.value = marked.parse(content) as string
-      } else {
-        viewerText.value = content
-      }
-    } catch {
-      viewerText.value = '(Fehler beim Laden)'
-    } finally {
-      viewerLoading.value = false
+  if (!isViewable(att)) return
+
+  viewerLoading.value = true
+  try {
+    const url = `/api/projects/${state.project?._id}/tasks/${task.value?.id}/attachments/${att.id}`
+    const res = await fetch(url)
+    const content = await res.text()
+    const lang = langFromFilename(att.filename)
+
+    if (lang === 'markdown') {
+      viewerHtml.value = marked.parse(content) as string
+      viewerLang.value = 'markdown'
+    } else {
+      // highlight.js: automatisch oder gezielt
+      const result = hljs.getLanguage(lang)
+        ? hljs.highlight(content, { language: lang })
+        : hljs.highlightAuto(content)
+      viewerHtml.value = result.value
+      viewerLang.value = result.language ?? lang
     }
+  } catch {
+    viewerHtml.value = '(Fehler beim Laden)'
+    viewerLang.value = 'plaintext'
+  } finally {
+    viewerLoading.value = false
   }
 }
 
 function closeViewer(): void {
   viewerAtt.value = null
-  viewerText.value = null
-  viewerMarkdown.value = null
+  viewerHtml.value = null
+  viewerLang.value = ''
 }
 
 function viewerApiUrl(att: AttachmentRef): string {
@@ -538,15 +571,17 @@ function viewerApiUrl(att: AttachmentRef): string {
         <div v-else-if="viewerLoading" class="text-white/40 font-mono text-sm">Laden…</div>
         <!-- Markdown -->
         <div
-          v-else-if="viewerMarkdown !== null"
+          v-else-if="viewerLang === 'markdown' && viewerHtml !== null"
           class="max-w-4xl w-full bg-[#161b22] border border-white/10 rounded-lg px-10 py-8 overflow-auto max-h-full markdown-body"
-          v-html="viewerMarkdown"
+          v-html="viewerHtml"
         />
-        <!-- Code / Text -->
-        <pre
-          v-else-if="viewerText !== null"
-          class="w-full max-w-full bg-[#0d1117] border border-white/10 rounded-lg p-5 font-mono text-[13px] text-[#e6edf3] overflow-auto max-h-full leading-relaxed"
-        >{{ viewerText }}</pre>
+        <!-- Code mit Syntax-Highlighting -->
+        <div v-else-if="viewerHtml !== null" class="w-full max-h-full overflow-auto rounded-lg border border-white/10" style="background:#0d1117">
+          <div class="flex items-center justify-between px-4 py-2 border-b border-white/10" style="background:#161b22">
+            <span class="font-mono text-[11px] text-white/40 uppercase tracking-wider">{{ viewerLang }}</span>
+          </div>
+          <pre class="m-0 p-5 overflow-auto text-[13px] leading-relaxed" style="background:transparent"><code class="hljs" v-html="viewerHtml"></code></pre>
+        </div>
         <!-- Unsupported -->
         <div v-else class="flex flex-col items-center gap-3 text-white/30">
           <span class="text-4xl">📎</span>
