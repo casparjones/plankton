@@ -278,7 +278,7 @@ function langFromFilename(name: string): string {
     vue: 'xml', py: 'python', go: 'go', rb: 'ruby', java: 'java', kt: 'kotlin',
     swift: 'swift', cpp: 'cpp', c: 'c', cs: 'csharp', php: 'php',
     sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'bash',
-    yaml: 'yaml', yml: 'yaml', toml: 'ini', json: 'json', json5: 'json',
+    yaml: 'yaml', yml: 'yaml', toml: 'ini', json: 'json', json5: 'json', jsonl: 'json', ndjson: 'json',
     xml: 'xml', html: 'html', htm: 'html', css: 'css', scss: 'scss', less: 'less',
     sql: 'sql', graphql: 'graphql', gql: 'graphql',
     dockerfile: 'dockerfile', makefile: 'makefile',
@@ -305,7 +305,7 @@ function isViewable(att: AttachmentRef): boolean {
   if (['application/json','application/xml','application/javascript',
        'application/typescript','application/x-yaml','application/yaml',
        'application/graphql'].some(p => m.startsWith(p))) return true
-  return !!att.filename.match(/\.(md|markdown|txt|rs|ts|tsx|js|jsx|vue|svelte|astro|py|go|rb|java|kt|swift|cpp|c|cs|php|sh|bash|zsh|fish|yaml|yml|toml|json|json5|xml|html|htm|css|scss|less|sql|graphql|gql|dockerfile|makefile|tf|hcl|lua|r|dart|ex|exs|hs|clj|proto)$/i)
+  return !!att.filename.match(/\.(md|markdown|txt|rs|ts|tsx|js|jsx|vue|svelte|astro|py|go|rb|java|kt|swift|cpp|c|cs|php|sh|bash|zsh|fish|yaml|yml|toml|json|json5|jsonl|ndjson|xml|html|htm|css|scss|less|sql|graphql|gql|dockerfile|makefile|tf|hcl|lua|r|dart|ex|exs|hs|clj|proto)$/i)
 }
 
 async function openViewer(att: AttachmentRef): Promise<void> {
