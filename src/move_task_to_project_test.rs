@@ -44,6 +44,9 @@ mod tests {
             oauth_refresh_tokens: Arc::new(Mutex::new(HashMap::new())),
             write_locks: Arc::new(Mutex::new(HashMap::new())),
             http_client: reqwest::Client::new(),
+            last_maintenance_run: Arc::new(tokio::sync::RwLock::new(None)),
+            started_at: chrono::Utc::now(),
+            attachment_store: None,
         };
         (state, dir)
     }
@@ -81,6 +84,7 @@ mod tests {
             r#type: None,
             done_expire: None,
             archive_delete: None,
+            pinned: None,
         };
         state
             .store
@@ -260,6 +264,7 @@ mod tests {
             r#type: None,
             done_expire: None,
             archive_delete: None,
+            pinned: None,
         };
         let dst = state.store.create_project(dst).await.expect("create dst");
 

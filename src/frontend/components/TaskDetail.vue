@@ -1,13 +1,14 @@
 <script setup lang="ts">
 // Task-Detail: Nur-Lesen-Ansicht eines Tasks mit allen Informationen.
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { marked } from 'marked'
-import type { Task } from '../types'
+import type { Task, AttachmentRef } from '../types'
 
 import { t } from '../i18n'
 import { state } from '../state'
 import { columnName, formatDate, labelColor } from '../utils'
 import { saveTask } from '../services/project-service'
+import api from '../api'
 
 // Marked Optionen: keine async, Zeilenumbrüche als <br>
 marked.setOptions({ async: false, breaks: true })
@@ -215,6 +216,107 @@ window.__openTaskDetail = open
 window.__closeTaskDetail = close
 
 defineExpose({ open, close })
+
+// ── Attachments ──────────────────────────────────────────────────────────────
+
+const attachments = computed<AttachmentRef[]>(() => task.value?.attachments ?? [])
+const uploadError = ref('')
+const uploading = ref(false)
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+async function uploadAttachment(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !task.value || !state.project) return
+  uploading.value = true
+  uploadError.value = ''
+  try {
+    const path = `/api/projects/${state.project._id}/tasks/${task.value.id}/attachments`
+    const att = await api.upload<AttachmentRef>(path, file)
+    if (!task.value.attachments) task.value.attachments = []
+    task.value.attachments.push(att)
+  } catch (e: unknown) {
+    uploadError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    uploading.value = false
+    input.value = ''
+  }
+}
+
+async function deleteAttachment(att: AttachmentRef) {
+  if (!task.value || !state.project) return
+  const path = `/api/projects/${state.project._id}/tasks/${task.value.id}/attachments/${att.id}`
+  await api.del(path)
+  if (task.value.attachments) {
+    task.value.attachments = task.value.attachments.filter(a => a.id !== att.id)
+  }
+}
+
+// ── Attachment Viewer ─────────────────────────────────────────────────────────
+
+const viewerAtt = ref<AttachmentRef | null>(null)
+const viewerText = ref<string | null>(null)
+const viewerMarkdown = ref<string | null>(null)
+const viewerLoading = ref(false)
+const viewerEl = ref<HTMLElement | null>(null)
+
+watch(viewerAtt, (val) => {
+  if (val) nextTick(() => viewerEl.value?.focus())
+})
+
+function isImage(att: AttachmentRef): boolean {
+  return att.mime_type.startsWith('image/')
+}
+
+function isPdf(att: AttachmentRef): boolean {
+  return att.mime_type === 'application/pdf'
+}
+
+function isViewableText(att: AttachmentRef): boolean {
+  const m = att.mime_type
+  return m.startsWith('text/') ||
+    ['application/json', 'application/xml', 'application/javascript',
+     'application/typescript', 'application/x-yaml', 'application/yaml'].some(p => m.startsWith(p))
+}
+
+async function openViewer(att: AttachmentRef): Promise<void> {
+  viewerAtt.value = att
+  viewerText.value = null
+  viewerMarkdown.value = null
+  if (isImage(att) || isPdf(att)) return
+  if (isViewableText(att) || att.filename.match(/\.(md|markdown|txt|rs|ts|js|vue|py|go|sh|yaml|yml|toml|json|xml|html|css|sql|dockerfile)$/i)) {
+    viewerLoading.value = true
+    try {
+      const url = `/api/projects/${state.project?._id}/tasks/${task.value?.id}/attachments/${att.id}`
+      const res = await fetch(url)
+      const content = await res.text()
+      if (att.filename.match(/\.(md|markdown)$/i)) {
+        viewerMarkdown.value = marked.parse(content) as string
+      } else {
+        viewerText.value = content
+      }
+    } catch {
+      viewerText.value = '(Fehler beim Laden)'
+    } finally {
+      viewerLoading.value = false
+    }
+  }
+}
+
+function closeViewer(): void {
+  viewerAtt.value = null
+  viewerText.value = null
+  viewerMarkdown.value = null
+}
+
+function viewerApiUrl(att: AttachmentRef): string {
+  return `/api/projects/${state.project?._id}/tasks/${task.value?.id}/attachments/${att.id}`
+}
 </script>
 
 <template>
@@ -349,6 +451,32 @@ defineExpose({ open, close })
               </div>
             </div>
           </div>
+          <!-- Attachments -->
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between border-b border-border pb-1">
+              <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim">Attachments</span>
+              <label class="cursor-pointer text-[11px] text-accent hover:text-accent/80 font-mono">
+                {{ uploading ? '…' : '+ Upload' }}
+                <input type="file" class="hidden" :disabled="uploading" @change="uploadAttachment" />
+              </label>
+            </div>
+            <div v-if="uploadError" class="text-[11px] text-red-400 font-mono">{{ uploadError }}</div>
+            <div v-if="attachments.length" class="flex flex-col gap-1">
+              <div v-for="att in attachments" :key="att.id"
+                class="flex items-center gap-2 text-[12px] p-1.5 px-2 bg-surface-2 rounded-md border border-border hover:border-accent/50 transition-colors group">
+                <button @click="openViewer(att)"
+                  class="flex-1 truncate font-mono text-text text-left hover:text-accent transition-colors cursor-pointer"
+                  :title="att.filename">{{ att.filename }}</button>
+                <span class="text-text-dim whitespace-nowrap text-[11px]">{{ formatBytes(att.size_bytes) }}</span>
+                <a :href="`/api/projects/${state.project?._id}/tasks/${task?.id}/attachments/${att.id}`"
+                  download class="text-accent hover:text-accent/80 text-[11px] font-mono opacity-0 group-hover:opacity-100 transition-opacity">↓</a>
+                <button @click="deleteAttachment(att)"
+                  class="text-text-dim hover:text-red-400 text-[11px] font-mono ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+              </div>
+            </div>
+            <div v-else-if="!uploading" class="text-xs text-text-dim italic">Keine Anhänge</div>
+          </div>
+
           <div class="flex flex-col gap-2">
             <span class="font-mono text-[11px] font-semibold uppercase tracking-wider text-text-dim border-b border-border pb-1">{{ t('taskModal.logs') }}</span>
             <div class="max-h-[250px] overflow-y-auto flex flex-col gap-1.5">
@@ -369,4 +497,64 @@ defineExpose({ open, close })
       </div>
     </div>
   </div>
+
+  <!-- Attachment Viewer Overlay -->
+  <Teleport to="body">
+    <div
+      v-if="viewerAtt"
+      ref="viewerEl"
+      tabindex="-1"
+      class="fixed inset-0 bg-black/92 z-[2000] flex flex-col outline-none"
+      @click.self="closeViewer"
+      @keydown.esc="closeViewer"
+    >
+      <!-- Header -->
+      <div class="flex items-center justify-between px-5 py-3 border-b border-white/10 flex-shrink-0 bg-black/40">
+        <span class="font-mono text-[13px] text-white/60 truncate max-w-[60%]">{{ viewerAtt.filename }}</span>
+        <div class="flex items-center gap-3 flex-shrink-0">
+          <span class="text-[11px] text-white/30 font-mono">{{ formatBytes(viewerAtt.size_bytes) }}</span>
+          <a :href="viewerApiUrl(viewerAtt)" download
+            class="font-mono text-[11px] text-accent hover:text-accent/80 border border-accent/30 rounded px-2.5 py-1 transition-colors">↓ Download</a>
+          <button @click="closeViewer" class="text-white/40 hover:text-white text-lg leading-none px-1.5 py-0.5 transition-colors">✕</button>
+        </div>
+      </div>
+      <!-- Content -->
+      <div class="flex-1 overflow-auto flex items-center justify-center p-6 min-h-0" @click.self="closeViewer">
+        <!-- Image -->
+        <img
+          v-if="isImage(viewerAtt)"
+          :src="viewerApiUrl(viewerAtt)"
+          class="max-w-full max-h-full object-contain rounded shadow-2xl select-none"
+          :alt="viewerAtt.filename"
+        />
+        <!-- PDF -->
+        <iframe
+          v-else-if="isPdf(viewerAtt)"
+          :src="viewerApiUrl(viewerAtt)"
+          class="w-full h-full border-none rounded"
+          style="max-width: 1000px;"
+        />
+        <!-- Loading -->
+        <div v-else-if="viewerLoading" class="text-white/40 font-mono text-sm">Laden…</div>
+        <!-- Markdown -->
+        <div
+          v-else-if="viewerMarkdown !== null"
+          class="max-w-4xl w-full bg-[#161b22] border border-white/10 rounded-lg px-10 py-8 overflow-auto max-h-full markdown-body"
+          v-html="viewerMarkdown"
+        />
+        <!-- Code / Text -->
+        <pre
+          v-else-if="viewerText !== null"
+          class="w-full max-w-full bg-[#0d1117] border border-white/10 rounded-lg p-5 font-mono text-[13px] text-[#e6edf3] overflow-auto max-h-full leading-relaxed"
+        >{{ viewerText }}</pre>
+        <!-- Unsupported -->
+        <div v-else class="flex flex-col items-center gap-3 text-white/30">
+          <span class="text-4xl">📎</span>
+          <span class="font-mono text-sm">Keine Vorschau verfügbar</span>
+          <a :href="viewerApiUrl(viewerAtt)" download
+            class="text-accent hover:text-accent/80 font-mono text-[13px] border border-accent/30 rounded px-4 py-2 transition-colors">↓ Herunterladen</a>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

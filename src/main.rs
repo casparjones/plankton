@@ -5,6 +5,8 @@
 // ============================================================
 
 #[cfg(test)]
+mod attachment_test;
+#[cfg(test)]
 mod auto_archive_job_test;
 #[cfg(test)]
 mod blocking_test;
@@ -126,6 +128,17 @@ async fn main() -> anyhow::Result<()> {
 
     let port = cfg.port;
 
+    // S3 Attachment-Store initialisieren (nur wenn S3_BUCKET konfiguriert).
+    let attachment_store: Option<Arc<dyn services::AttachmentStore>> =
+        cfg.s3.as_ref().map(|s3_cfg| {
+            info!("S3 attachment storage enabled (bucket: {})", s3_cfg.bucket);
+            let store = services::attachment_service::build_s3_store(s3_cfg);
+            Arc::new(store) as Arc<dyn services::AttachmentStore>
+        });
+    if attachment_store.is_none() {
+        info!("S3_BUCKET not set — file attachment feature disabled");
+    }
+
     let state = AppState {
         store,
         events: Arc::new(Mutex::new(HashMap::new())),
@@ -139,6 +152,7 @@ async fn main() -> anyhow::Result<()> {
         http_client: Client::new(),
         last_maintenance_run: Arc::new(tokio::sync::RwLock::new(None)),
         started_at: chrono::Utc::now(),
+        attachment_store,
     };
 
     // Users-Verzeichnis sicherstellen und Default-Admin anlegen.
@@ -182,8 +196,18 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // Router: Auth + REST-API + Admin + MCP + Statische Dateien.
-    let app = Router::new()
+    let app = build_router(state);
+
+    let addr: SocketAddr = format!("0.0.0.0:{port}").parse()?;
+    print_startup_banner(&port);
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+
+/// Baut den Axum-Router. Auch von Tests verwendbar.
+pub fn build_router(state: state::AppState) -> axum::Router {
+    let mut router = Router::new()
         // Auth-Routen (öffentlich, kein Guard)
         .route("/auth/login", post(auth_login))
         .route("/auth/logout", post(auth_logout))
@@ -250,9 +274,6 @@ async fn main() -> anyhow::Result<()> {
             "/api/projects/:id/users/:user_id",
             put(update_user).delete(delete_user),
         )
-        // Git-Integration deaktiviert (siehe git_controller.rs)
-        // .route("/api/projects/:id/git", get(get_git_config).put(update_git_config))
-        // .route("/api/projects/:id/git/sync", post(git_sync))
         .route(
             "/api/projects/:id/stats/columns",
             get(project_stats_columns),
@@ -279,7 +300,6 @@ async fn main() -> anyhow::Result<()> {
             "/api/admin/users/:user_id/password",
             put(admin_reset_password),
         )
-        // Admin-Token-Routen
         .route(
             "/api/admin/tokens",
             get(admin_list_tokens).post(admin_create_token),
@@ -310,26 +330,34 @@ async fn main() -> anyhow::Result<()> {
         // Docs & Skill
         .route("/docs", get(docs_page))
         .route("/skill.md", get(skill_md))
-        // SPA-Fallback: /p/* und /import liefert index.html (URL-Routing im Frontend).
+        // SPA-Fallback
         .route("/p/*rest", get(spa_fallback))
         .route("/import", get(spa_fallback))
         // Statische Dateien
         .nest_service(
             "/",
             ServeDir::new("static").append_index_html_on_directories(true),
-        )
-        // Middleware
+        );
+
+    // File-Attachment-Routen nur registrieren wenn S3 konfiguriert ist.
+    if state.attachment_store.is_some() {
+        router = router
+            .route(
+                "/api/projects/:id/tasks/:task_id/attachments",
+                post(upload_attachment).get(list_attachments),
+            )
+            .route(
+                "/api/projects/:id/tasks/:task_id/attachments/:attachment_id",
+                get(download_attachment).delete(delete_attachment),
+            );
+    }
+
+    router
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             auth_guard,
         ))
         .layer(axum::middleware::from_fn(request_logger))
         .layer(CorsLayer::permissive())
-        .with_state(state);
-
-    let addr: SocketAddr = format!("0.0.0.0:{port}").parse()?;
-    print_startup_banner(&port);
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
-    Ok(())
+        .with_state(state)
 }

@@ -154,6 +154,39 @@ fn all_tools() -> Vec<ToolDef> {
                 "target_project_id": { "type": "string", "description": "ID of the target project (must be different from source)" }
             }
         })) },
+        ToolDef { name: "attach_file", description: "Attach a small file (≤500 KB) to a task via base64-encoded content. Ideal for source code, configs, small PDFs. For larger files use the CLI: `plankton attach`. Only available when S3 is configured.", roles: Some(&["developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id", "filename", "content_base64"],
+            "properties": {
+                "project_id": { "type": "string" },
+                "task_id": { "type": "string" },
+                "filename": { "type": "string", "description": "Filename including extension, e.g. main.rs" },
+                "content_base64": { "type": "string", "description": "File content base64-encoded (standard encoding). Max 500 KB decoded." },
+                "mime_type": { "type": "string", "description": "MIME type (optional, auto-detected from filename if omitted)" }
+            }
+        })) },
+        ToolDef { name: "list_attachments", description: "List all file attachments of a task.", roles: None, schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id"],
+            "properties": {
+                "project_id": { "type": "string" },
+                "task_id": { "type": "string" }
+            }
+        })) },
+        ToolDef { name: "get_attachment", description: "Get download URL (presigned S3, valid 1h) for a task attachment.", roles: None, schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id", "attachment_id"],
+            "properties": {
+                "project_id": { "type": "string" },
+                "task_id": { "type": "string" },
+                "attachment_id": { "type": "string" }
+            }
+        })) },
+        ToolDef { name: "delete_attachment", description: "Delete a file attachment from a task and S3.", roles: Some(&["developer", "manager", "admin"]), schema: Some(|| serde_json::json!({
+            "type": "object", "required": ["project_id", "task_id", "attachment_id"],
+            "properties": {
+                "project_id": { "type": "string" },
+                "task_id": { "type": "string" },
+                "attachment_id": { "type": "string" }
+            }
+        })) },
     ]
 }
 
@@ -1744,6 +1777,193 @@ async fn execute_tool(
                 "target_project_id": target_project_id,
             }))
         }
+        // ── File-Attachment Tools ────────────────────────────────────
+        "attach_file" => {
+            use base64::Engine;
+
+            let attachment_store = state.attachment_store.as_ref().ok_or_else(|| {
+                ApiError::BadRequest(
+                    "File uploads not configured on this server (S3_BUCKET not set)".into(),
+                )
+            })?;
+
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let task_id = args["task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
+            let filename = args["filename"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("filename missing".into()))?;
+            let content_b64 = args["content_base64"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("content_base64 missing".into()))?;
+
+            let data = base64::engine::general_purpose::STANDARD
+                .decode(content_b64)
+                .map_err(|e| ApiError::BadRequest(format!("base64 decode error: {e}")))?;
+
+            // 500 KB Limit für MCP-Upload
+            const MAX_BYTES: usize = 500 * 1024;
+            if data.len() > MAX_BYTES {
+                return Err(ApiError::BadRequest(format!(
+                    "File too large for MCP upload: {} bytes (max 500 KB = {} bytes). Use `plankton attach` CLI for larger files.",
+                    data.len(),
+                    MAX_BYTES
+                )));
+            }
+
+            let mime_type = args["mime_type"]
+                .as_str()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| {
+                    mime_guess::from_path(filename)
+                        .first_or_octet_stream()
+                        .to_string()
+                });
+
+            let attachment_id = Uuid::new_v4().to_string();
+            let key = format!("{}/{}/{}/{}", project_id, task_id, attachment_id, filename);
+            let size_bytes = data.len() as i64;
+
+            let url = attachment_store.upload(&key, data, &mime_type).await?;
+
+            let att = crate::models::AttachmentRef {
+                id: attachment_id,
+                filename: filename.to_string(),
+                url,
+                mime_type,
+                size_bytes,
+                created_at: Utc::now().to_rfc3339(),
+            };
+
+            // In Task persistieren
+            let lock = state.get_project_write_lock(project_id).await;
+            let _guard = lock.lock().await;
+            let mut project = state.store.resolve_project(project_id).await?;
+            let task = project
+                .tasks
+                .iter_mut()
+                .find(|t| t.id == task_id || t.slug == task_id)
+                .ok_or_else(|| ApiError::NotFound(format!("task {task_id} not found")))?;
+            task.attachments.push(att.clone());
+            state.store.put_project(project).await?;
+
+            Ok(serde_json::to_value(&att)?)
+        }
+
+        "list_attachments" => {
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let task_id = args["task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
+
+            let project = state.store.resolve_project(project_id).await?;
+            let task = project
+                .tasks
+                .iter()
+                .find(|t| t.id == task_id || t.slug == task_id)
+                .ok_or_else(|| ApiError::NotFound(format!("task {task_id} not found")))?;
+
+            Ok(serde_json::to_value(&task.attachments)?)
+        }
+
+        "get_attachment" => {
+            let attachment_store = state.attachment_store.as_ref().ok_or_else(|| {
+                ApiError::BadRequest(
+                    "File uploads not configured on this server (S3_BUCKET not set)".into(),
+                )
+            })?;
+
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let task_id = args["task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
+            let attachment_id = args["attachment_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("attachment_id missing".into()))?;
+
+            let project = state.store.resolve_project(project_id).await?;
+            let task = project
+                .tasks
+                .iter()
+                .find(|t| t.id == task_id || t.slug == task_id)
+                .ok_or_else(|| ApiError::NotFound(format!("task {task_id} not found")))?;
+            let att = task
+                .attachments
+                .iter()
+                .find(|a| a.id == attachment_id)
+                .ok_or_else(|| {
+                    ApiError::NotFound(format!("attachment {attachment_id} not found"))
+                })?;
+
+            let key = format!(
+                "{}/{}/{}/{}",
+                project_id, task_id, attachment_id, att.filename
+            );
+            let url = attachment_store.download_url(&key, 3600).await?;
+
+            Ok(serde_json::json!({
+                "id": att.id,
+                "filename": att.filename,
+                "mime_type": att.mime_type,
+                "size_bytes": att.size_bytes,
+                "url": url,
+                "created_at": att.created_at,
+            }))
+        }
+
+        "delete_attachment" => {
+            let attachment_store = state.attachment_store.as_ref().ok_or_else(|| {
+                ApiError::BadRequest(
+                    "File uploads not configured on this server (S3_BUCKET not set)".into(),
+                )
+            })?;
+
+            let project_id = args["project_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("project_id missing".into()))?;
+            let task_id = args["task_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("task_id missing".into()))?;
+            let attachment_id = args["attachment_id"]
+                .as_str()
+                .ok_or_else(|| ApiError::BadRequest("attachment_id missing".into()))?;
+
+            let lock = state.get_project_write_lock(project_id).await;
+            let _guard = lock.lock().await;
+            let mut project = state.store.resolve_project(project_id).await?;
+            let task = project
+                .tasks
+                .iter_mut()
+                .find(|t| t.id == task_id || t.slug == task_id)
+                .ok_or_else(|| ApiError::NotFound(format!("task {task_id} not found")))?;
+
+            let idx = task
+                .attachments
+                .iter()
+                .position(|a| a.id == attachment_id)
+                .ok_or_else(|| {
+                    ApiError::NotFound(format!("attachment {attachment_id} not found"))
+                })?;
+
+            let att = task.attachments.remove(idx);
+            state.store.put_project(project).await?;
+
+            let key = format!(
+                "{}/{}/{}/{}",
+                project_id, task_id, attachment_id, att.filename
+            );
+            attachment_store.delete(&key).await?;
+
+            Ok(serde_json::json!({ "ok": true }))
+        }
+
         _ => Err(ApiError::BadRequest(format!("unknown tool: {tool}"))),
     }
 }

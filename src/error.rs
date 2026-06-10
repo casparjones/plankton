@@ -16,6 +16,8 @@ pub enum ApiError {
     Unauthorized(String),
     #[error("Forbidden: {0}")]
     Forbidden(String),
+    #[error("Internal error: {0}")]
+    InternalError(String),
     #[error(transparent)]
     Request(#[from] reqwest::Error),
     #[error(transparent)]
@@ -33,6 +35,7 @@ impl IntoResponse for ApiError {
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
             ApiError::Unauthorized(m) => (StatusCode::UNAUTHORIZED, m),
             ApiError::Forbidden(m) => (StatusCode::FORBIDDEN, m),
+            ApiError::InternalError(m) => (StatusCode::INTERNAL_SERVER_ERROR, m),
             ApiError::Request(e) => (StatusCode::BAD_GATEWAY, e.to_string()),
             ApiError::Io(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             ApiError::Json(e) => (StatusCode::BAD_REQUEST, e.to_string()),

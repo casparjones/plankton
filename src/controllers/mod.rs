@@ -1,6 +1,7 @@
 // Controller-Module: HTTP-Handler für alle API-Endpunkte.
 
 pub mod admin_controller;
+pub mod attachment_controller;
 pub mod auth_controller;
 pub mod cli_controller;
 pub mod column_controller;
@@ -14,6 +15,7 @@ pub mod user_controller;
 pub mod webhook_controller;
 
 pub use admin_controller::*;
+pub use attachment_controller::*;
 pub use auth_controller::*;
 pub use cli_controller::*;
 pub use column_controller::*;

@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{broadcast, Mutex, RwLock};
 
 use crate::models::{CliSession, OAuthAuthCode, OAuthClient, OAuthRefreshToken};
+use crate::services::AttachmentStore;
 use crate::store::DataStore;
 use reqwest::Client;
 
@@ -37,6 +38,8 @@ pub struct AppState {
     pub last_maintenance_run: Arc<RwLock<Option<chrono::DateTime<chrono::Utc>>>>,
     /// Zeitpunkt des Server-Starts (für Next-Run-Berechnung vor erstem Job).
     pub started_at: chrono::DateTime<chrono::Utc>,
+    /// S3-Attachment-Store. None wenn S3_BUCKET nicht konfiguriert ist (Feature deaktiviert).
+    pub attachment_store: Option<Arc<dyn AttachmentStore>>,
 }
 
 impl AppState {

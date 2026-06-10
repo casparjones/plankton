@@ -44,6 +44,9 @@ mod tests {
             oauth_refresh_tokens: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             write_locks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             http_client: reqwest::Client::new(),
+            last_maintenance_run: Arc::new(tokio::sync::RwLock::new(None)),
+            started_at: chrono::Utc::now(),
+            attachment_store: None,
         };
         (state, dir)
     }
@@ -96,6 +99,7 @@ mod tests {
             r#type: None,
             done_expire: None,    // Kein explizites Feld – Default-Verhalten
             archive_delete: None, // Kein explizites Feld – Default-Verhalten
+            pinned: None,
         }
     }
 

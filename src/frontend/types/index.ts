@@ -79,6 +79,16 @@ export interface Task {
   blocked_by: string[]
   parent_id: string
   subtask_ids: string[]
+  attachments?: AttachmentRef[]
+}
+
+export interface AttachmentRef {
+  id: string
+  filename: string
+  url: string
+  mime_type: string
+  size_bytes: number
+  created_at: string
 }
 
 // === Auth-Datenmodell ===

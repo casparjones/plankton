@@ -54,6 +54,13 @@ const api = {
     const r = await fetch(path, { method: 'DELETE' });
     await checkAuth(r, path);
   },
+  async upload<T>(path: string, file: File): Promise<T> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const r = await fetch(path, { method: 'POST', body: form });
+    await checkAuth(r, path);
+    return r.json();
+  },
 };
 
 export { ApiError };

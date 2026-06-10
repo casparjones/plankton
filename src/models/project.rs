@@ -239,6 +239,19 @@ pub fn unique_task_slug(title: &str, existing_tasks: &[Task], exclude_id: &str) 
     unreachable!()
 }
 
+/// Referenz auf eine an einen Task angehängte Datei.
+/// Die Datei selbst liegt in S3 – hier werden nur URL + Metadaten gespeichert.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AttachmentRef {
+    pub id: String,
+    pub filename: String,
+    /// Öffentliche oder Presigned URL zur Datei in S3.
+    pub url: String,
+    pub mime_type: String,
+    pub size_bytes: i64,
+    pub created_at: String,
+}
+
 /// Ein Teammitglied, das Aufgaben zugewiesen bekommen kann.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
@@ -298,6 +311,10 @@ pub struct Task {
     pub parent_id: String,
     /// IDs der Subtasks (denormalisiert für schnellen Zugriff auf Epics).
     pub subtask_ids: Vec<String>,
+    /// Datei-Anhänge: nur URL + Metadaten, Binärdaten liegen in S3.
+    /// Fehlt bei alten Tasks (Rückwärtskompatibilität via default).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<AttachmentRef>,
 }
 
 #[allow(dead_code)]
@@ -340,6 +357,7 @@ impl Default for Task {
             blocked_by: vec![],
             parent_id: String::new(),
             subtask_ids: vec![],
+            attachments: vec![],
         }
     }
 }
