@@ -31,7 +31,7 @@ RUN npm run build
 # Node.js wird hier nicht benötigt – build.rs erkennt dass
 # bundle.js bereits existiert und überspringt npm automatisch
 # ============================================================
-FROM rust:1.94-slim AS backend-builder
+FROM rust:1.94-slim-bookworm AS backend-builder
 WORKDIR /app
 
 # System-Abhängigkeiten für reqwest (OpenSSL) + mold als schneller Linker
