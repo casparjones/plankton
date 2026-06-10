@@ -34,10 +34,13 @@ RUN npm run build
 FROM rust:1.94-slim AS backend-builder
 WORKDIR /app
 
-# System-Abhängigkeiten für reqwest (OpenSSL)
+# System-Abhängigkeiten für reqwest (OpenSSL) + mold als schneller Linker
 RUN apt-get update \
-    && apt-get install -y pkg-config libssl-dev \
+    && apt-get install -y pkg-config libssl-dev mold \
     && rm -rf /var/lib/apt/lists/*
+
+# mold statt GNU ld – 5-10× schneller, deutlich weniger RAM beim Linken
+ENV RUSTFLAGS="-C link-arg=-fuse-ld=mold"
 
 # Cargo-Dependency-Cache: erst Cargo.toml/Cargo.lock + Dummy-main
 # → cargo build cached alle Abhängigkeiten in einem eigenen Layer
