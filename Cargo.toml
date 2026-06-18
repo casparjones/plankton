@@ -38,3 +38,8 @@ async-trait = "0.1"
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+
+[profile.release]
+# Mehr Codegen-Units reduzieren den Peak-Speicher pro Einheit beim Kompilieren.
+# aws-sdk-s3-Monomorphisierung verursacht sonst OOM im Docker-Build (Step #29).
+codegen-units = 4
