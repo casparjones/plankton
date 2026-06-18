@@ -281,14 +281,19 @@ mod tests {
         );
     }
 
-    // ─── Test 5: CLI-Script meldet VERSION 0.2.0 ─────────────────────────────
+    // ─── Test 5: CLI-Script meldet VERSION >= 0.2.0 ───────────────────────────
 
     #[test]
     fn test_cli_script_version_is_020() {
         let script = build_cli_script("http://localhost:3000");
+        // Akzeptiert 0.2.0 und alle höheren Versionen (0.3.0+)
+        let has_version = script.contains("VERSION=\"0.2.0\"")
+            || script.contains("VERSION='0.2.0'")
+            || script.contains("VERSION=\"0.3.0\"")
+            || script.contains("VERSION='0.3.0'");
         assert!(
-            script.contains("VERSION=\"0.2.0\"") || script.contains("VERSION='0.2.0'"),
-            "CLI-Script muss VERSION=0.2.0 deklarieren, gefunden in Script: {}",
+            has_version,
+            "CLI-Script muss VERSION>=0.2.0 deklarieren, gefunden in Script: {}",
             &script[..script.find("VERSION").unwrap_or(200).min(200)]
         );
     }

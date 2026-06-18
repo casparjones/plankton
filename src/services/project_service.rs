@@ -15,6 +15,27 @@ pub async fn publish_update(state: &AppState, project_id: &str) {
     publish_event(state, project_id, "project_update", serde_json::json!({})).await;
 }
 
+/// Persistiert ein Ticket-Event als Notification im Notification-Center.
+///
+/// Fire-and-forget: Fehler werden geloggt aber nicht propagiert.
+pub fn persist_notification(
+    state: AppState,
+    event_type: crate::models::NotificationEventType,
+    task_id: String,
+    task_title: String,
+    project_id: String,
+    actor: Option<String>,
+) {
+    tokio::spawn(async move {
+        let n = crate::models::NotificationEntry::new(
+            event_type, task_id, project_id, task_title, actor,
+        );
+        if let Err(e) = state.store.save_notification(&n).await {
+            tracing::warn!("Notification-Persistierung fehlgeschlagen: {e}");
+        }
+    });
+}
+
 /// Granulares SSE-Event senden. Format: `{"event":"<type>","data":<payload>}`
 /// Akzeptiert sowohl UUID als auch Slug als project_id.
 pub async fn publish_event(

@@ -211,7 +211,7 @@ pub(crate) fn build_cli_script(default_url: &str) -> String {
 
 set -e
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 INSTALLED_FROM="{default_url}"
 CONFIG_DIR="${{HOME}}/.config/plankton"
 CONFIG_FILE="${{CONFIG_DIR}}/config"
@@ -1435,6 +1435,301 @@ cmd_task() {{
     esac
 }}
 
+# ─── Attachment-Subcommands (v0.3.0) ─────────────────────────
+
+# MIME-Type aus Dateiendung ableiten (fallback: application/octet-stream)
+mime_from_ext() {{
+    local file="$1"
+    local ext="${{file##*.}}"
+    ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+    case "$ext" in
+        pdf)                    echo "application/pdf" ;;
+        png)                    echo "image/png" ;;
+        jpg|jpeg)               echo "image/jpeg" ;;
+        gif)                    echo "image/gif" ;;
+        svg)                    echo "image/svg+xml" ;;
+        webp)                   echo "image/webp" ;;
+        txt)                    echo "text/plain" ;;
+        md)                     echo "text/markdown" ;;
+        html|htm)               echo "text/html" ;;
+        css)                    echo "text/css" ;;
+        js)                     echo "application/javascript" ;;
+        ts)                     echo "application/typescript" ;;
+        json)                   echo "application/json" ;;
+        xml)                    echo "application/xml" ;;
+        zip)                    echo "application/zip" ;;
+        gz|tgz)                 echo "application/gzip" ;;
+        tar)                    echo "application/x-tar" ;;
+        rs|py|go|java|c|cpp|h)  echo "text/plain" ;;
+        sh|bash|fish|zsh)       echo "text/plain" ;;
+        csv)                    echo "text/csv" ;;
+        yaml|yml)               echo "text/yaml" ;;
+        toml)                   echo "text/plain" ;;
+        *)                      echo "application/octet-stream" ;;
+    esac
+}}
+
+# attach <project>/<task-slug> <dateipfad> [--name <anzeigename>]
+cmd_attach() {{
+    need_auth
+    local ref="" filepath="" display_name=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --help|-h)
+                echo ""
+                echo "  Usage: plankton attach <project>/<task-slug> <dateipfad> [--name <anzeigename>]"
+                echo ""
+                echo "  Lädt eine lokale Datei als Anhang an einen Task hoch."
+                echo ""
+                echo "  Options:"
+                echo "    --name <anzeigename>   Optionaler Anzeigename (default: Dateiname)"
+                echo ""
+                echo "  Examples:"
+                echo "    plankton attach myproject/my-task ./report.pdf"
+                echo "    plankton attach myproject/my-task ./src/main.rs --name 'main.rs'"
+                echo "    plankton attach myproject/my-task ./design.pdf --name 'Q2-Report.pdf'"
+                echo ""
+                return 0
+                ;;
+            --name) shift; display_name="${{1:-}}"; ;;
+            --name=*) display_name="${{1#--name=}}" ;;
+            *)
+                if [ -z "$ref" ]; then ref="$1"
+                elif [ -z "$filepath" ]; then filepath="$1"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$ref" ] || [ -z "$filepath" ]; then
+        echo "Usage: plankton attach <project>/<task-slug> <dateipfad> [--name <anzeigename>]"
+        exit 1
+    fi
+
+    # project und task-slug aus "project/task-slug" trennen
+    local project_slug="${{ref%%/*}}"
+    local task_slug="${{ref#*/}}"
+
+    if [ -z "$project_slug" ] || [ -z "$task_slug" ] || [ "$project_slug" = "$task_slug" ]; then
+        echo "Error: Referenz muss das Format <project>/<task-slug> haben"
+        exit 1
+    fi
+
+    # Datei prüfen
+    if [ ! -f "$filepath" ]; then
+        echo "Error: Datei nicht gefunden: $filepath"
+        exit 1
+    fi
+
+    # Anzeigename: explizit angegeben oder Dateiname
+    if [ -z "$display_name" ]; then
+        display_name=$(basename "$filepath")
+    fi
+
+    # Dateigröße ermitteln (in Bytes, portabel)
+    local filesize
+    filesize=$(wc -c < "$filepath" 2>/dev/null || echo 0)
+
+    # MIME-Type ableiten
+    local mime_type
+    mime_type=$(mime_from_ext "$display_name")
+
+    # curl-Optionen: Fortschrittsbalken bei > 1048576 Bytes (1 MB), sonst silent
+    local progress_flag="-s"
+    if [ "$filesize" -gt 1048576 ] 2>/dev/null; then
+        progress_flag="--progress-bar"
+        echo "  Uploading $display_name ($((filesize / 1024)) KB) ..."
+    fi
+
+    # Datei hochladen via multipart/form-data
+    local result
+    result=$(curl $progress_flag -L \
+        -H "Authorization: Bearer $PLANKTON_TOKEN" \
+        -F "file=@$filepath;filename=$display_name;type=$mime_type" \
+        "$PLANKTON_SERVER/api/projects/$project_slug/tasks/$task_slug/attachments") \
+        || {{ echo "Error: Upload fehlgeschlagen"; exit 1; }}
+
+    # Ergebnis auswerten
+    local att_id att_url
+    att_id=$(echo "$result" | jq -r '.id // empty' 2>/dev/null)
+    att_url=$(echo "$result" | jq -r '.url // empty' 2>/dev/null)
+
+    if [ -n "$att_id" ]; then
+        echo ""
+        echo "  ✓ Datei hochgeladen"
+        echo "  ID:   $att_id"
+        echo "  URL:  $att_url"
+        echo ""
+    else
+        local err
+        err=$(echo "$result" | jq -r '.error // .message // "Unbekannter Fehler"' 2>/dev/null || echo "$result")
+        echo "  ✗ Upload fehlgeschlagen: $err"
+        exit 1
+    fi
+}}
+
+# attachments <project>/<task-slug>
+cmd_attachments() {{
+    need_auth
+    local ref=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --help|-h)
+                echo ""
+                echo "  Usage: plankton attachments <project>/<task-slug>"
+                echo ""
+                echo "  Listet alle Anhänge eines Tasks tabellarisch auf."
+                echo ""
+                echo "  Examples:"
+                echo "    plankton attachments myproject/my-task"
+                echo ""
+                return 0
+                ;;
+            *)
+                [ -z "$ref" ] && ref="$1"
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$ref" ]; then
+        echo "Usage: plankton attachments <project>/<task-slug>"
+        exit 1
+    fi
+
+    local project_slug="${{ref%%/*}}"
+    local task_slug="${{ref#*/}}"
+
+    if [ -z "$project_slug" ] || [ -z "$task_slug" ] || [ "$project_slug" = "$task_slug" ]; then
+        echo "Error: Referenz muss das Format <project>/<task-slug> haben"
+        exit 1
+    fi
+
+    local result
+    result=$(curl -sf \
+        -H "Authorization: Bearer $PLANKTON_TOKEN" \
+        "$PLANKTON_SERVER/api/projects/$project_slug/tasks/$task_slug/attachments") \
+        || {{ echo "Error: Konnte Anhänge nicht laden"; exit 1; }}
+
+    local count
+    count=$(echo "$result" | jq 'length' 2>/dev/null || echo 0)
+
+    if [ "$count" -eq 0 ]; then
+        echo ""
+        echo "  Keine Anhänge vorhanden."
+        echo ""
+        return 0
+    fi
+
+    echo ""
+    printf "  %-36s  %-24s  %-22s  %8s  %s\n" "ID" "DATEINAME" "TYPE" "GRÖSSE" "DATUM"
+    printf "  %-36s  %-24s  %-22s  %8s  %s\n" "$(printf '%0.s─' {{1..36}})" "$(printf '%0.s─' {{1..24}})" "$(printf '%0.s─' {{1..22}})" "$(printf '%0.s─' {{1..8}})" "──────────"
+
+    echo "$result" | jq -r '.[] | [.id, (.filename // ""), (.mime_type // ""), (.size_bytes // 0), (.created_at // "")] | @tsv' | \
+    while IFS=$'\t' read -r id filename mime_type size_bytes created_at; do
+        # Größe in lesbare Form umwandeln
+        local size_str
+        if [ "$size_bytes" -ge 1048576 ] 2>/dev/null; then
+            size_str="$(echo "$size_bytes" | awk '{{printf "%.1f MB", $1/1048576}}')"
+        elif [ "$size_bytes" -ge 1024 ] 2>/dev/null; then
+            size_str="$(echo "$size_bytes" | awk '{{printf "%.1f KB", $1/1024}}')"
+        else
+            size_str="${{size_bytes}} B"
+        fi
+        # Datum kürzen (nur YYYY-MM-DD)
+        local date_str
+        date_str=$(echo "$created_at" | cut -c1-10)
+        printf "  %-36s  %-24s  %-22s  %8s  %s\n" "$id" "${{filename:0:24}}" "${{mime_type:0:22}}" "$size_str" "$date_str"
+    done
+    echo ""
+}}
+
+# download <project>/<task-slug> <attachment-id> [output-pfad]
+cmd_download() {{
+    need_auth
+    local ref="" attachment_id="" out_path=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --help|-h)
+                echo ""
+                echo "  Usage: plankton download <project>/<task-slug> <attachment-id> [output-pfad]"
+                echo ""
+                echo "  Lädt einen Anhang herunter und speichert ihn lokal."
+                echo ""
+                echo "  Examples:"
+                echo "    plankton download myproject/my-task a1b2c3d4"
+                echo "    plankton download myproject/my-task a1b2c3d4 ./mein-output.pdf"
+                echo ""
+                return 0
+                ;;
+            *)
+                if [ -z "$ref" ]; then ref="$1"
+                elif [ -z "$attachment_id" ]; then attachment_id="$1"
+                elif [ -z "$out_path" ]; then out_path="$1"
+                fi
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$ref" ] || [ -z "$attachment_id" ]; then
+        echo "Usage: plankton download <project>/<task-slug> <attachment-id> [output-pfad]"
+        exit 1
+    fi
+
+    local project_slug="${{ref%%/*}}"
+    local task_slug="${{ref#*/}}"
+
+    if [ -z "$project_slug" ] || [ -z "$task_slug" ] || [ "$project_slug" = "$task_slug" ]; then
+        echo "Error: Referenz muss das Format <project>/<task-slug> haben"
+        exit 1
+    fi
+
+    # Metadaten laden um Dateinamen zu ermitteln (falls kein out_path angegeben)
+    if [ -z "$out_path" ]; then
+        local meta
+        meta=$(curl -sf \
+            -H "Authorization: Bearer $PLANKTON_TOKEN" \
+            "$PLANKTON_SERVER/api/projects/$project_slug/tasks/$task_slug/attachments") \
+            || {{ echo "Error: Konnte Metadaten nicht laden"; exit 1; }}
+        local filename
+        filename=$(echo "$meta" | jq -r --arg id "$attachment_id" \
+            '.[] | select(.id == $id) | .filename' 2>/dev/null)
+        if [ -n "$filename" ]; then
+            out_path="./$filename"
+        else
+            out_path="./attachment-$attachment_id"
+        fi
+    fi
+
+    echo "  Lade herunter → $out_path ..."
+
+    # Download: Redirect folgen (-L), direkt in Datei speichern
+    local http_status
+    http_status=$(curl -sL \
+        -H "Authorization: Bearer $PLANKTON_TOKEN" \
+        -o "$out_path" \
+        -w "%{{http_code}}" \
+        "$PLANKTON_SERVER/api/projects/$project_slug/tasks/$task_slug/attachments/$attachment_id")
+
+    if [ "$http_status" -ge 200 ] && [ "$http_status" -lt 400 ] 2>/dev/null; then
+        local saved_size
+        saved_size=$(wc -c < "$out_path" 2>/dev/null || echo 0)
+        echo ""
+        echo "  ✓ Download abgeschlossen"
+        echo "  Gespeichert: $out_path ($saved_size Bytes)"
+        echo ""
+    else
+        rm -f "$out_path"
+        echo "  ✗ Download fehlgeschlagen (HTTP $http_status)"
+        exit 1
+    fi
+}}
+
 # ─── Remote ──────────────────────────────────────────────────
 
 cmd_remote() {{
@@ -1569,6 +1864,9 @@ cmd_help() {{
     echo "    task done <slug> <id>           Move task to Done"
     echo "    task comment <slug> <id> <text> Add comment to task"
     echo "    task create <slug> <title>      Create new task"
+    echo "    attach <proj>/<slug> <file>     Upload file as attachment"
+    echo "    attachments <proj>/<slug>       List all attachments of a task"
+    echo "    download <proj>/<slug> <id>     Download attachment (optional: <output>)"
     echo "    export [-f] [-p slug] [-d dir]  Export projects as JSON"
     echo "    import [-f] [-p slug] [-d dir]  Import JSON to server"
     echo "    init                 Create .vibe/ project structure"
@@ -1601,6 +1899,9 @@ case "${{1:-help}}" in
     view)       shift; cmd_view_project "$@" ;;
     tasks)      shift; cmd_tasks "$@" ;;
     task)       shift; cmd_task "$@" ;;
+    attach)      shift; cmd_attach "$@" ;;
+    attachments) shift; cmd_attachments "$@" ;;
+    download)    shift; cmd_download "$@" ;;
     export)     shift; cmd_export "$@" ;;
     import)     shift; cmd_import "$@" ;;
     init)       cmd_init ;;
@@ -2166,13 +2467,18 @@ mod tests {
         );
     }
 
-    /// VERSION wird auf 0.2.0 erhöht
+    /// VERSION ist mindestens 0.2.0 (Write-Subcommands vorhanden)
     #[test]
     fn test_version_is_0_2_0() {
         let s = script();
+        // Akzeptiert 0.2.0 und alle höheren Versionen (0.3.0+)
+        let has_version = s.contains("VERSION=\"0.2.0\"") || s.contains("VERSION=\"0.3.0\"");
         assert!(
-            s.contains("VERSION=\"0.2.0\""),
-            "VERSION muss auf 0.2.0 gesetzt sein für den v0.2.0 Release"
+            has_version,
+            "VERSION muss mindestens 0.2.0 sein, aktuell: {}",
+            s.lines()
+                .find(|l| l.contains("VERSION="))
+                .unwrap_or("(nicht gefunden)")
         );
     }
 

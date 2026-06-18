@@ -8,8 +8,11 @@ use chrono::{Local, Utc};
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::models::NotificationEventType;
 use crate::models::*;
-use crate::services::{extract_token_from_headers, publish_event, publish_update, validate_jwt};
+use crate::services::{
+    extract_token_from_headers, persist_notification, publish_event, publish_update, validate_jwt,
+};
 use crate::state::AppState;
 
 /// Caller-Identität aus Headers auflösen (JWT oder Agent-Token).
@@ -199,6 +202,15 @@ pub async fn create_task(
         serde_json::to_value(&task).unwrap_or_default(),
     )
     .await;
+    // Notification persistieren
+    persist_notification(
+        state.clone(),
+        NotificationEventType::TaskCreated,
+        task.id.clone(),
+        task.title.clone(),
+        id.clone(),
+        Some(task.creator.clone()),
+    );
     // Outgoing Webhook: task.created
     crate::services::webhook_service::dispatch_webhook(
         state.http_client.clone(),
@@ -359,6 +371,15 @@ pub async fn add_comment(
     let task_data = project.tasks.iter().find(|t| t.id == real_task_id).cloned();
     state.store.put_project(project).await?;
     if let Some(t) = task_data {
+        // Kommentar-Notification persistieren
+        persist_notification(
+            state.clone(),
+            NotificationEventType::TaskCommented,
+            t.id.clone(),
+            t.title.clone(),
+            id.clone(),
+            Some(user_name.clone()),
+        );
         publish_event(
             &state,
             &id,
@@ -436,13 +457,20 @@ pub async fn move_task(
     let project_slug = project.slug.clone();
     state.store.put_project(project).await?;
     if let Some(ref t) = task_data {
-        publish_event(
-            &state,
-            &id,
-            "task_moved",
-            serde_json::to_value(t).unwrap_or_default(),
-        )
-        .await;
+        // Notification persistieren (actor aus user_name)
+        persist_notification(
+            state.clone(),
+            NotificationEventType::TaskMoved,
+            t.id.clone(),
+            t.title.clone(),
+            id.clone(),
+            Some(user_name.clone()),
+        );
+        let mut payload = serde_json::to_value(t).unwrap_or_default();
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("actor".to_string(), serde_json::json!(user_name));
+        }
+        publish_event(&state, &id, "task_moved", payload).await;
         // Outgoing Webhook: task.moved
         let col_title = t.column_id.clone(); // column_id enthält jetzt die neue Spalten-ID
         crate::services::webhook_service::dispatch_webhook(
@@ -534,6 +562,18 @@ pub async fn batch_move_tasks(
             .map(|c| c.title.clone())
             .unwrap_or_else(|| col_id.to_string())
     };
+    // IDs der Tasks die die Spalte wechseln (nicht nur Reihenfolge)
+    let column_changed_ids: std::collections::HashSet<String> = req
+        .moves
+        .iter()
+        .filter_map(|m| {
+            project
+                .tasks
+                .iter()
+                .find(|t| t.id == m.task_id && t.column_id != m.column_id)
+                .map(|t| t.id.clone())
+        })
+        .collect();
     for m in &req.moves {
         if let Some(task) = project.tasks.iter_mut().find(|t| t.id == m.task_id) {
             if task.column_id != m.column_id {
@@ -551,8 +591,32 @@ pub async fn batch_move_tasks(
             task.order = m.order;
         }
     }
+    // Nur Tasks mit echtem Spalten-Wechsel für Notifications sammeln
+    let moved_tasks: Vec<crate::models::project::Task> = project
+        .tasks
+        .iter()
+        .filter(|t| column_changed_ids.contains(&t.id))
+        .cloned()
+        .collect();
     state.store.put_project(project).await?;
-    publish_update(&state, &id).await;
+    // Pro verschobenem Task ein granulares task_moved-Event senden damit alle Clients
+    // die Notification empfangen. Falls keine Spalte gewechselt wurde (nur Reihenfolge),
+    // trotzdem task_moved senden so dass andere Clients den aktuellen Stand kennen.
+    for t in &moved_tasks {
+        persist_notification(
+            state.clone(),
+            NotificationEventType::TaskMoved,
+            t.id.clone(),
+            t.title.clone(),
+            id.clone(),
+            Some(user_name.clone()),
+        );
+        let mut payload = serde_json::to_value(t).unwrap_or_default();
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("actor".to_string(), serde_json::json!(user_name));
+        }
+        publish_event(&state, &id, "task_moved", payload).await;
+    }
     Ok(Json(
         serde_json::json!({ "ok": true, "moved": req.moves.len() }),
     ))

@@ -357,4 +357,107 @@ impl DataStore {
         let _ = tokio::fs::remove_file(path).await;
         Ok(refresh)
     }
+
+    // ------------------------------------------------------------------
+    // Notification-Center (immer File-basiert in data/notifications/)
+    // ------------------------------------------------------------------
+
+    fn notifications_root(&self) -> PathBuf {
+        match self {
+            DataStore::File(f) => f.root.join("notifications"),
+            DataStore::Couch(_) => PathBuf::from("data/notifications"),
+        }
+    }
+
+    fn notification_path(&self, id: &str) -> PathBuf {
+        self.notifications_root().join(format!("{id}.json"))
+    }
+
+    async fn ensure_notifications_dir(&self) -> Result<(), ApiError> {
+        tokio::fs::create_dir_all(self.notifications_root()).await?;
+        Ok(())
+    }
+
+    /// Speichert eine neue Notification persistent.
+    pub async fn save_notification(
+        &self,
+        notification: &crate::models::NotificationEntry,
+    ) -> Result<(), ApiError> {
+        self.ensure_notifications_dir().await?;
+        let data = serde_json::to_string_pretty(notification)?;
+        tokio::fs::write(self.notification_path(&notification.id), data).await?;
+        Ok(())
+    }
+
+    /// Lädt alle Notifications, sortiert neueste zuerst.
+    pub async fn list_notifications(
+        &self,
+    ) -> Result<Vec<crate::models::NotificationEntry>, ApiError> {
+        self.ensure_notifications_dir().await?;
+        let mut notifications = Vec::new();
+        let mut dir = tokio::fs::read_dir(self.notifications_root()).await?;
+        while let Some(entry) = dir.next_entry().await? {
+            if entry
+                .path()
+                .extension()
+                .map(|e| e == "json")
+                .unwrap_or(false)
+            {
+                if let Ok(data) = tokio::fs::read_to_string(entry.path()).await {
+                    if let Ok(n) = serde_json::from_str::<crate::models::NotificationEntry>(&data) {
+                        notifications.push(n);
+                    }
+                }
+            }
+        }
+        // Neueste zuerst sortieren
+        notifications.sort_by_key(|n| std::cmp::Reverse(n.created_at));
+        Ok(notifications)
+    }
+
+    /// Löscht eine einzelne Notification nach ID.
+    pub async fn delete_notification(&self, id: &str) -> Result<(), ApiError> {
+        let path = self.notification_path(id);
+        tokio::fs::remove_file(path)
+            .await
+            .map_err(|_| ApiError::NotFound(format!("Notification '{id}' not found")))?;
+        Ok(())
+    }
+
+    /// Löscht alle Notifications.
+    pub async fn clear_all_notifications(&self) -> Result<(), ApiError> {
+        self.ensure_notifications_dir().await?;
+        let mut dir = tokio::fs::read_dir(self.notifications_root()).await?;
+        while let Some(entry) = dir.next_entry().await? {
+            if entry
+                .path()
+                .extension()
+                .map(|e| e == "json")
+                .unwrap_or(false)
+            {
+                let _ = tokio::fs::remove_file(entry.path()).await;
+            }
+        }
+        Ok(())
+    }
+
+    /// Entfernt alle Notifications, die älter als `max_age_hours` Stunden sind.
+    pub async fn cleanup_old_notifications(&self, max_age_hours: i64) -> Result<(), ApiError> {
+        self.ensure_notifications_dir().await?;
+        let cutoff = chrono::Utc::now() - chrono::Duration::hours(max_age_hours);
+        let mut dir = tokio::fs::read_dir(self.notifications_root()).await?;
+        while let Some(entry) = dir.next_entry().await? {
+            let path = entry.path();
+            if path.extension().map(|e| e == "json").unwrap_or(false) {
+                if let Ok(data) = tokio::fs::read_to_string(&path).await {
+                    if let Ok(n) = serde_json::from_str::<crate::models::NotificationEntry>(&data) {
+                        if n.created_at <= cutoff {
+                            let _ = tokio::fs::remove_file(path).await;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }

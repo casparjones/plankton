@@ -7,6 +7,8 @@ import { state } from '../state';
 import { renderBoard } from '../components/board';
 import type { ProjectDoc, Task } from '../types';
 import { notificationService } from './notification-service';
+import { notificationHistoryService } from './notification-history-service';
+import type { NotificationEntry, NotificationEventType } from './notification-history-service';
 
 interface SSEPayload {
   event: string;
@@ -41,6 +43,29 @@ function removeTask(taskId: string): void {
   }
 }
 
+/**
+ * Erstellt einen lokalen NotificationEntry aus SSE-Payload und fügt ihn
+ * vorne in die Notification-History ein (ohne API-Call, da Backend
+ * die Notification bereits persistiert hat).
+ */
+function prependHistoryEntry(
+  eventType: NotificationEventType,
+  data: Record<string, unknown>,
+  projectId: string,
+): void {
+  const entry: NotificationEntry = {
+    id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    event_type: eventType,
+    task_id: (data.id as string) || '',
+    task_title: (data.title as string) || '?',
+    project_id: projectId,
+    actor: (data.actor as string | null) ?? null,
+    read: false,
+    created_at: new Date().toISOString(),
+  }
+  notificationHistoryService.prepend(entry)
+}
+
 export function subscribeSSE(projectId: string): void {
   if (state.eventSource) {
     state.eventSource.close();
@@ -50,54 +75,75 @@ export function subscribeSSE(projectId: string): void {
 
   // Granulare Events
   es.addEventListener('project_event', async (e: MessageEvent) => {
-    if (state.isDragging) return;
-
     let payload: SSEPayload;
     try {
       payload = JSON.parse(e.data);
     } catch {
-      // Fallback: altes Format (plain project_id string)
-      state.project = await api.get<ProjectDoc>(`/api/projects/${projectId}`);
-      renderBoard();
+      // Fallback: altes Format — Board-Update nur außerhalb eines Drags
+      if (!state.isDragging) {
+        state.project = await api.get<ProjectDoc>(`/api/projects/${projectId}`);
+        renderBoard();
+      }
       return;
     }
 
+    // Notifications immer verarbeiten, Board-Updates nur wenn kein Drag läuft
     switch (payload.event) {
       case 'task_created': {
         const task = payload.data as unknown as Task;
-        patchTask(task);
-        // Glow für via SSE empfangene neue Tasks (von anderen Clients/Agenten)
-        (window as any).__newTaskGlowId = task.id;
-        renderBoard();
         notificationService.notify(payload);
+        prependHistoryEntry(payload.event as NotificationEventType, payload.data, projectId);
+        if (!state.isDragging) {
+          patchTask(task);
+          // Glow für via SSE empfangene neue Tasks (von anderen Clients/Agenten)
+          (window as any).__newTaskGlowId = task.id;
+          renderBoard();
+        }
         break;
       }
       case 'task_updated':
-        patchTask(payload.data as unknown as Task);
-        renderBoard();
         notificationService.notify(payload);
+        prependHistoryEntry(payload.event as NotificationEventType, payload.data, projectId);
+        if (!state.isDragging) {
+          patchTask(payload.data as unknown as Task);
+          renderBoard();
+        }
         break;
 
-      case 'task_moved':
-        patchTask(payload.data as unknown as Task);
-        renderBoard();
-        notificationService.notify(payload);
+      case 'task_moved': {
+        const actor = payload.data.actor as string | undefined;
+        const me = state.currentUser?.display_name || state.currentUser?.username;
+        // Eigene Aktion nicht ins Notification-Center — der Erfolgs-Toast reicht
+        if (!me || actor !== me) {
+          notificationService.notify(payload);
+          prependHistoryEntry(payload.event as NotificationEventType, payload.data, projectId);
+        }
+        if (!state.isDragging) {
+          patchTask(payload.data as unknown as Task);
+          renderBoard();
+        }
         break;
+      }
 
       case 'task_commented':
         notificationService.notify(payload);
+        prependHistoryEntry(payload.event as NotificationEventType, payload.data, projectId);
         break;
 
       case 'task_deleted':
-        removeTask((payload.data as { task_id: string }).task_id);
-        renderBoard();
+        if (!state.isDragging) {
+          removeTask((payload.data as { task_id: string }).task_id);
+          renderBoard();
+        }
         break;
 
       case 'project_update':
       default:
         // Full-Refetch für Projekt-Level-Änderungen (Spalten, User, etc.)
-        state.project = await api.get<ProjectDoc>(`/api/projects/${projectId}`);
-        renderBoard();
+        if (!state.isDragging) {
+          state.project = await api.get<ProjectDoc>(`/api/projects/${projectId}`);
+          renderBoard();
+        }
         break;
     }
   });

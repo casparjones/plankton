@@ -14,6 +14,7 @@ import DashboardContainer from './DashboardContainer.vue'
 import StatusCountsWidget from './StatusCountsWidget.vue'
 import VelocityWidget from './VelocityWidget.vue'
 import BurndownWidget from './BurndownWidget.vue'
+import NotificationCenter from './NotificationCenter.vue'
 import type { Task } from '../types'
 
 import { t, useI18n } from '../i18n'
@@ -248,16 +249,7 @@ onMounted(() => {
           :title="t('board.archive')"
           @click="archivePanelRef?.open()"
         >&#128451; {{ t('board.archive') }}</button>
-        <button
-          id="notification-toggle"
-          data-notification-toggle
-          class="notification-toggle bg-transparent border rounded-md cursor-pointer font-sans text-xs px-2.5 py-1 transition-all flex-shrink-0"
-          :class="notificationsEnabled
-            ? 'border-accent text-accent hover:bg-accent/10'
-            : 'border-border text-text-dim hover:border-accent hover:text-accent opacity-50'"
-          :title="t('notifications.notificationToggle')"
-          @click="toggleNotifications"
-        >&#128276; <span class="hidden sm:inline">{{ t('notifications.notificationToggle') }}</span></button>
+        <NotificationCenter />
         <button id="import-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer font-sans text-xs px-2.5 py-1 transition-all hover:border-accent hover:text-accent" :title="t('board.importIssues')">&#8615; {{ t('board.importIssues') }}</button>
         <button id="project-menu-btn" class="bg-transparent border border-border rounded-md text-text-dim cursor-pointer text-base px-2.5 py-1 transition-all ml-auto hover:border-accent hover:text-accent" :title="t('board.projectMenu')">&#9776;</button>
         <div id="project-dropdown" class="project-dropdown absolute top-full right-6 z-[2000] bg-surface border border-border rounded-md shadow-[0_8px_24px_rgba(0,0,0,0.4)] py-1 min-w-[200px]"></div>

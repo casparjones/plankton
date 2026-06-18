@@ -6,3 +6,5 @@ data/
 .env
 AGENTS.local.md
 CLAUDE.local.md
+graphify-out
+graphify-out/*

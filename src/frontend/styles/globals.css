@@ -342,3 +342,17 @@ body[data-theme="light"] {
     touch-action: none;
   }
 }
+
+/* ── Notification-Highlight: kurzes Aufblinken der Task-Karte ── */
+@keyframes notification-highlight-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(var(--accent-rgb, 99, 179, 237), 0.8); }
+  50%  { box-shadow: 0 0 0 8px rgba(var(--accent-rgb, 99, 179, 237), 0.3); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb, 99, 179, 237), 0); }
+}
+
+.notification-highlight {
+  animation: notification-highlight-pulse 0.6s ease-in-out 3;
+  outline: 2px solid rgba(var(--accent-rgb, 99, 179, 237), 0.7);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

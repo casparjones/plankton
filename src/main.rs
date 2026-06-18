@@ -13,6 +13,8 @@ mod blocking_test;
 #[cfg(test)]
 mod burndown_test;
 #[cfg(test)]
+mod cli_attach_test;
+#[cfg(test)]
 mod cli_write_test;
 #[cfg(test)]
 mod column_entered_at_http_test;
@@ -35,6 +37,8 @@ mod models;
 mod move_task_to_project_http_test;
 #[cfg(test)]
 mod move_task_to_project_test;
+#[cfg(test)]
+mod notification_center_test;
 #[cfg(test)]
 mod optimistic_locking_test;
 #[cfg(test)]
@@ -159,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
     state.store.ensure_users_dir().await?;
     ensure_default_admin(&state.store).await?;
 
-    // Background-Task: Stündlicher Wartungs-Job (Auto-Archivierung + Auto-Delete).
+    // Background-Task: Stündlicher Wartungs-Job (Auto-Archivierung + Auto-Delete + Notification-Cleanup).
     {
         let maintenance_store = state.store.clone();
         let last_run = state.last_maintenance_run.clone();
@@ -177,6 +181,10 @@ async fn main() -> anyhow::Result<()> {
                     Err(e) => {
                         tracing::error!("Maintenance-Job Fehler: {e}");
                     }
+                }
+                // Notifications älter als 24h löschen
+                if let Err(e) = maintenance_store.cleanup_old_notifications(24).await {
+                    tracing::warn!("Notification-Cleanup Fehler: {e}");
                 }
             }
         });
@@ -321,6 +329,15 @@ pub fn build_router(state: state::AppState) -> axum::Router {
             post(mcp_jsonrpc)
                 .get(mcp_sse_stream)
                 .delete(mcp_session_delete),
+        )
+        // Notification-Center
+        .route(
+            "/api/notifications",
+            get(list_notifications).delete(clear_notifications),
+        )
+        .route(
+            "/api/notifications/:id",
+            axum::routing::delete(delete_notification),
         )
         // Incoming Webhooks (extern → Plankton)
         .route(
